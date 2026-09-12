@@ -19,16 +19,25 @@ export function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = req.result;
-      if (!db.objectStoreNames.contains('exercises')) {
-        db.createObjectStore('exercises', { keyPath: 'id' });
+      const oldVersion = e.oldVersion;
+
+      // Each block runs only for DBs upgrading across that version, so a device
+      // already on version N skips blocks <= N and only applies newer ones.
+      if (oldVersion < 1) {
+        if (!db.objectStoreNames.contains('exercises')) {
+          db.createObjectStore('exercises', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('workouts')) {
+          const s = db.createObjectStore('workouts', { keyPath: 'id' });
+          s.createIndex('date', 'date');
+          s.createIndex('isActive', 'isActive');
+        }
+        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
       }
-      if (!db.objectStoreNames.contains('workouts')) {
-        const s = db.createObjectStore('workouts', { keyPath: 'id' });
-        s.createIndex('date', 'date');
-        s.createIndex('isActive', 'isActive');
-      }
-      if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+
+      // Next schema change: bump DB_VERSION below and add `if (oldVersion < 2) { ... }`
+      // here (new stores/indexes, or data rewrites via e.target.transaction).
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

@@ -37,6 +37,13 @@ export function useWorkout() {
 
   // ---- Workout lifecycle ----
   const startWorkout = useCallback(async (name = 'Workout') => {
+    // Re-check IDB (not just local `active` state) so a stale hook instance or a
+    // second tab can never create two concurrently active workouts.
+    const existing = await getActiveWorkout();
+    if (existing) {
+      setActive(existing);
+      return existing;
+    }
     const now = Date.now();
     const wo = {
       id: uid('wo'),
