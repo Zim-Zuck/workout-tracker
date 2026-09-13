@@ -86,18 +86,30 @@ export default function ExerciseCard({
         </div>
       </header>
 
-      <div className="mt-3 space-y-2">
-        {activeSets.map((s, i) => (
-          <SetRow
-            key={s.id}
-            index={i}
-            set={s}
-            unit={unit}
-            onChange={(patch) => onUpdateSet(s.id, patch)}
-            onComplete={() => onCompleteSet(s)}
-            onDelete={() => onDeleteSet(s.id)}
-          />
-        ))}
+      <div className="mt-3">
+        <div
+          className="grid items-center pb-1 text-[10px] uppercase tracking-[0.08em] text-muted/70"
+          style={{ gridTemplateColumns: '28px 1fr 1fr 40px', columnGap: 4 }}
+        >
+          <span className="text-center">Set</span>
+          <span className="text-center">Weight</span>
+          <span className="text-center">Reps</span>
+          <span />
+        </div>
+        <div className="divide-y divide-white/[.04]">
+          {activeSets.map((s, i) => (
+            <SetRow
+              key={s.id}
+              index={i}
+              set={s}
+              unit={unit}
+              prevSet={prev?.sets?.[i] || null}
+              onChange={(patch) => onUpdateSet(s.id, patch)}
+              onComplete={() => onCompleteSet(s)}
+              onDelete={() => onDeleteSet(s.id)}
+            />
+          ))}
+        </div>
       </div>
 
       <button
@@ -114,9 +126,9 @@ export default function ExerciseCard({
               };
           onAddSet(seed);
         }}
-        className="mt-3 w-full h-11 rounded-lg border border-dashed border-border text-muted flex items-center justify-center gap-2 active:bg-card"
+        className="mt-2 w-full h-10 rounded-lg text-accent text-[14px] font-medium flex items-center justify-center gap-1.5 active:opacity-60"
       >
-        <Plus size={16} /> Add set
+        <Plus size={15} strokeWidth={2.5} /> Add set
       </button>
     </section>
   );
