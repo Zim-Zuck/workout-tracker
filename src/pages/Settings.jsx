@@ -92,6 +92,7 @@ export default function SettingsScreen({ settings, updateSettings, workout }) {
       </Section>
 
       <Section title="About">
+        <Row label="App"><span className="text-sm text-text font-medium">Kun Workouts</span></Row>
         <Row label="App version"><span className="text-sm text-muted">1.0.0</span></Row>
         <Row label="Data schema"><span className="text-sm text-muted">v{SCHEMA_VERSION}</span></Row>
         <Row label="Connection">

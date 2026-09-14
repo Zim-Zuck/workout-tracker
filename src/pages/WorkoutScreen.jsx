@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Play, Square, Plus, Search, Undo2, Timer } from 'lucide-react';
 import ExerciseCard from '../components/ExerciseCard.jsx';
 import Modal from '../components/Modal.jsx';
+import ShareCard from '../components/ShareCard.jsx';
 import { useToast, useHaptic } from '../components/Toast.jsx';
 import { formatDuration } from '../utils/date.js';
 
@@ -16,6 +17,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replaceFor, setReplaceFor] = useState(null); // exerciseId being replaced
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [shareFor, setShareFor] = useState(null); // finished workout to share
   const [now, setNow] = useState(Date.now());
   const toast = useToast();
   const haptic = useHaptic();
@@ -27,23 +29,38 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
     return () => clearInterval(id);
   }, [active]);
 
+  const shareCardEl = (
+    <ShareCard
+      open={!!shareFor}
+      workout={shareFor}
+      workouts={workouts}
+      exercises={exercises}
+      unit={settings.unit}
+      onClose={() => setShareFor(null)}
+    />
+  );
+
   if (!active) {
     return (
-      <div className="p-4 flex flex-col items-center justify-center min-h-[70vh] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-card border border-border flex items-center justify-center mb-4">
-          <Play size={28} className="text-accent" />
+      <>
+        <div className="p-4 flex flex-col items-center justify-center min-h-[70vh] text-center">
+          <div className="w-16 h-16 rounded-2xl bg-card border border-border flex items-center justify-center mb-4">
+            <Play size={28} className="text-accent" />
+          </div>
+          <div className="text-[11px] tracking-[0.2em] font-semibold text-muted mb-1">KUN WORKOUTS</div>
+          <h1 className="text-xl font-bold">Ready to lift?</h1>
+          <p className="text-muted text-sm mt-2 max-w-xs">
+            Start a workout to log sets, track PRs, and get progression targets for next time.
+          </p>
+          <button
+            onClick={async () => { await startWorkout(defaultName()); haptic(); }}
+            className="mt-6 h-12 px-6 rounded-xl bg-accent text-white font-semibold flex items-center gap-2 active:opacity-80"
+          >
+            <Play size={18} /> Start Workout
+          </button>
         </div>
-        <h1 className="text-xl font-bold">Ready to lift?</h1>
-        <p className="text-muted text-sm mt-2 max-w-xs">
-          Start a workout to log sets, track PRs, and get progression targets for next time.
-        </p>
-        <button
-          onClick={async () => { await startWorkout(defaultName()); haptic(); }}
-          className="mt-6 h-12 px-6 rounded-xl bg-accent text-white font-semibold flex items-center gap-2 active:opacity-80"
-        >
-          <Play size={18} /> Start Workout
-        </button>
-      </div>
+        {shareCardEl}
+      </>
     );
   }
 
@@ -177,6 +194,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
                 setConfirmFinish(false);
                 restTimer.stop();
                 onFinishToast?.(w);
+                if (w) setShareFor(w);
               }}
               className="flex-1 h-11 rounded-xl bg-success text-white font-semibold active:opacity-80"
             >
@@ -190,6 +208,8 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
           over {formatDuration(elapsed)}.
         </p>
       </Modal>
+
+      {shareCardEl}
     </div>
   );
 }
