@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Search, Trash2, Edit3, Filter, ChevronRight } from 'lucide-react';
+import { Search, Trash2, Edit3, Filter, ChevronRight, Share2 } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import SetRow from '../components/SetRow.jsx';
+import ShareCard from '../components/ShareCard.jsx';
 import { formatDate, formatDuration, formatDateTime } from '../utils/date.js';
 import { formatWeight } from '../utils/units.js';
 import { workingVolume, isWorking } from '../services/calculations.js';
@@ -14,6 +15,7 @@ export default function HistoryScreen({ workout, settings }) {
   const [dateTo, setDateTo] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [shareFor, setShareFor] = useState(null);
 
   const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
   const fmt = (kg) => formatWeight(kg, settings.unit);
@@ -136,8 +138,18 @@ export default function HistoryScreen({ workout, settings }) {
           onClose={() => setOpenId(null)}
           onSave={async (w) => { await updateHistoricalWorkout(w); }}
           onDelete={async () => { await deleteHistoricalWorkout(opened.id); setOpenId(null); }}
+          onShare={() => setShareFor(opened)}
         />
       )}
+
+      <ShareCard
+        open={!!shareFor}
+        workout={shareFor}
+        workouts={workouts}
+        exercises={exercises}
+        unit={settings.unit}
+        onClose={() => setShareFor(null)}
+      />
     </div>
   );
 }
@@ -151,7 +163,7 @@ function Stat({ label, value }) {
   );
 }
 
-function WorkoutDetail({ workout, exMap, unit, onClose, onSave, onDelete }) {
+function WorkoutDetail({ workout, exMap, unit, onClose, onSave, onDelete, onShare }) {
   const [w, setW] = useState(workout);
   const [confirmDel, setConfirmDel] = useState(false);
   const fmt = (kg) => formatWeight(kg, unit);
@@ -167,13 +179,21 @@ function WorkoutDetail({ workout, exMap, unit, onClose, onSave, onDelete }) {
       onClose={onClose}
       title={w.name || 'Workout'}
       footer={
-        <div className="flex gap-2">
-          <button onClick={() => setConfirmDel(true)} className="flex-1 h-11 rounded-xl border border-danger/60 text-danger flex items-center justify-center gap-2">
-            <Trash2 size={16} /> Delete
+        <div className="space-y-2">
+          <button
+            onClick={onShare}
+            className="w-full h-11 rounded-xl bg-surface border border-border text-text font-medium flex items-center justify-center gap-2 active:opacity-80"
+          >
+            <Share2 size={16} /> Share workout
           </button>
-          <button onClick={async () => { await onSave(w); onClose(); }} className="flex-1 h-11 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2">
-            <Edit3 size={16} /> Save
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDel(true)} className="flex-1 h-11 rounded-xl border border-danger/60 text-danger flex items-center justify-center gap-2">
+              <Trash2 size={16} /> Delete
+            </button>
+            <button onClick={async () => { await onSave(w); onClose(); }} className="flex-1 h-11 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2">
+              <Edit3 size={16} /> Save
+            </button>
+          </div>
         </div>
       }
     >
