@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Download, Share2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
-import { estimate1RM, workingVolume, isWorking, buildPrTimeline, e1rmSeries } from '../services/calculations.js';
+import { estimate1RM, workingVolume, isWorking, buildPrTimeline, e1rmSeries, computeStreak } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
 import { formatWeight, toDisplay, roundDisplay } from '../utils/units.js';
 import { startOfWeek, startOfDay, formatDate } from '../utils/date.js';
 import { useToast } from '../components/Toast.jsx';
+import ProgressShareCard from '../components/ProgressShareCard.jsx';
 
 export default function ProgressScreen({ workout, settings }) {
   const { workouts, exercises } = workout;
@@ -13,6 +14,7 @@ export default function ProgressScreen({ workout, settings }) {
   const fmt = (kg) => formatWeight(kg, unit);
   const toast = useToast();
   const exName = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
+  const [shareOpen, setShareOpen] = useState(false);
 
   // Basic counts.
   const now = Date.now();
@@ -20,7 +22,7 @@ export default function ProgressScreen({ workout, settings }) {
   const startMonth = new Date(); startMonth.setDate(1); startMonth.setHours(0,0,0,0);
   const thisWeek = workouts.filter((w) => w.date >= startWeek).length;
   const thisMonth = workouts.filter((w) => w.date >= startMonth.getTime()).length;
-  const streak = computeStreak(workouts);
+  const streak = computeStreak(workouts, now);
 
   // Aggregate weekly volume.
   const weekly = useMemo(() => {
@@ -164,33 +166,6 @@ export default function ProgressScreen({ workout, settings }) {
   const handleExportCSV = async () => {
     await downloadSetsCSV(unit);
     toast('CSV exported');
-  };
-
-  const handleShareSummary = async () => {
-    const lines = [
-      'Workout progress summary',
-      `This week: ${thisWeek} workout${thisWeek === 1 ? '' : 's'}`,
-      `This month: ${thisMonth} workout${thisMonth === 1 ? '' : 's'}`,
-      `Current streak: ${streak} week${streak === 1 ? '' : 's'}`,
-      `Total workouts logged: ${workouts.length}`
-    ];
-    if (prEvents.length) {
-      lines.push('', 'Recent PRs:');
-      for (const pr of prEvents.slice(0, 3)) {
-        lines.push(`- ${exName.get(pr.exerciseId) || 'Exercise'}: ${fmt(pr.valueKg)} (${pr.kind === 'e1rm' ? 'est. 1RM' : 'top set'})`);
-      }
-    }
-    const text = lines.join('\n');
-    if (navigator.share) {
-      try { await navigator.share({ text, title: 'Workout progress' }); } catch { /* user cancelled */ }
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      toast('Summary copied to clipboard');
-    } catch {
-      toast('Could not copy — clipboard access is blocked', { tone: 'error' });
-    }
   };
 
   return (
@@ -394,13 +369,21 @@ export default function ProgressScreen({ workout, settings }) {
             <Download size={16} /> Export CSV
           </button>
           <button
-            onClick={handleShareSummary}
+            onClick={() => setShareOpen(true)}
             className="flex-1 h-11 rounded-xl bg-accent text-white flex items-center justify-center gap-2 text-sm font-semibold"
           >
-            <Share2 size={16} /> Share summary
+            <Share2 size={16} /> Share progress
           </button>
         </div>
       </Section>
+
+      <ProgressShareCard
+        open={shareOpen}
+        workouts={workouts}
+        exercises={exercises}
+        unit={unit}
+        onClose={() => setShareOpen(false)}
+      />
     </div>
   );
 }
@@ -409,19 +392,6 @@ function heatmapColor(level) {
   if (level === 0) return '#1c1c1f';
   const alpha = [0, 0.3, 0.55, 0.8, 1][level];
   return `color-mix(in srgb, #3b82f6 ${Math.round(alpha * 100)}%, #1c1c1f)`;
-}
-
-function computeStreak(workouts) {
-  // Count consecutive ISO weeks (ending this week) with at least one workout.
-  if (!workouts.length) return 0;
-  const weeks = new Set(workouts.map((w) => startOfWeek(w.date)));
-  let count = 0;
-  let cur = startOfWeek(Date.now());
-  while (weeks.has(cur)) {
-    count++;
-    cur -= 7 * 86400000;
-  }
-  return count;
 }
 
 function Section({ title, children, right }) {

@@ -1,5 +1,6 @@
 // Pure functions over set/workout data. No React, no I/O.
 // Set shape: { id, exerciseId, type: 'warmup'|'working'|'drop'|'failure', weightKg, reps, timestamp, completed, rpe?, notes? }
+import { startOfWeek } from '../utils/date.js';
 
 export function isWorking(set) {
   return set && set.completed && set.type !== 'warmup';
@@ -122,6 +123,20 @@ export function buildPrTimeline(workouts) {
     }
   }
   return events.sort((a, b) => b.date - a.date);
+}
+
+// Consecutive ISO weeks (ending the current week) with at least one workout, counting back
+// from `asOf` (defaults to now). Weeks with zero workouts break the streak.
+export function computeStreak(workouts, asOf = Date.now()) {
+  if (!workouts.length) return 0;
+  const weeks = new Set(workouts.map((w) => startOfWeek(w.date)));
+  let count = 0;
+  let cur = startOfWeek(asOf);
+  while (weeks.has(cur)) {
+    count++;
+    cur -= 7 * 86400000;
+  }
+  return count;
 }
 
 // Est. 1RM at each workout date for one exercise — used to overlay two exercises' trends.
