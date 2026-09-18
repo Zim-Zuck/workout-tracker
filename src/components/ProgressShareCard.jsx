@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Share2, Download, X, Check } from 'lucide-react';
+import { Share2, Download, X, Check, Search, Star } from 'lucide-react';
 import { buildProgressSummary, strengthSeriesFor, TIMEFRAMES } from '../services/progressSummary.js';
 import { formatWeight } from '../utils/units.js';
 import {
   PALETTE, FONT_DISPLAY, FONT_TEXT,
-  paintBackground, drawTopBar, drawHairline, truncate, fitFontSize, drawWordmark, drawSparkline, drawBar
+  paintBackground, drawTopBar, drawHairline, truncate, fitFontSize, drawWordmark, drawSparkline, drawBar, drawDonut, accentShade
 } from '../utils/canvasDraw.js';
 
 // Metric catalogue per style. Minimal deliberately excludes the distribution charts —
@@ -36,6 +36,10 @@ const DEFAULTS = {
 // Canvas heights — Detailed gets more room since it carries more content.
 const CARD_H = { minimal: 1350, detailed: 1500 };
 const CARD_M = 72;
+
+// Muscle Focus renders as a fixed-size donut + legend, so unlike the row-based sections
+// its footprint doesn't grow with how many muscle groups there are.
+const MUSCLE_CHART_H = 210;
 
 // Minimal is a flat stack of hero tiles, so a simple weight budget keeps it from
 // getting crowded — a real number a person would actually post, not five.
@@ -104,9 +108,8 @@ function layoutDetailed(summary, selectedIds, exerciseCount, strengthSeriesLengt
     else trainingIds.forEach((id) => trimmed.push(id));
   }
 
-  const muscleRows = Math.min(4, summary.muscle.length);
-  if (has('muscle') && muscleRows >= 2) {
-    const need = 38 + muscleRows * 44;
+  if (has('muscle') && summary.muscle.length >= 2) {
+    const need = 38 + MUSCLE_CHART_H;
     if (y + need <= maxY) { rendered.add('muscle'); y += need; }
     else trimmed.push('muscle');
   }
@@ -152,6 +155,9 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
   const [selectedMinimal, setSelectedMinimal] = useState(null);
   const [selectedDetailed, setSelectedDetailed] = useState(null);
   const [selectedExercises, setSelectedExercises] = useState(null);
+  const [exerciseSearch, setExerciseSearch] = useState('');
+  const [featuredExerciseId, setFeaturedExerciseId] = useState(null);
+  const [volumeMode, setVolumeMode] = useState('pct');
 
   // Fresh defaults every time the sheet is opened.
   useEffect(() => {
@@ -163,6 +169,9 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     setSelectedMinimal(null);
     setSelectedDetailed(null);
     setSelectedExercises(null);
+    setExerciseSearch('');
+    setFeaturedExerciseId(null);
+    setVolumeMode('pct');
   }, [open]);
 
   const custom = useMemo(() => {
@@ -190,12 +199,26 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     ? pickExercises(effectiveExerciseIds, style, exerciseOptions)
     : { rendered: [], trimmed: [] };
   const renderedExercisesKey = renderedExercises.map((e) => e.exerciseId).join(',');
-  const headlineExercise = renderedExercises[0] || null;
+  // The starred exercise drives the Strength Progression line. The graph only ever needs
+  // one exercise, so this is intentionally independent of the PR list's row cap — starring
+  // an exercise that got crowded out of the (space-limited) PR rows should still work.
+  const featuredOption = featuredExerciseId ? exerciseOptions.find((e) => e.exerciseId === featuredExerciseId) : null;
+  const headlineExercise = (featuredOption && effectiveExerciseIds.includes(featuredOption.exerciseId))
+    ? featuredOption
+    : renderedExercises[0] || null;
+  const filteredExerciseOptions = exerciseSearch
+    ? exerciseOptions.filter((ex) => ex.exerciseName.toLowerCase().includes(exerciseSearch.toLowerCase()))
+    : exerciseOptions;
 
   const toggleExercise = (id) => {
     const next = new Set(effectiveExerciseIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedExercises([...next]);
+  };
+
+  const featureExercise = (id) => {
+    if (!effectiveExerciseIds.includes(id)) setSelectedExercises([...effectiveExerciseIds, id]);
+    setFeaturedExerciseId(id);
   };
 
   const strengthSeries = useMemo(() => {
@@ -228,11 +251,11 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     const cv = canvasRef.current;
     if (!cv) return;
     const renderedSet = new Set(renderedKey ? renderedKey.split(',') : []);
-    const url = drawProgressCard(cv, summary, style, renderedSet, renderedExercises, strengthSeries, unit);
+    const url = drawProgressCard(cv, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExercise?.exerciseName, volumeMode, unit);
     setPngUrl(url);
     return () => { if (url) URL.revokeObjectURL(url); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, summary, style, renderedKey, renderedExercisesKey, strengthSeries, unit]);
+  }, [open, summary, style, renderedKey, renderedExercisesKey, strengthSeries, volumeMode, unit]);
 
   if (!open) return null;
 
@@ -352,25 +375,46 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
                   const isChecked = effectiveSelected.includes(m.id);
                   const isTrimmed = trimmed.includes(m.id);
                   return (
-                    <button
-                      key={m.id}
-                      disabled={!isAvailable}
-                      onClick={() => toggleMetric(m.id)}
-                      className={`w-full flex items-center justify-between gap-2 h-11 px-3 rounded-xl border text-left ${
-                        !isAvailable ? 'border-border/50 opacity-40' : isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
-                      }`}
-                    >
-                      <span className="text-sm">
-                        {m.label}
-                        {!isAvailable && <span className="text-[10px] text-muted ml-1.5">no data yet</span>}
-                        {isAvailable && isTrimmed && <span className="text-[10px] text-warn ml-1.5">not shown — card is full</span>}
-                      </span>
-                      <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                        isChecked ? 'bg-accent border-accent' : 'border-border'
-                      }`}>
-                        {isChecked && <Check size={13} className="text-white" />}
-                      </span>
-                    </button>
+                    <div key={m.id}>
+                      <button
+                        disabled={!isAvailable}
+                        onClick={() => toggleMetric(m.id)}
+                        className={`w-full flex items-center justify-between gap-2 h-11 px-3 rounded-xl border text-left ${
+                          !isAvailable ? 'border-border/50 opacity-40' : isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
+                        }`}
+                      >
+                        <span className="text-sm">
+                          {m.label}
+                          {!isAvailable && <span className="text-[10px] text-muted ml-1.5">no data yet</span>}
+                          {isAvailable && isTrimmed && <span className="text-[10px] text-warn ml-1.5">not shown — card is full</span>}
+                        </span>
+                        <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                          isChecked ? 'bg-accent border-accent' : 'border-border'
+                        }`}>
+                          {isChecked && <Check size={13} className="text-white" />}
+                        </span>
+                      </button>
+                      {m.id === 'volume' && isAvailable && isChecked && (
+                        <div className="flex gap-2 mt-1.5 pl-1">
+                          <button
+                            onClick={() => setVolumeMode('pct')}
+                            className={`h-8 px-3 rounded-full text-xs border ${
+                              volumeMode === 'pct' ? 'bg-accent/15 border-accent/60 text-accent' : 'border-border text-muted'
+                            }`}
+                          >
+                            % change
+                          </button>
+                          <button
+                            onClick={() => setVolumeMode('avg')}
+                            className={`h-8 px-3 rounded-full text-xs border ${
+                              volumeMode === 'avg' ? 'bg-accent/15 border-accent/60 text-accent' : 'border-border text-muted'
+                            }`}
+                          >
+                            Avg / workout
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -385,33 +429,59 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
 
             {exerciseOptions.length > 0 && (
               <ConfigSection label="Exercises">
-                <div className="space-y-1.5">
-                  {exerciseOptions.map((ex) => {
+                {exerciseOptions.length > 6 && (
+                  <div className="relative mb-2">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                    <input
+                      value={exerciseSearch}
+                      onChange={(e) => setExerciseSearch(e.target.value)}
+                      placeholder="Search exercises"
+                      className="w-full h-10 pl-8 pr-3 rounded-lg bg-card border border-border outline-none focus:border-accent text-sm"
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-muted mb-2">
+                  Check to include · tap <Star size={10} className="inline -mt-0.5" /> to feature in the Strength graph
+                </p>
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto no-scrollbar">
+                  {filteredExerciseOptions.length === 0 && (
+                    <div className="text-xs text-muted text-center py-4">No exercises match "{exerciseSearch}".</div>
+                  )}
+                  {filteredExerciseOptions.map((ex) => {
                     const isChecked = effectiveExerciseIds.includes(ex.exerciseId);
                     const isTrimmed = trimmedExercises.some((t) => t.exerciseId === ex.exerciseId);
+                    const isFeatured = headlineExercise?.exerciseId === ex.exerciseId;
                     return (
-                      <button
+                      <div
                         key={ex.exerciseId}
-                        onClick={() => toggleExercise(ex.exerciseId)}
-                        className={`w-full flex items-center justify-between gap-2 h-11 px-3 rounded-xl border text-left ${
+                        className={`w-full flex items-center gap-2 h-11 pl-3 pr-2 rounded-xl border ${
                           isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
                         }`}
                       >
-                        <span className="text-sm min-w-0 truncate">
-                          {ex.exerciseName}
-                          {isChecked && isTrimmed && <span className="text-[10px] text-warn ml-1.5">not shown — card is full</span>}
+                        <button onClick={() => toggleExercise(ex.exerciseId)} className="flex-1 min-w-0 flex items-center text-left">
+                          <span className="text-sm truncate">{ex.exerciseName}</span>
+                          {isChecked && isTrimmed && <span className="text-[10px] text-warn ml-1.5 shrink-0">not shown</span>}
+                        </button>
+                        <span className="text-[11px] text-muted tabular-nums shrink-0">
+                          {formatWeight(ex.valueKg, unit)} · {exerciseDeltaLabel(ex, unit)}
                         </span>
-                        <span className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] text-muted tabular-nums">
-                            {formatWeight(ex.valueKg, unit)} · {exerciseDeltaLabel(ex, unit)}
-                          </span>
-                          <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                        <button
+                          onClick={() => featureExercise(ex.exerciseId)}
+                          aria-label={`Feature ${ex.exerciseName} in Strength graph`}
+                          className={`p-1 shrink-0 ${isFeatured ? 'text-accent' : 'text-muted/60'}`}
+                        >
+                          <Star size={15} fill={isFeatured ? 'currentColor' : 'none'} />
+                        </button>
+                        <button
+                          onClick={() => toggleExercise(ex.exerciseId)}
+                          aria-label={`${isChecked ? 'Remove' : 'Add'} ${ex.exerciseName}`}
+                          className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
                             isChecked ? 'bg-accent border-accent' : 'border-border'
-                          }`}>
-                            {isChecked && <Check size={13} className="text-white" />}
-                          </span>
-                        </span>
-                      </button>
+                          }`}
+                        >
+                          {isChecked && <Check size={13} className="text-white" />}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -471,7 +541,7 @@ function StyleOption({ active, title, desc, onClick }) {
 
 // ---------- Canvas rendering ----------
 
-function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises, strengthSeries, unit) {
+function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit) {
   const W = 1080;
   const H = CARD_H[style];
   const dpr = Math.min(3, window.devicePixelRatio || 2);
@@ -481,8 +551,8 @@ function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, unit);
-  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, unit);
+  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode, unit);
+  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit);
 
   try {
     return canvas.toDataURL('image/png');
@@ -501,9 +571,13 @@ function formatBigWeight(kg, unit) {
   return [grouped + (decPart ? `.${decPart}` : ''), ...rest].join(' ');
 }
 
-function volumeTile(summary, unit) {
-  const { volumeKg, volumePct } = summary.training;
+function volumeTile(summary, unit, volumeMode) {
+  const { volumeKg, volumePct, workoutCount } = summary.training;
   if (volumeKg <= 0) return null;
+  if (volumeMode === 'avg') {
+    const avg = workoutCount > 0 ? volumeKg / workoutCount : 0;
+    return { value: formatBigWeight(avg, unit), label: 'AVG / WORKOUT' };
+  }
   if (volumePct != null) {
     const sign = volumePct > 0 ? '+' : '';
     return { value: `${sign}${volumePct}%`, label: 'VOLUME' };
@@ -511,7 +585,7 @@ function volumeTile(summary, unit) {
   return { value: formatBigWeight(volumeKg, unit), label: 'VOLUME' };
 }
 
-function buildTiles(summary, renderedSet, renderedExercises, unit) {
+function buildTiles(summary, renderedSet, renderedExercises, volumeMode, unit) {
   const tiles = [];
   if (renderedSet.has('prs')) {
     for (const pr of renderedExercises) {
@@ -522,7 +596,7 @@ function buildTiles(summary, renderedSet, renderedExercises, unit) {
     tiles.push({ value: String(summary.training.workoutCount), label: 'WORKOUTS' });
   }
   if (renderedSet.has('volume')) {
-    const v = volumeTile(summary, unit);
+    const v = volumeTile(summary, unit, volumeMode);
     if (v) tiles.push(v);
   }
   if (renderedSet.has('streak') && summary.streakWeeks > 0) {
@@ -531,7 +605,7 @@ function buildTiles(summary, renderedSet, renderedExercises, unit) {
   return tiles;
 }
 
-function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, unit) {
+function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode, unit) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -553,7 +627,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, stre
   drawHairline(ctx, M, y, W - M, y);
   y += 58;
 
-  const tiles = buildTiles(summary, renderedSet, renderedExercises, unit).slice(0, 4);
+  const tiles = buildTiles(summary, renderedSet, renderedExercises, volumeMode, unit).slice(0, 4);
 
   if (tiles.length === 0) {
     ctx.fillStyle = PALETTE.muted;
@@ -584,7 +658,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, stre
   drawWordmark(ctx, W, H);
 }
 
-function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, unit) {
+function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -613,7 +687,7 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
     ctx.textAlign = 'right';
     ctx.fillStyle = PALETTE.text;
     ctx.font = `600 24px ${FONT_TEXT}`;
-    ctx.fillText(truncate(ctx, renderedExercises[0]?.exerciseName || '', 420), W - M, y);
+    ctx.fillText(truncate(ctx, headlineExerciseName || '', 420), W - M, y);
     ctx.textAlign = 'left';
     y += 30;
     const vals = strengthSeries.map((p) => p.e1rmKg);
@@ -650,7 +724,7 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
     trainingTiles.push({ value: String(summary.training.workoutCount), label: 'WORKOUTS' });
   }
   if (renderedSet.has('volume')) {
-    const v = volumeTile(summary, unit);
+    const v = volumeTile(summary, unit, volumeMode);
     if (v) trainingTiles.push(v);
   }
   if (renderedSet.has('streak') && summary.streakWeeks > 0) {
@@ -677,29 +751,47 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
     y += 44;
   }
 
-  const muscleRowCount = Math.min(4, summary.muscle.length);
-  if (renderedSet.has('muscle') && muscleRowCount >= 2 && y + 38 + muscleRowCount * 44 <= maxY) {
+  if (renderedSet.has('muscle') && summary.muscle.length >= 2 && y + 38 + MUSCLE_CHART_H <= maxY) {
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `600 20px ${FONT_TEXT}`;
     ctx.fillText('MUSCLE FOCUS', M, y);
     y += 38;
+
     const rows = summary.muscle.slice(0, 4);
-    const barX = M + 170;
-    const barW = W - M - barX - 70;
-    for (const row of rows) {
+    const shown = rows.reduce((a, r) => a + r.pct, 0);
+    const otherPct = Math.max(0, 100 - shown);
+    const segCount = rows.length + (otherPct > 1 ? 1 : 0);
+
+    const chartTop = y;
+    const cx = M + 90;
+    const cy = chartTop + 80;
+    const radius = 72;
+    const segments = rows.map((r, i) => ({ value: r.pct, color: accentShade(i, segCount) }));
+    if (otherPct > 1) segments.push({ value: otherPct, color: PALETTE.faint });
+    drawDonut(ctx, cx, cy, radius, 22, segments);
+
+    const legendX = cx + radius + 56;
+    let legendY = chartTop + 10;
+    const legendRow = (color, label, pct) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(legendX + 6, legendY + 6, 6, 0, Math.PI * 2);
+      ctx.fill();
       ctx.textAlign = 'left';
       ctx.fillStyle = PALETTE.text;
       ctx.font = `500 24px ${FONT_TEXT}`;
-      ctx.fillText(truncate(ctx, row.label, 150), M, y + 18);
-      drawBar(ctx, barX, y + 2, barW, 16, row.pct);
+      ctx.fillText(truncate(ctx, label, W - M - legendX - 90), legendX + 22, legendY + 14);
       ctx.textAlign = 'right';
       ctx.fillStyle = PALETTE.muted;
       ctx.font = `500 22px ${FONT_TEXT}`;
-      ctx.fillText(`${row.pct}%`, W - M, y + 18);
+      ctx.fillText(`${Math.round(pct)}%`, W - M, legendY + 14);
       ctx.textAlign = 'left';
-      y += 44;
-    }
-    y += 4;
+      legendY += 36;
+    };
+    rows.forEach((r, i) => legendRow(accentShade(i, segCount), r.label, r.pct));
+    if (otherPct > 1) legendRow(PALETTE.faint, 'Other', otherPct);
+
+    y = chartTop + MUSCLE_CHART_H;
   }
 
   const repRangeHasData = summary.repRange.some((r) => r.count > 0);

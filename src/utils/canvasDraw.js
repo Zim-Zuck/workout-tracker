@@ -108,6 +108,32 @@ export function drawBar(ctx, x, y, w, h, pct, color = PALETTE.accent, trackColor
   ctx.fill();
 }
 
+// A ring/donut chart — quiet, single-hue segments (rank distinguished by lightness, not a
+// rainbow of new colors) so it stays inside the app's existing accent rather than inventing
+// a categorical palette. `segments` is [{ value, label? }], largest-first is typical.
+export function drawDonut(ctx, cx, cy, radius, thickness, segments) {
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  const gap = segments.length > 1 ? 0.035 : 0;
+  let angle = -Math.PI / 2;
+  ctx.lineCap = 'butt';
+  segments.forEach((seg, i) => {
+    const sweep = (seg.value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, angle + gap / 2, angle + sweep - gap / 2);
+    ctx.lineWidth = thickness;
+    ctx.strokeStyle = seg.color || accentShade(i, segments.length);
+    ctx.stroke();
+    angle += sweep;
+  });
+}
+
+// Rank 0 (biggest share) gets the full accent; each rank after fades a bit — a sequential,
+// single-hue scale rather than introducing new categorical colors into the palette.
+export function accentShade(rank, total) {
+  const alpha = Math.max(0.32, 1 - rank * (0.62 / Math.max(1, total - 1 || 1)));
+  return `rgba(94, 160, 255, ${alpha.toFixed(2)})`;
+}
+
 export function roundRect(ctx, x, y, w, h, r) {
   const rad = Math.min(r, h / 2, w / 2);
   ctx.beginPath();
