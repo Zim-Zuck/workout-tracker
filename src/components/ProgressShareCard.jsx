@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Share2, Download, X, Check } from 'lucide-react';
-import { buildProgressSummary, TIMEFRAMES } from '../services/progressSummary.js';
+import { buildProgressSummary, strengthSeriesFor, TIMEFRAMES } from '../services/progressSummary.js';
 import { formatWeight } from '../utils/units.js';
 import {
   PALETTE, FONT_DISPLAY, FONT_TEXT,
@@ -42,6 +42,32 @@ const CARD_M = 72;
 const MINIMAL_WEIGHT = { prs: 3, workouts: 1, volume: 1, streak: 1, strength: 1 };
 const MINIMAL_BUDGET = 5;
 
+// How many exercises each style's Personal Records / Strength section can hold before
+// it starts feeling crowded — mirrors the metric-crowding cap-and-warn pattern above.
+const EXERCISE_CAP = { minimal: 2, detailed: 3 };
+
+// Orders a user's exercise picks by biggest improvement first (so the strongest story
+// leads), then caps to the style's limit — same "intelligently reorganize" pattern as
+// pickRendered(), applied to the exercise roster instead of the metric list.
+function pickExercises(selectedIds, style, exerciseOptions) {
+  const optionMap = new Map(exerciseOptions.map((e) => [e.exerciseId, e]));
+  const ordered = selectedIds
+    .map((id) => optionMap.get(id))
+    .filter(Boolean)
+    .sort((a, b) => (b.deltaKg - a.deltaKg) || (b.valueKg - a.valueKg));
+  const cap = EXERCISE_CAP[style];
+  return { rendered: ordered.slice(0, cap), trimmed: ordered.slice(cap) };
+}
+
+// "New" when there's no real baseline to compare to, "Steady" when selected but flat/negative
+// in the period, otherwise the actual improvement — so a hand-picked exercise that isn't a
+// fresh PR still reads sensibly instead of implying a record that didn't happen.
+function exerciseDeltaLabel(ex, unit) {
+  if (ex.isNew) return 'New';
+  if (ex.improved) return `+${formatWeight(ex.deltaKg, unit)}`;
+  return 'Steady';
+}
+
 function defaultsFor(style, available) {
   const base = DEFAULTS[style].filter((id) => available[id]);
   if (base.length) return base;
@@ -53,19 +79,19 @@ function defaultsFor(style, available) {
 // drawDetailed() uses and decides section-by-section what actually fits. Both the metric
 // checklist and the canvas read from this single source of truth, so the UI's "not shown"
 // warning always matches what the exported image actually contains.
-function layoutDetailed(summary, selectedIds) {
+function layoutDetailed(summary, selectedIds, exerciseCount, strengthSeriesLength) {
   const has = (id) => selectedIds.includes(id) && summary.available[id];
   const maxY = CARD_H.detailed - 150;
   let y = CARD_M + 130 + 46 + 96 + 48;
   const rendered = new Set();
   const trimmed = [];
 
-  if (has('strength') && summary.strengthSeries.length >= 2) {
+  if (has('strength') && strengthSeriesLength >= 2) {
     if (y + 234 <= maxY) { rendered.add('strength'); y += 234; }
     else trimmed.push('strength');
   }
 
-  const prCount = Math.min(3, summary.prs.length);
+  const prCount = Math.min(3, exerciseCount);
   if (has('prs') && prCount > 0) {
     const need = 44 + prCount * 48 + 56;
     if (y + need <= maxY) { rendered.add('prs'); y += need; }
@@ -97,8 +123,8 @@ function layoutDetailed(summary, selectedIds) {
 
 // Trims a user's metric selection so an overcrowded pick "intelligently reorganizes"
 // instead of overflowing the card, preserving each style's priority order.
-function pickRendered(selectedIds, style, summary) {
-  if (style === 'detailed') return layoutDetailed(summary, selectedIds);
+function pickRendered(selectedIds, style, summary, exerciseCount, strengthSeriesLength) {
+  if (style === 'detailed') return layoutDetailed(summary, selectedIds, exerciseCount, strengthSeriesLength);
 
   const order = STYLE_METRICS.minimal.map((m) => m.id);
   let used = 0;
@@ -106,6 +132,8 @@ function pickRendered(selectedIds, style, summary) {
   const trimmed = [];
   for (const id of order) {
     if (!selectedIds.includes(id) || !summary.available[id]) continue;
+    if (id === 'strength' && strengthSeriesLength < 2) continue;
+    if (id === 'prs' && exerciseCount === 0) continue;
     const w = MINIMAL_WEIGHT[id] || 1;
     if (used + w <= MINIMAL_BUDGET) { rendered.push(id); used += w; }
     else trimmed.push(id);
@@ -123,6 +151,7 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
   const [style, setStyle] = useState('minimal');
   const [selectedMinimal, setSelectedMinimal] = useState(null);
   const [selectedDetailed, setSelectedDetailed] = useState(null);
+  const [selectedExercises, setSelectedExercises] = useState(null);
 
   // Fresh defaults every time the sheet is opened.
   useEffect(() => {
@@ -133,6 +162,7 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     setStyle('minimal');
     setSelectedMinimal(null);
     setSelectedDetailed(null);
+    setSelectedExercises(null);
   }, [open]);
 
   const custom = useMemo(() => {
@@ -149,10 +179,35 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     return buildProgressSummary(workouts, exercises, { timeframeId, custom });
   }, [open, workouts, exercises, timeframeId, custom]);
 
+  // Exercise picker: which lifts show up in Personal Records / drive the Strength line.
+  // Defaults to the top improvers this period (or, failing that, whatever was trained).
+  const exerciseOptions = summary?.exerciseOptions || [];
+  const defaultExerciseIds = summary
+    ? (summary.prs.length ? summary.prs.map((p) => p.exerciseId) : exerciseOptions.slice(0, 3).map((p) => p.exerciseId))
+    : [];
+  const effectiveExerciseIds = selectedExercises || defaultExerciseIds;
+  const { rendered: renderedExercises, trimmed: trimmedExercises } = summary
+    ? pickExercises(effectiveExerciseIds, style, exerciseOptions)
+    : { rendered: [], trimmed: [] };
+  const renderedExercisesKey = renderedExercises.map((e) => e.exerciseId).join(',');
+  const headlineExercise = renderedExercises[0] || null;
+
+  const toggleExercise = (id) => {
+    const next = new Set(effectiveExerciseIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedExercises([...next]);
+  };
+
+  const strengthSeries = useMemo(() => {
+    if (!summary || !headlineExercise) return [];
+    return strengthSeriesFor(workouts, headlineExercise.exerciseId, summary.start, summary.end);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary, headlineExercise?.exerciseId, workouts]);
+
   const selectedIds = style === 'minimal' ? selectedMinimal : selectedDetailed;
   const effectiveSelected = summary ? (selectedIds || defaultsFor(style, summary.available)) : [];
   const { rendered, trimmed } = summary
-    ? pickRendered(effectiveSelected, style, summary)
+    ? pickRendered(effectiveSelected, style, summary, renderedExercises.length, strengthSeries.length)
     : { rendered: [], trimmed: [] };
   const renderedKey = rendered.join(',');
 
@@ -173,11 +228,11 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     const cv = canvasRef.current;
     if (!cv) return;
     const renderedSet = new Set(renderedKey ? renderedKey.split(',') : []);
-    const url = drawProgressCard(cv, summary, style, renderedSet, unit);
+    const url = drawProgressCard(cv, summary, style, renderedSet, renderedExercises, strengthSeries, unit);
     setPngUrl(url);
     return () => { if (url) URL.revokeObjectURL(url); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, summary, style, renderedKey, unit]);
+  }, [open, summary, style, renderedKey, renderedExercisesKey, strengthSeries, unit]);
 
   if (!open) return null;
 
@@ -327,6 +382,48 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
                 </div>
               )}
             </ConfigSection>
+
+            {exerciseOptions.length > 0 && (
+              <ConfigSection label="Exercises">
+                <div className="space-y-1.5">
+                  {exerciseOptions.map((ex) => {
+                    const isChecked = effectiveExerciseIds.includes(ex.exerciseId);
+                    const isTrimmed = trimmedExercises.some((t) => t.exerciseId === ex.exerciseId);
+                    return (
+                      <button
+                        key={ex.exerciseId}
+                        onClick={() => toggleExercise(ex.exerciseId)}
+                        className={`w-full flex items-center justify-between gap-2 h-11 px-3 rounded-xl border text-left ${
+                          isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
+                        }`}
+                      >
+                        <span className="text-sm min-w-0 truncate">
+                          {ex.exerciseName}
+                          {isChecked && isTrimmed && <span className="text-[10px] text-warn ml-1.5">not shown — card is full</span>}
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] text-muted tabular-nums">
+                            {formatWeight(ex.valueKg, unit)} · {exerciseDeltaLabel(ex, unit)}
+                          </span>
+                          <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                            isChecked ? 'bg-accent border-accent' : 'border-border'
+                          }`}>
+                            {isChecked && <Check size={13} className="text-white" />}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {trimmedExercises.length > 0 && (
+                  <div className="mt-2 text-[11px] text-warn">
+                    {style === 'minimal'
+                      ? `Minimal fits ${EXERCISE_CAP.minimal} exercises — switch to Detailed for more.`
+                      : `Detailed fits ${EXERCISE_CAP.detailed} exercises — the rest were left off.`}
+                  </div>
+                )}
+              </ConfigSection>
+            )}
           </div>
         </div>
 
@@ -374,7 +471,7 @@ function StyleOption({ active, title, desc, onClick }) {
 
 // ---------- Canvas rendering ----------
 
-function drawProgressCard(canvas, summary, style, renderedSet, unit) {
+function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises, strengthSeries, unit) {
   const W = 1080;
   const H = CARD_H[style];
   const dpr = Math.min(3, window.devicePixelRatio || 2);
@@ -384,8 +481,8 @@ function drawProgressCard(canvas, summary, style, renderedSet, unit) {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, unit);
-  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, unit);
+  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, unit);
+  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, unit);
 
   try {
     return canvas.toDataURL('image/png');
@@ -414,10 +511,10 @@ function volumeTile(summary, unit) {
   return { value: formatBigWeight(volumeKg, unit), label: 'VOLUME' };
 }
 
-function buildTiles(summary, renderedSet, unit, maxPrs) {
+function buildTiles(summary, renderedSet, renderedExercises, unit) {
   const tiles = [];
   if (renderedSet.has('prs')) {
-    for (const pr of summary.prs.slice(0, maxPrs)) {
+    for (const pr of renderedExercises) {
       tiles.push({ value: formatWeight(pr.valueKg, unit), label: `${pr.exerciseName.toUpperCase()} PR` });
     }
   }
@@ -434,7 +531,7 @@ function buildTiles(summary, renderedSet, unit, maxPrs) {
   return tiles;
 }
 
-function drawMinimal(ctx, W, H, M, summary, renderedSet, unit) {
+function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, unit) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -456,7 +553,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, unit) {
   drawHairline(ctx, M, y, W - M, y);
   y += 58;
 
-  const tiles = buildTiles(summary, renderedSet, unit, 2).slice(0, 4);
+  const tiles = buildTiles(summary, renderedSet, renderedExercises, unit).slice(0, 4);
 
   if (tiles.length === 0) {
     ctx.fillStyle = PALETTE.muted;
@@ -477,9 +574,9 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, unit) {
     y += 70;
   }
 
-  if (renderedSet.has('strength') && summary.strengthSeries.length >= 2) {
+  if (renderedSet.has('strength') && strengthSeries.length >= 2) {
     y += 24;
-    const vals = summary.strengthSeries.map((p) => p.e1rmKg);
+    const vals = strengthSeries.map((p) => p.e1rmKg);
     drawSparkline(ctx, M, y, W - M * 2, 90, vals);
     y += 90;
   }
@@ -487,7 +584,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, unit) {
   drawWordmark(ctx, W, H);
 }
 
-function drawDetailed(ctx, W, H, M, summary, renderedSet, unit) {
+function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, unit) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -509,38 +606,37 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, unit) {
   drawHairline(ctx, M, y, W - M, y);
   y += 48;
 
-  if (renderedSet.has('strength') && summary.strengthSeries.length >= 2 && y + 234 <= maxY) {
+  if (renderedSet.has('strength') && strengthSeries.length >= 2 && y + 234 <= maxY) {
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `600 20px ${FONT_TEXT}`;
     ctx.fillText('STRENGTH PROGRESSION', M, y);
     ctx.textAlign = 'right';
     ctx.fillStyle = PALETTE.text;
     ctx.font = `600 24px ${FONT_TEXT}`;
-    ctx.fillText(truncate(ctx, summary.headlineExerciseName || '', 420), W - M, y);
+    ctx.fillText(truncate(ctx, renderedExercises[0]?.exerciseName || '', 420), W - M, y);
     ctx.textAlign = 'left';
     y += 30;
-    const vals = summary.strengthSeries.map((p) => p.e1rmKg);
+    const vals = strengthSeries.map((p) => p.e1rmKg);
     drawSparkline(ctx, M, y, W - M * 2, 130, vals);
     y += 160;
     drawHairline(ctx, M, y, W - M, y);
     y += 44;
   }
 
-  const prCount = Math.min(3, summary.prs.length);
+  const prCount = Math.min(3, renderedExercises.length);
   if (renderedSet.has('prs') && prCount > 0 && y + 44 + prCount * 48 + 56 <= maxY) {
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `600 20px ${FONT_TEXT}`;
     ctx.fillText('PERSONAL RECORDS', M, y);
     y += 44;
-    for (const pr of summary.prs.slice(0, 3)) {
+    for (const pr of renderedExercises.slice(0, 3)) {
       ctx.fillStyle = PALETTE.text;
       ctx.font = `600 30px ${FONT_DISPLAY}`;
       ctx.fillText(truncate(ctx, pr.exerciseName, W - M * 2 - 280), M, y);
       ctx.textAlign = 'right';
       ctx.fillStyle = PALETTE.accent;
       ctx.font = `600 28px ${FONT_DISPLAY}`;
-      const delta = pr.isNew ? 'New' : `+${formatWeight(pr.deltaKg, unit)}`;
-      ctx.fillText(`${formatWeight(pr.valueKg, unit)}  ${delta}`, W - M, y);
+      ctx.fillText(`${formatWeight(pr.valueKg, unit)}  ${exerciseDeltaLabel(pr, unit)}`, W - M, y);
       ctx.textAlign = 'left';
       y += 48;
     }

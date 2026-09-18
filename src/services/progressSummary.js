@@ -53,9 +53,10 @@ export function periodTitle(timeframeId, start, end) {
 }
 
 // Per-exercise improvement across the period: current best (as of `end`) vs the best
-// achieved strictly before `start`. Only exercises actually trained inside the period,
-// and that actually improved (or are wholly new to the period), are returned.
-function exercisePRProgress(workouts, exerciseMap, start, end) {
+// achieved strictly before `start`. Every exercise actually trained inside the period is
+// returned (the "exercise picker" needs the full roster) — callers filter down to real
+// improvements themselves when they only want PRs.
+function exerciseProgress(workouts, exerciseMap, start, end) {
   const byExercise = new Map();
   for (const w of workouts) {
     if (w.date > end) continue;
@@ -88,6 +89,7 @@ function exercisePRProgress(workouts, exerciseMap, start, end) {
       isNew = sortedInPeriod.length < 2;
     }
     const deltaKg = currentE1rm - baselineE1rm;
+    const improved = !isNew && deltaKg > 0.01;
 
     results.push({
       exerciseId: exId,
@@ -95,13 +97,18 @@ function exercisePRProgress(workouts, exerciseMap, start, end) {
       valueKg: currentE1rm,
       topWeightKg: currentTopWeight,
       deltaKg,
-      isNew
+      isNew,
+      improved
     });
   }
 
-  return results
-    .filter((r) => (r.isNew ? r.valueKg > 0 : r.deltaKg > 0.01))
-    .sort((a, b) => (b.deltaKg - a.deltaKg) || (b.valueKg - a.valueKg));
+  return results.sort((a, b) => (b.deltaKg - a.deltaKg) || (b.valueKg - a.valueKg));
+}
+
+// The subset of exerciseProgress() that actually represents a "personal record" worth
+// leading with — a real improvement, or brand new to the period with a real value.
+function filterToPRs(exerciseOptions) {
+  return exerciseOptions.filter((r) => (r.isNew ? r.valueKg > 0 : r.improved));
 }
 
 function trainingStats(workouts, start, end) {
@@ -176,8 +183,9 @@ function mostTrainedExerciseId(workouts, start, end) {
   return best;
 }
 
-// Est. 1RM at each workout date for one exercise, within [start, end] only.
-function e1rmSeriesInRange(workouts, exerciseId, start, end) {
+// Est. 1RM at each workout date for one exercise, within [start, end] only. Exported so the
+// card can recompute the Strength Progression line for whichever exercise the user picks.
+export function strengthSeriesFor(workouts, exerciseId, start, end) {
   const rows = [];
   for (const w of [...workouts].sort((a, b) => a.date - b.date)) {
     if (w.date < start || w.date > end) continue;
@@ -195,15 +203,18 @@ export function buildProgressSummary(workouts, exercises, { timeframeId = '6m', 
   const exerciseMap = new Map(exercises.map((e) => [e.id, e]));
   const { start, end } = resolveRange(timeframeId, workouts, custom);
 
-  const prs = exercisePRProgress(workouts, exerciseMap, start, end);
+  const exerciseOptions = exerciseProgress(workouts, exerciseMap, start, end);
+  const prs = filterToPRs(exerciseOptions);
   const training = trainingStats(workouts, start, end);
   const streakWeeks = computeStreak(workouts, end);
   const muscle = muscleDistribution(workouts, exercises, start, end);
   const repRange = repRangeDistribution(workouts, start, end);
 
-  const headlineExerciseId = prs[0]?.exerciseId || mostTrainedExerciseId(workouts, start, end);
+  // Default headline exercise for the Strength Progression line — the user can override
+  // this via the exercise picker; this is just what the card shows before they touch it.
+  const headlineExerciseId = prs[0]?.exerciseId || exerciseOptions[0]?.exerciseId || mostTrainedExerciseId(workouts, start, end);
   const headlineExerciseName = headlineExerciseId ? (exerciseMap.get(headlineExerciseId)?.name || 'Exercise') : null;
-  const strengthSeries = headlineExerciseId ? e1rmSeriesInRange(workouts, headlineExerciseId, start, end) : [];
+  const strengthSeries = headlineExerciseId ? strengthSeriesFor(workouts, headlineExerciseId, start, end) : [];
 
   const firstWorkoutDate = workouts.reduce((m, w) => Math.min(m, w.date), Infinity);
   const spanDays = workouts.length ? Math.max(0, (end - Math.max(start, firstWorkoutDate)) / 86400000) : 0;
@@ -219,6 +230,7 @@ export function buildProgressSummary(workouts, exercises, { timeframeId = '6m', 
     label: periodLabel(timeframeId, start, end),
     title: periodTitle(timeframeId, start, end),
     prs,
+    exerciseOptions,
     training,
     streakWeeks,
     muscle,
