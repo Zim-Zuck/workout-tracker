@@ -4,10 +4,15 @@
 //   workouts       key: id, idx: date  (completed + active workouts; active is workouts[isActive=true])
 //   settings       key: key         (single-row config)
 //   meta           key: key         (schema version, etc.)
+//   outbox         key: id, idx: kind  (pending cloud writes; survives app kill)
+//   socialCache    key: key         (last-known profiles/friends/challenges, for offline render)
 import { DEFAULT_EXERCISES } from '../data/defaultExercises.js';
 
 const DB_NAME = 'lift-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+// Backup/export format version. Deliberately still 1: v2 added only local-only
+// stores (outbox, socialCache) which are never exported, so v1 backups remain
+// valid and older app builds can still read files written by this one.
 export const SCHEMA_VERSION = 1;
 
 let _dbPromise = null;
@@ -36,7 +41,23 @@ export function openDB() {
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
       }
 
-      // Next schema change: bump DB_VERSION below and add `if (oldVersion < 2) { ... }`
+      // v2: social layer. Both stores are local-only scratch space — the outbox
+      // holds cloud writes waiting for a connection, socialCache holds the last
+      // successful read of each social screen so they render offline. Neither
+      // contains anything that isn't reconstructible, so no data migration is
+      // needed and a user upgrading loses nothing.
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains('outbox')) {
+          const s = db.createObjectStore('outbox', { keyPath: 'id' });
+          s.createIndex('kind', 'kind');
+          s.createIndex('createdAt', 'createdAt');
+        }
+        if (!db.objectStoreNames.contains('socialCache')) {
+          db.createObjectStore('socialCache', { keyPath: 'key' });
+        }
+      }
+
+      // Next schema change: bump DB_VERSION above and add `if (oldVersion < 3) { ... }`
       // here (new stores/indexes, or data rewrites via e.target.transaction).
     };
     req.onsuccess = () => resolve(req.result);
@@ -130,6 +151,59 @@ export async function setMeta(key, value) {
   const db = await openDB();
   const t = tx(db, 'meta', 'readwrite');
   await reqPromise(t.objectStore('meta').put({ key, value }));
+}
+
+// ---- Outbox (pending cloud writes) ----
+export async function getOutbox() {
+  const db = await openDB();
+  const list = await reqPromise(tx(db, 'outbox').objectStore('outbox').getAll());
+  return (list || []).sort((a, b) => a.createdAt - b.createdAt);
+}
+export async function putOutboxItem(item) {
+  const db = await openDB();
+  const t = tx(db, 'outbox', 'readwrite');
+  await reqPromise(t.objectStore('outbox').put(item));
+  return item;
+}
+export async function deleteOutboxItem(id) {
+  const db = await openDB();
+  const t = tx(db, 'outbox', 'readwrite');
+  await reqPromise(t.objectStore('outbox').delete(id));
+}
+// Drop every queued item of a kind. Used for idempotent snapshot kinds, where an
+// older queued copy is pure noise once a newer one exists.
+export async function deleteOutboxByKind(kind) {
+  const db = await openDB();
+  const t = tx(db, 'outbox', 'readwrite');
+  const idx = t.objectStore('outbox').index('kind');
+  const matches = await reqPromise(idx.getAll(kind));
+  await Promise.all((matches || []).map((m) => reqPromise(t.objectStore('outbox').delete(m.id))));
+}
+export async function clearOutbox() {
+  const db = await openDB();
+  const t = tx(db, 'outbox', 'readwrite');
+  await reqPromise(t.objectStore('outbox').clear());
+}
+
+// ---- Social cache (last known cloud reads, for offline render) ----
+export async function getCached(key) {
+  const db = await openDB();
+  const r = await reqPromise(tx(db, 'socialCache').objectStore('socialCache').get(key));
+  return r || null; // { key, value, cachedAt }
+}
+export async function setCached(key, value) {
+  const db = await openDB();
+  const t = tx(db, 'socialCache', 'readwrite');
+  const row = { key, value, cachedAt: Date.now() };
+  await reqPromise(t.objectStore('socialCache').put(row));
+  return row;
+}
+// Wipe cached social data — on sign-out, so the next account never sees the
+// previous user's friends or stats, even for a frame.
+export async function clearSocialCache() {
+  const db = await openDB();
+  const t = tx(db, 'socialCache', 'readwrite');
+  await reqPromise(t.objectStore('socialCache').clear());
 }
 
 // ---- Bulk ops (for import / wipe) ----
