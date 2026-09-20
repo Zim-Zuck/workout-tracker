@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Play, Square, Plus, Search, Undo2, Timer } from 'lucide-react';
+import { Play, Square, Plus, Search, Undo2, Timer, ListChecks } from 'lucide-react';
 import ExerciseCard from '../components/ExerciseCard.jsx';
 import Modal from '../components/Modal.jsx';
 import ShareCard from '../components/ShareCard.jsx';
+import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { useToast, useHaptic } from '../components/Toast.jsx';
 import { formatDuration } from '../utils/date.js';
 
@@ -18,6 +19,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   const [replaceFor, setReplaceFor] = useState(null); // exerciseId being replaced
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [shareFor, setShareFor] = useState(null); // finished workout to share
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const toast = useToast();
   const haptic = useHaptic();
@@ -47,7 +49,6 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
           <div className="w-16 h-16 rounded-2xl bg-card border border-border flex items-center justify-center mb-4">
             <Play size={28} className="text-accent" />
           </div>
-          <div className="text-[11px] tracking-[0.2em] font-semibold text-muted mb-1">KUN WORKOUTS</div>
           <h1 className="text-xl font-bold">Ready to lift?</h1>
           <p className="text-muted text-sm mt-2 max-w-xs">
             Start a workout to log sets, track PRs, and get progression targets for next time.
@@ -165,6 +166,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
         exercises={exercises}
         exclude={active.exercises}
         onPick={(id) => { addExerciseToActive(id); setPickerOpen(false); }}
+        onManage={() => { setPickerOpen(false); setLibraryOpen(true); }}
       />
 
       <ExercisePicker
@@ -174,6 +176,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
         exclude={active.exercises.filter((e) => e !== replaceFor)}
         title="Replace with…"
         onPick={(id) => { replaceExercise(replaceFor, id); setReplaceFor(null); }}
+        onManage={() => { setReplaceFor(null); setLibraryOpen(true); }}
       />
 
       <Modal
@@ -210,6 +213,8 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
       </Modal>
 
       {shareCardEl}
+
+      <ExerciseLibrarySheet open={libraryOpen} onClose={() => setLibraryOpen(false)} workout={workout} />
     </div>
   );
 }
@@ -221,7 +226,7 @@ function defaultName() {
   return `${period} Workout`;
 }
 
-function ExercisePicker({ open, onClose, exercises, exclude = [], onPick, title = 'Add exercise' }) {
+function ExercisePicker({ open, onClose, exercises, exclude = [], onPick, onManage, title = 'Add exercise' }) {
   const [q, setQ] = useState('');
   const options = useMemo(() => {
     const list = exercises
@@ -257,8 +262,25 @@ function ExercisePicker({ open, onClose, exercises, exclude = [], onPick, title 
             </button>
           </li>
         ))}
-        {options.length === 0 && <li className="text-center text-muted text-sm py-8">No matches</li>}
+        {options.length === 0 && (
+          <li className="text-center text-muted text-sm py-8">
+            No matches
+            {onManage && (
+              <button onClick={onManage} className="block mx-auto mt-3 text-accent text-sm underline">
+                Create "{q.trim() || 'a new exercise'}" in the library
+              </button>
+            )}
+          </li>
+        )}
       </ul>
+      {onManage && (
+        <button
+          onClick={onManage}
+          className="w-full mt-2 h-11 rounded-xl border border-border text-muted text-sm flex items-center justify-center gap-2 active:bg-card"
+        >
+          <ListChecks size={16} /> Manage exercise library
+        </button>
+      )}
     </Modal>
   );
 }

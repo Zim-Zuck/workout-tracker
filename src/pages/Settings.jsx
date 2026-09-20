@@ -1,16 +1,32 @@
-import { useRef, useState } from 'react';
-import { Download, Upload, Trash2, Info, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { SCHEMA_VERSION } from '../db/database.js';
 import { downloadBackup, importReplaceAll, wipeAllData, validateBackup } from '../services/dataManager.js';
 import { maybeSeed } from '../db/seedData.js';
+import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
+import { backupNow, fetchBackup, restoreBackup, getBackupInfo } from '../services/backupApi.js';
+import { deleteMyAccount } from '../services/profileApi.js';
+import { relativeDay } from '../utils/date.js';
 
-export default function SettingsScreen({ settings, updateSettings, workout }) {
+export default function SettingsScreen({ settings, updateSettings, workout, auth, onSignIn }) {
   const toast = useToast();
   const fileRef = useRef(null);
   const [pendingImport, setPendingImport] = useState(null); // parsed data
   const [confirmWipe, setConfirmWipe] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [backupInfo, setBackupInfo] = useState(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState(null);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+
+  // Backup metadata is a listing, not a download — cheap enough to fetch on
+  // mount and it keeps the row from saying "never" when a backup exists.
+  useEffect(() => {
+    if (!auth?.signedIn) { setBackupInfo(null); return; }
+    getBackupInfo(auth.userId).then(setBackupInfo).catch(() => {});
+  }, [auth?.signedIn, auth?.userId]);
 
   const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
@@ -30,6 +46,29 @@ export default function SettingsScreen({ settings, updateSettings, workout }) {
 
   return (
     <div className="p-3 space-y-4">
+      {auth?.cloudConfigured && (
+        <Section title="Account">
+          {auth.signedIn ? (
+            <>
+              <Row label="Signed in as">
+                <span className="text-sm text-muted truncate max-w-[55%]">{auth.user?.email}</span>
+              </Row>
+              <ActionButton icon={LogOut} label="Sign out" onClick={async () => {
+                await auth.signOut();
+                toast('Signed out');
+              }} />
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted mb-2">
+                An account adds friends, challenges and cloud backup. Your workouts stay on this device either way.
+              </p>
+              <ActionButton icon={LogIn} label="Sign in or create account" onClick={onSignIn} />
+            </>
+          )}
+        </Section>
+      )}
+
       <Section title="Preferences">
         <Row label="Weight unit">
           <Segmented
@@ -74,8 +113,15 @@ export default function SettingsScreen({ settings, updateSettings, workout }) {
         </Row>
       </Section>
 
+      <Section title="Exercises">
+        <p className="text-xs text-muted mb-2">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
+        <ActionButton icon={ListChecks} label="Exercise library" onClick={() => setLibraryOpen(true)} />
+      </Section>
+
       <Section title="Data">
-        <p className="text-xs text-muted mb-2">Your data is stored locally on this device. No account, no server.</p>
+        <p className="text-xs text-muted mb-2">
+          Your workouts are stored locally on this device. Export a backup regularly, or sign in to back them up to the cloud.
+        </p>
         <div className="grid grid-cols-1 gap-2">
           <ActionButton icon={Download} label="Export JSON backup" onClick={async () => { await downloadBackup(); toast('Backup downloaded'); }} />
           <ActionButton icon={Upload} label="Import JSON backup" onClick={() => fileRef.current?.click()} />
@@ -91,6 +137,61 @@ export default function SettingsScreen({ settings, updateSettings, workout }) {
         </div>
       </Section>
 
+      {auth?.signedIn && (
+        <Section title="Cloud backup">
+          <p className="text-xs text-muted mb-2">
+            A copy of your workouts stored against your account, so a new phone can pick up where this one left off.
+            It backs up automatically once a day after a workout.
+          </p>
+          <Row label="Last backup">
+            <span className="text-sm text-muted">
+              {backupInfo === null ? '—'
+                : backupInfo.updatedAt ? relativeDay(backupInfo.updatedAt)
+                : backupInfo.localLast ? relativeDay(backupInfo.localLast)
+                : 'Never'}
+            </span>
+          </Row>
+          <div className="grid grid-cols-1 gap-2">
+            <ActionButton
+              icon={CloudUpload}
+              label={backupBusy ? 'Working…' : 'Back up now'}
+              onClick={async () => {
+                setBackupBusy(true);
+                try {
+                  const r = await backupNow(auth.userId);
+                  setBackupInfo(await getBackupInfo(auth.userId));
+                  toast(`Backed up ${r.workouts} workouts`, { tone: 'success' });
+                } catch (err) {
+                  toast(err.message, { tone: 'error', duration: 4000 });
+                } finally { setBackupBusy(false); }
+              }}
+            />
+            <ActionButton
+              icon={CloudDownload}
+              label="Restore from cloud"
+              onClick={async () => {
+                setBackupBusy(true);
+                try {
+                  setPendingRestore(await fetchBackup(auth.userId));
+                } catch (err) {
+                  toast(err.message, { tone: 'error', duration: 4000 });
+                } finally { setBackupBusy(false); }
+              }}
+            />
+          </div>
+        </Section>
+      )}
+
+      {auth?.signedIn && (
+        <Section title="Danger zone">
+          <p className="text-xs text-muted mb-2">
+            Deleting your account removes your profile, friends, challenges and cloud backup permanently.
+            Workouts on this device are not touched.
+          </p>
+          <ActionButton icon={UserX} label="Delete my account" danger onClick={() => setConfirmDeleteAccount(true)} />
+        </Section>
+      )}
+
       <Section title="About">
         <Row label="App"><span className="text-sm text-text font-medium">Kun Workouts</span></Row>
         <Row label="App version"><span className="text-sm text-muted">1.0.0</span></Row>
@@ -102,6 +203,66 @@ export default function SettingsScreen({ settings, updateSettings, workout }) {
         </Row>
         <p className="text-xs text-muted mt-3">This app works fully offline after first load. Add it to your Home Screen from Safari's Share menu for an app-like experience.</p>
       </Section>
+
+      <Modal open={!!pendingRestore} onClose={() => setPendingRestore(null)} title="Restore from cloud?"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setPendingRestore(null)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button
+              onClick={async () => {
+                try {
+                  await restoreBackup(pendingRestore);
+                  await workout.refresh();
+                  toast('Restored from cloud', { tone: 'success' });
+                } catch (err) {
+                  toast(`Restore failed: ${err.message}`, { tone: 'error' });
+                } finally { setPendingRestore(null); }
+              }}
+              className="flex-1 h-11 rounded-xl bg-warn text-white font-semibold"
+            >Replace</button>
+          </div>
+        }
+      >
+        <p className="text-sm">
+          This will <span className="text-danger font-semibold">replace everything on this device</span> with your cloud backup.
+        </p>
+        {pendingRestore && (
+          <p className="text-xs text-muted mt-2">
+            {pendingRestore.exercises?.length ?? 0} exercises · {pendingRestore.workouts?.length ?? 0} workouts ·
+            backed up {pendingRestore.exportedAt?.slice(0, 10)}
+          </p>
+        )}
+      </Modal>
+
+      <Modal open={confirmDeleteAccount} onClose={() => setConfirmDeleteAccount(false)} title="Delete your account?"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmDeleteAccount(false)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button
+              onClick={async () => {
+                try {
+                  await deleteMyAccount(auth.userId);
+                  await auth.signOut();
+                  setConfirmDeleteAccount(false);
+                  toast('Account deleted', { tone: 'error' });
+                } catch (err) {
+                  toast(err.message, { tone: 'error' });
+                }
+              }}
+              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold"
+            >Delete account</button>
+          </div>
+        }
+      >
+        <p className="text-sm">
+          Your profile, friendships, challenges and cloud backup are deleted permanently. This cannot be undone.
+        </p>
+        <p className="text-xs text-muted mt-2">
+          Your workout history stays on this device — export a backup first if you want to keep a copy elsewhere.
+        </p>
+      </Modal>
+
+      <ExerciseLibrarySheet open={libraryOpen} onClose={() => setLibraryOpen(false)} workout={workout} />
 
       <Modal open={!!pendingImport} onClose={() => setPendingImport(null)} title="Import backup?"
         footer={
