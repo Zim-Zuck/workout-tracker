@@ -229,8 +229,16 @@ export async function bulkPut(storeName, items) {
 // ---- Initial seed of default exercise library on first launch ----
 export async function ensureInitialized() {
   const initialized = await getMeta('initialized');
-  if (initialized) return;
-  await bulkPut('exercises', DEFAULT_EXERCISES);
-  await setMeta('initialized', true);
-  await setMeta('schemaVersion', SCHEMA_VERSION);
+  if (!initialized) {
+    await bulkPut('exercises', DEFAULT_EXERCISES);
+    await setMeta('initialized', true);
+    await setMeta('schemaVersion', SCHEMA_VERSION);
+    return;
+  }
+  // Builtins added in a later app update aren't covered by the one-time seed
+  // above, so top up anything missing by id. Leaves existing rows (including
+  // user edits to builtins) untouched.
+  const existingIds = new Set((await getAllExercises()).map((e) => e.id));
+  const missing = DEFAULT_EXERCISES.filter((e) => !existingIds.has(e.id));
+  if (missing.length) await bulkPut('exercises', missing);
 }
