@@ -29,6 +29,13 @@ export function formatWeight(kg, unit, opts = {}) {
   const v = roundDisplay(toDisplay(kg, unit), unit);
   const withUnit = opts.withUnit !== false;
   // Strip trailing zero (80.0 → 80) but keep half increments (82.5).
-  const str = Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
+  const plain = Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
+  // Opt-in digit grouping, for the few places a weekly or lifetime total is set
+  // large enough that "48200 kg" is genuinely hard to read. Off by default so
+  // every existing set/lift readout in the app is untouched — a bar load is
+  // never big enough to need a separator, and adding one there would be noise.
+  const str = opts.group
+    ? v.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(v) ? 0 : 1 })
+    : plain;
   return withUnit ? `${str} ${unit}` : str;
 }

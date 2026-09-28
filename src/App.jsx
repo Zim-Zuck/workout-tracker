@@ -35,7 +35,8 @@ function Root() {
   // Auth is shown as an overlay rather than a tab: it is a detour, and you should
   // land back exactly where you were when you finish or back out.
   const [authOpen, setAuthOpen] = useState(null); // null | 'signin' | 'signup'
-  const [socialSection, setSocialSection] = useState('friends');
+  // The recap is the reason to come back, so it is what the Social tab opens on.
+  const [socialSection, setSocialSection] = useState('week');
   const [profileOpen, setProfileOpen] = useState(false);
   const [viewingFriendId, setViewingFriendId] = useState(null);
   // Set when 'Challenge' is tapped on a friend's profile, so the create sheet

@@ -17,11 +17,12 @@ import { uid } from '../utils/id.js';
 export const KIND = {
   STATS: 'stats',
   LIFTS: 'lifts',
+  WEEKLY: 'weekly',
   CHALLENGE_PROGRESS: 'challenge_progress'
 };
 
 // Kinds where only the newest queued item has any meaning.
-const COLLAPSIBLE = new Set([KIND.STATS, KIND.LIFTS]);
+const COLLAPSIBLE = new Set([KIND.STATS, KIND.LIFTS, KIND.WEEKLY]);
 
 // Give up after this many failures so a permanently-rejected item (say, one that
 // violates a constraint) cannot block the queue forever.
@@ -64,6 +65,46 @@ async function send(sb, item, userId) {
       if (!rows.length) return;
       const { error } = await sb.from('user_lifts').upsert(rows, { onConflict: 'user_id,exercise_id' });
       if (error) throw error;
+      return;
+    }
+
+    case KIND.WEEKLY: {
+      // Two tables, one queued item, because a week's totals and its
+      // per-exercise breakdown must never be half-published: a recap showing
+      // last week's bench next to this week's volume would be wrong in a way
+      // nobody could diagnose.
+      const { weeks, exercises } = item.payload;
+      const stamp = new Date().toISOString();
+
+      const weekRows = (weeks || []).map((r) => ({ user_id: userId, ...r, updated_at: stamp }));
+      if (weekRows.length) {
+        const { error } = await sb
+          .from('weekly_stats')
+          .upsert(weekRows, { onConflict: 'user_id,week_start' });
+        if (error) throw error;
+      }
+
+      const weekKeys = (weeks || []).map((r) => r.week_start);
+      if (weekKeys.length) {
+        // Deleting first is what makes this a true snapshot. Upserting alone
+        // would leave a stale row behind for an exercise removed from a logged
+        // workout, so last week's battle would keep showing a lift that no
+        // longer exists in the user's history.
+        const { error: delError } = await sb
+          .from('weekly_exercise_stats')
+          .delete()
+          .eq('user_id', userId)
+          .in('week_start', weekKeys);
+        if (delError) throw delError;
+      }
+
+      const exRows = (exercises || []).map((r) => ({ user_id: userId, ...r, updated_at: stamp }));
+      if (exRows.length) {
+        const { error } = await sb
+          .from('weekly_exercise_stats')
+          .upsert(exRows, { onConflict: 'user_id,week_start,exercise_id' });
+        if (error) throw error;
+      }
       return;
     }
 
