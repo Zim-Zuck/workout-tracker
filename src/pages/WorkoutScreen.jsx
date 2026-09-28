@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Play, Square, Plus, Search, Undo2, Timer, ListChecks } from 'lucide-react';
+import { Play, Square, Plus, Search, Undo2, Timer, ListChecks, X } from 'lucide-react';
 import ExerciseCard from '../components/ExerciseCard.jsx';
 import Modal from '../components/Modal.jsx';
 import ShareCard from '../components/ShareCard.jsx';
@@ -17,12 +17,29 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replaceFor, setReplaceFor] = useState(null); // exerciseId being replaced
-  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [shareFor, setShareFor] = useState(null); // finished workout to share
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const toast = useToast();
   const haptic = useHaptic();
+
+  const handleFinish = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      const w = await finishWorkout();
+      restTimer.stop();
+      onFinishToast?.(w);
+      if (w) setShareFor(w);
+    } catch (err) {
+      console.error('Failed to finish workout', err);
+      toast('Could not save workout — please try again', { tone: 'error' });
+    } finally {
+      setFinishing(false);
+    }
+  };
 
   // Tick for the elapsed-time badge (1s).
   useEffect(() => {
@@ -148,15 +165,24 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
         <button
           onClick={undo}
           disabled={!canUndo}
-          className="flex-1 h-12 rounded-xl border border-border text-text disabled:opacity-40 active:bg-card flex items-center justify-center gap-2"
+          className="h-12 w-12 shrink-0 rounded-xl border border-border text-text disabled:opacity-40 active:bg-card flex items-center justify-center"
+          aria-label="Undo"
         >
-          <Undo2 size={16} /> Undo
+          <Undo2 size={16} />
         </button>
         <button
-          onClick={() => setConfirmFinish(true)}
-          className="flex-1 h-12 rounded-xl bg-success text-white font-semibold active:opacity-80 flex items-center justify-center gap-2"
+          onClick={() => setConfirmCancel(true)}
+          className="h-12 w-12 shrink-0 rounded-xl border border-danger/60 text-danger active:bg-danger/10 flex items-center justify-center"
+          aria-label="Cancel workout"
         >
-          <Square size={16} /> Finish
+          <X size={16} />
+        </button>
+        <button
+          onClick={handleFinish}
+          disabled={finishing}
+          className="flex-1 h-12 rounded-xl bg-success text-white font-semibold active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+        >
+          <Square size={16} /> {finishing ? 'Saving…' : 'Finish'}
         </button>
       </div>
 
@@ -180,35 +206,29 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
       />
 
       <Modal
-        open={confirmFinish}
-        onClose={() => setConfirmFinish(false)}
-        title="Finish workout?"
+        open={confirmCancel}
+        onClose={() => setConfirmCancel(false)}
+        title="Cancel workout?"
         footer={
           <div className="flex gap-2">
             <button
-              onClick={async () => { await cancelWorkout(); setConfirmFinish(false); toast('Workout cancelled', { tone: 'error' }); }}
-              className="flex-1 h-11 rounded-xl border border-danger/60 text-danger active:bg-danger/10"
+              onClick={() => setConfirmCancel(false)}
+              className="flex-1 h-11 rounded-xl border border-border text-text active:bg-card"
             >
-              Cancel workout
+              Keep going
             </button>
             <button
-              onClick={async () => {
-                const w = await finishWorkout();
-                setConfirmFinish(false);
-                restTimer.stop();
-                onFinishToast?.(w);
-                if (w) setShareFor(w);
-              }}
-              className="flex-1 h-11 rounded-xl bg-success text-white font-semibold active:opacity-80"
+              onClick={async () => { await cancelWorkout(); setConfirmCancel(false); toast('Workout cancelled', { tone: 'error' }); }}
+              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold active:opacity-80"
             >
-              Finish
+              Cancel workout
             </button>
           </div>
         }
       >
         <p className="text-sm text-muted">
-          {active.sets.filter((s) => s.completed).length} completed sets across {active.exercises.length} exercises
-          over {formatDuration(elapsed)}.
+          This discards {active.sets.filter((s) => s.completed).length} completed sets across {active.exercises.length}{' '}
+          exercises over {formatDuration(elapsed)}. This cannot be undone.
         </p>
       </Modal>
 
