@@ -49,6 +49,51 @@ export function truncate(ctx, text, maxW) {
   return t + '…';
 }
 
+// Greedy word wrap at the CURRENT ctx.font. Returns the lines; the caller
+// decides where to put them, since line height is a layout decision.
+export function wrapText(ctx, text, maxW, maxLines = 3) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w;
+    if (ctx.measureText(next).width <= maxW || !line) {
+      line = next;
+    } else {
+      lines.push(line);
+      line = w;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  // Anything that did not fit is signalled on the last line rather than
+  // silently dropped, so a long sentence never looks like it simply ended.
+  if (lines.length === maxLines) {
+    const used = lines.join(' ').split(/\s+/).length;
+    if (used < words.length) lines[maxLines - 1] = truncate(ctx, `${lines[maxLines - 1]}…`, maxW);
+  }
+  return lines;
+}
+
+// A person's initial in a filled circle. Deliberately NOT their uploaded
+// avatar: drawing a remote image into the canvas taints it, and a tainted
+// canvas throws on toDataURL(), which would break sharing for exactly the
+// users who bothered to set a profile picture.
+export function drawInitial(ctx, cx, cy, r, name, fill = PALETTE.accent, textColor = '#FFFFFF') {
+  const initial = String(name || '?').trim().charAt(0).toUpperCase() || '?';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.fillStyle = textColor;
+  ctx.font = `700 ${Math.round(r * 0.95)}px ${FONT_DISPLAY}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initial, cx, cy + 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
 // Shrinks a bold display-font size until `text` fits within maxW.
 export function fitFontSize(ctx, text, maxW, { weight = 700, family = FONT_DISPLAY, max = 112, min = 40, step = 4 } = {}) {
   let size = max;

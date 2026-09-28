@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Flame, Dumbbell, Pencil, Eye, EyeOff, Check, CloudOff, RefreshCw } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Flame, Dumbbell, Pencil, Eye, EyeOff, Check, CloudOff, RefreshCw, Camera, Trash2 } from 'lucide-react';
 import { Avatar } from '../components/AppHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -7,6 +7,7 @@ import { formatWeight } from '../utils/units.js';
 import { relativeDay } from '../utils/date.js';
 import { buildStatsSummary, buildLiftsSummary, pickTopLifts } from '../services/socialSummary.js';
 import { updateProfile } from '../services/profileApi.js';
+import { uploadAvatar, removeAvatar } from '../services/avatarApi.js';
 import AchievementsRow from '../components/AchievementsRow.jsx';
 
 // Your own profile — rendered from LOCAL data, not from the cloud.
@@ -179,6 +180,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, setti
         profile={profile}
         onClose={() => setEditing(false)}
         onSaved={(p) => { setProfile(p); setEditing(false); toast('Profile updated', { tone: 'success' }); }}
+        onAvatarChanged={(p) => { setProfile(p); toast(p.avatar_url ? 'Picture updated' : 'Picture removed', { tone: 'success' }); }}
       />
     </div>
   );
@@ -206,11 +208,13 @@ function Toggle({ on }) {
   );
 }
 
-function EditProfileModal({ open, profile, onClose, onSaved }) {
+function EditProfileModal({ open, profile, onClose, onSaved, onAvatarChanged }) {
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [bio, setBio] = useState(profile?.bio || '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileRef = useRef(null);
 
   // Reset the draft each time the sheet opens so a cancelled edit is discarded.
   const [lastOpen, setLastOpen] = useState(open);
@@ -236,6 +240,38 @@ function EditProfileModal({ open, profile, onClose, onSaved }) {
     }
   };
 
+  // The picture saves immediately on pick rather than waiting for the sheet's
+  // Save button. Uploading is slow and can fail on its own terms, so it needs
+  // its own spinner and its own error — bundling it into Save would mean a
+  // flaky connection loses the name change too.
+  const pickPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    // Reset first: picking the same file twice must still fire a change event.
+    e.target.value = '';
+    if (!file) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      onAvatarChanged(await uploadAvatar(profile.id, file));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const clearPhoto = async () => {
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      onAvatarChanged(await removeAvatar(profile.id));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   return (
     <Modal
       open={open}
@@ -255,6 +291,46 @@ function EditProfileModal({ open, profile, onClose, onSaved }) {
       }
     >
       <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={photoBusy}
+            className="relative rounded-full active:opacity-70 disabled:opacity-60"
+            aria-label={profile?.avatar_url ? 'Change profile picture' : 'Add a profile picture'}
+          >
+            <Avatar profile={profile} size={64} />
+            <span className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-accent border-2 border-surface flex items-center justify-center">
+              {photoBusy
+                ? <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                : <Camera size={12} className="text-white" />}
+            </span>
+          </button>
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Profile picture</p>
+            <p className="text-[11px] text-muted leading-snug">
+              Shown to friends. Resized on this device before it is uploaded.
+            </p>
+            {profile?.avatar_url && (
+              <button
+                onClick={clearPhoto}
+                disabled={photoBusy}
+                className="mt-1.5 h-8 px-2.5 -ml-2.5 rounded-lg text-[11px] text-muted flex items-center gap-1.5 active:text-danger disabled:opacity-50"
+              >
+                <Trash2 size={12} /> Remove
+              </button>
+            )}
+          </div>
+          {/* accept="image/*" is what gives iOS and Android the native
+              camera-or-library sheet, which is the whole mobile experience. */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            onChange={pickPhoto}
+            className="hidden"
+          />
+        </div>
+
         <div>
           <label className="text-xs text-muted mb-1.5 block">Display name</label>
           <input

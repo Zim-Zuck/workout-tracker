@@ -1,9 +1,10 @@
-import { Users, Trophy, Swords, WifiOff, Bell } from 'lucide-react';
+import { Users, Trophy, Swords, WifiOff, Bell, CalendarRange } from 'lucide-react';
 import { isOnline } from '../services/supabase.js';
 import FriendsPanel from '../components/FriendsPanel.jsx';
 import NotificationsPanel from '../components/NotificationsPanel.jsx';
 import ChallengesPanel from '../components/ChallengesPanel.jsx';
 import LeaderboardPanel from '../components/LeaderboardPanel.jsx';
+import WeeklyRecapPanel from '../components/WeeklyRecapPanel.jsx';
 
 // Social tab shell.
 //
@@ -38,6 +39,7 @@ export default function SocialScreen({
         </p>
 
         <ul className="mt-6 w-full max-w-xs space-y-2 text-left">
+          <Perk icon={CalendarRange} text="A weekly recap of your whole circle" />
           <Perk icon={Users} text="See what your friends are lifting" />
           <Perk icon={Swords} text="Challenge a friend to beat your PR" />
           <Perk icon={Trophy} text="Friends-only leaderboard" />
@@ -77,6 +79,7 @@ export default function SocialScreen({
             value={section}
             onChange={onSectionChange}
             options={[
+              { value: 'week', label: 'Week' },
               { value: 'friends', label: 'Friends' },
               { value: 'challenges', label: 'Challenges' },
               { value: 'leaderboard', label: 'Board' }
@@ -104,6 +107,14 @@ export default function SocialScreen({
           onOpenProfile={onOpenProfile}
           onRead={onUnreadChange}
           refreshToken={refreshToken}
+        />
+      )}
+
+      {section === 'week' && (
+        <WeeklyRecapPanel
+          onOpenProfile={onOpenProfile}
+          refreshToken={refreshToken}
+          unit={settings.unit}
         />
       )}
 
@@ -160,16 +171,24 @@ function Empty({ icon: Icon, title, body }) {
 // Full-width segmented control, matching the inline one in Settings but sized
 // for primary navigation within the tab.
 export function Segmented({ value, onChange, options }) {
+  // Three segments share the width evenly. A fourth does not fit at text-sm on
+  // a phone, so past three the control switches to intrinsic widths and scrolls
+  // if it has to — a clipped "Challeng…" is worse than a short swipe.
+  const dense = options.length > 3;
   return (
-    <div className="flex rounded-xl bg-card border border-border overflow-hidden p-1 gap-1">
+    <div
+      className={`flex rounded-xl bg-card border border-border p-1 gap-1 ${
+        dense ? 'overflow-x-auto no-scrollbar' : 'overflow-hidden'
+      }`}
+    >
       {options.map((o) => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
-          className={`flex-1 h-9 rounded-lg text-sm font-medium transition-colors ${
-            value === o.value ? 'bg-accent text-white' : 'text-muted active:bg-surface'
-          }`}
+          className={`h-9 rounded-lg font-medium transition-colors whitespace-nowrap ${
+            dense ? 'shrink-0 px-2.5 text-[13px]' : 'flex-1 text-sm'
+          } ${value === o.value ? 'bg-accent text-white' : 'text-muted active:bg-surface'}`}
         >
           {o.label}
         </button>

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchMyProfile } from '../services/profileApi.js';
 import { buildStatsSummary, buildLiftsSummary } from '../services/socialSummary.js';
+import { buildWeeklySummaries } from '../services/weeklySummary.js';
 import { enqueue, flushOutbox, pendingCount, KIND } from '../services/outbox.js';
 import { isOnline } from '../services/supabase.js';
 import { reportProgressForActiveChallenges } from '../services/challengesApi.js';
@@ -89,6 +90,10 @@ export function useProfile({ userId, signedIn, workouts }) {
     const lifts = buildLiftsSummary(list);
     await enqueue(KIND.STATS, buildStatsSummary(list));
     await enqueue(KIND.LIFTS, lifts);
+    // The weekly rows ride the same snapshot-and-upsert path as the two above,
+    // and cover the last two weeks so a Sunday-night session or a Monday
+    // history edit lands in the week it actually belongs to.
+    await enqueue(KIND.WEEKLY, buildWeeklySummaries(list));
     await refreshPending();
     await sync();
     // Handed back so the caller can report the same numbers into live
