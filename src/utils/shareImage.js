@@ -58,11 +58,19 @@ export async function shareImage(dataUrl, filename, { title, text } = {}) {
   return 'saved';
 }
 
-// What goes alongside the image in WhatsApp, Instagram or Messages.
+// Where a shared card sends someone who taps the link.
 //
-// No invite link: this app has no public URL to point at, and inventing one
-// would produce a dead link in someone's chat. The card itself carries the
-// wordmark, which is the honest version of the same hook.
+// One constant, because this is the last step of the loop the recap exists
+// for — card lands in a group chat, someone asks what that is, and the answer
+// has to be one tap away. If the app ever moves, it moves here.
+export const APP_URL = 'https://workout-tracker-mu-snowy.vercel.app/';
+
+// What goes alongside the image in WhatsApp, Messages or a group chat.
+//
+// The link is on its own line so chat apps that linkify text find a clean URL
+// rather than one glued to a date range. Instagram Stories drops share text
+// entirely — the wordmark painted on the card is the fallback hook there, and
+// the reason every card carries it.
 export function recapShareText(chapterLabel, rangeLabel) {
-  return `${chapterLabel} · ${rangeLabel} — my week on Kun Workouts`;
+  return `${chapterLabel} · ${rangeLabel} — my week on Kun Workouts\n${APP_URL}`;
 }
