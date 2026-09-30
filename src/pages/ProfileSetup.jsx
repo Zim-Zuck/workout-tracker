@@ -60,20 +60,20 @@ export default function ProfileSetup({ userId, onDone, defaultDisplayName = '' }
   return (
     <div className="p-4">
       <div className="text-center mb-6 mt-2">
-        <h1 className="text-xl font-bold">Pick your name</h1>
-        <p className="text-sm text-muted mt-2 max-w-xs mx-auto">
+        <h1 className="text-title font-semibold">Pick your name</h1>
+        <p className="text-label text-ink-tertiary mt-2 max-w-xs mx-auto">
           This is how friends find you and how you appear on leaderboards.
         </p>
       </div>
 
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="text-xs text-muted mb-1.5 block px-1">Username</label>
-          <div className={`flex items-center gap-2 px-3 rounded-xl bg-card border ${
-            status.state === 'taken' || status.state === 'invalid' ? 'border-danger/60' :
-            status.state === 'free' ? 'border-success/60' : 'border-border'
+          <label className="text-label text-ink-tertiary mb-1.5 block px-1">Username</label>
+          <div className={`flex items-center gap-2 px-3 rounded-row bg-glass-inset border ${
+            status.state === 'taken' || status.state === 'invalid' ? 'border-danger-border' :
+            status.state === 'free' ? 'border-done-border' : 'border-glass-border'
           }`}>
-            <AtSign size={16} className="text-muted shrink-0" />
+            <AtSign size={16} className="text-ink-tertiary shrink-0" />
             <input
               autoFocus
               value={username}
@@ -84,17 +84,17 @@ export default function ProfileSetup({ userId, onDone, defaultDisplayName = '' }
               spellCheck={false}
               maxLength={20}
               aria-label="Username"
-              className="w-full h-12 bg-transparent outline-none text-sm"
+              className="w-full h-tap bg-transparent outline-none text-label"
             />
             {status.state === 'checking' && (
               <span className="w-4 h-4 rounded-full border-2 border-muted border-t-transparent animate-spin shrink-0" />
             )}
-            {status.state === 'free' && <Check size={16} className="text-success shrink-0" />}
+            {status.state === 'free' && <Check size={16} className="text-done shrink-0" />}
             {(status.state === 'taken' || status.state === 'invalid') && <X size={16} className="text-danger shrink-0" />}
           </div>
-          <p className={`text-xs mt-1.5 px-1 ${
-            status.state === 'free' ? 'text-success' :
-            status.state === 'taken' || status.state === 'invalid' ? 'text-danger' : 'text-muted'
+          <p className={`text-label mt-1.5 px-1 ${
+            status.state === 'free' ? 'text-done' :
+            status.state === 'taken' || status.state === 'invalid' ? 'text-danger' : 'text-ink-tertiary'
           }`}>
             {status.state === 'free' ? `@${normalizeUsername(username)} is available` :
              status.message || 'Letters, numbers and underscores. 3–20 characters.'}
@@ -102,32 +102,32 @@ export default function ProfileSetup({ userId, onDone, defaultDisplayName = '' }
         </div>
 
         <div>
-          <label className="text-xs text-muted mb-1.5 block px-1">Display name</label>
-          <div className="flex items-center gap-2 px-3 rounded-xl bg-card border border-border focus-within:border-accent">
-            <User size={16} className="text-muted shrink-0" />
+          <label className="text-label text-ink-tertiary mb-1.5 block px-1">Display name</label>
+          <div className="flex items-center gap-2 px-3 rounded-row bg-glass-inset border border-glass-border focus-within:border-focus">
+            <User size={16} className="text-ink-tertiary shrink-0" />
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Kunashe Makahamadze"
               maxLength={40}
               aria-label="Display name"
-              className="w-full h-12 bg-transparent outline-none text-sm"
+              className="w-full h-tap bg-transparent outline-none text-label"
             />
           </div>
         </div>
 
-        {error && <p role="alert" className="text-xs text-danger px-1">{error}</p>}
+        {error && <p role="alert" className="text-label text-danger px-1">{error}</p>}
 
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full h-12 rounded-xl bg-accent text-white font-semibold disabled:opacity-40 active:opacity-80 flex items-center justify-center gap-2"
+          className="w-full h-tap rounded-row bg-primary text-on-primary font-semibold disabled:opacity-40 active:opacity-80 flex items-center justify-center gap-2"
         >
           {busy && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
           Continue
         </button>
 
-        <p className="text-[11px] text-muted text-center px-4 leading-relaxed">
+        <p className="text-micro tracking-normal text-ink-tertiary text-center px-4 leading-relaxed">
           Your username is how people find you, so it is visible to anyone signed in.
           Kun shows the community your milestones — records, streaks and workout count.
           Your detailed numbers stay with friends you accept, and your individual sets

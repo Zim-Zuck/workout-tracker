@@ -78,8 +78,8 @@ export default function UserProfile({
     return (
       <div className="p-4">
         <BackBar onBack={onBack} />
-        <p className="text-center text-sm text-danger py-10">{error || 'Could not load this profile.'}</p>
-        <button onClick={load} className="w-full h-11 rounded-xl border border-border">Try again</button>
+        <p className="text-center text-label text-danger py-10">{error || 'Could not load this profile.'}</p>
+        <button onClick={load} className="w-full h-tap rounded-row border border-glass-border">Try again</button>
       </div>
     );
   }
@@ -102,20 +102,20 @@ export default function UserProfile({
     <div className="p-3 space-y-3">
       <BackBar onBack={onBack} />
 
-      <section className="bg-surface border border-border rounded-2xl p-4">
+      <section className="bg-glass border border-glass-border rounded-card p-4">
         <div className="flex items-start gap-3">
           <Avatar profile={profile} size={56} />
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold leading-tight truncate">{profile.display_name}</h1>
-            <p className="text-sm text-muted">@{profile.username}</p>
-            {profile.bio && <p className="text-sm mt-2 leading-snug">{profile.bio}</p>}
+            <h1 className="text-body font-semibold leading-tight truncate">{profile.display_name}</h1>
+            <p className="text-label text-ink-tertiary">@{profile.username}</p>
+            {profile.bio && <p className="text-label mt-2 leading-snug">{profile.bio}</p>}
           </div>
         </div>
 
         {canView && stats?.streak_weeks > 0 && (
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-warn/15 border border-warn/30">
-            <Flame size={14} className="text-warn" />
-            <span className="text-sm font-semibold text-warn">
+          <div className="mt-3 inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-glass-inset border border-glass-border">
+            <Flame size={14} className="text-ink-secondary" />
+            <span className="text-label font-semibold text-ink-secondary">
               {stats.streak_weeks} week{stats.streak_weeks === 1 ? '' : 's'} in a row
             </span>
           </div>
@@ -129,7 +129,7 @@ export default function UserProfile({
           <div className="flex gap-2 mt-4">
             <button
               onClick={() => onChallenge?.(profile)}
-              className="flex-1 h-11 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80"
+              className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80"
             >
               <Swords size={16} /> Challenge
             </button>
@@ -145,9 +145,9 @@ export default function UserProfile({
                   } catch (err) { toast(err.message, { tone: 'error' }); }
                 }}
                 aria-label="Add friend"
-                className="h-11 px-3 rounded-xl border border-border text-muted flex items-center justify-center gap-1.5 active:bg-card"
+                className="h-tap px-3 rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-1.5 active:bg-glass-inset"
               >
-                <UserPlus size={16} /> <span className="text-sm">Add</span>
+                <UserPlus size={16} /> <span className="text-label">Add</span>
               </button>
             )}
 
@@ -162,14 +162,14 @@ export default function UserProfile({
                   } catch (err) { toast(err.message, { tone: 'error' }); }
                 }}
                 aria-label="Accept friend request"
-                className="h-11 px-3 rounded-xl border border-success/40 text-success flex items-center justify-center gap-1.5 active:bg-card"
+                className="h-tap px-3 rounded-row border border-done-border text-done flex items-center justify-center gap-1.5 active:bg-glass-inset"
               >
-                <Check size={16} /> <span className="text-sm">Accept</span>
+                <Check size={16} /> <span className="text-label">Accept</span>
               </button>
             )}
 
             {relationship === 'requested' && (
-              <span className="h-11 px-3 rounded-xl border border-border text-muted flex items-center justify-center gap-1.5 text-sm">
+              <span className="h-tap px-3 rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-1.5 text-label">
                 <Clock size={15} /> Sent
               </span>
             )}
@@ -178,7 +178,7 @@ export default function UserProfile({
               <button
                 onClick={() => setConfirmRemove(true)}
                 aria-label="Remove friend"
-                className="w-11 h-11 rounded-xl border border-border text-muted flex items-center justify-center active:bg-card"
+                className="w-tap h-tap rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center active:bg-glass-inset"
               >
                 <UserMinus size={16} />
               </button>
@@ -195,18 +195,18 @@ export default function UserProfile({
           what you are being refused. It is the one place in the app where adding
           someone still has a concrete payoff, now that nothing else requires it. */}
       {!canView && (
-        <section className="bg-surface border border-border rounded-2xl p-6 text-center">
+        <section className="bg-glass border border-glass-border rounded-card p-6 text-center">
           {relationship === 'friends' ? (
             <>
-              <EyeOff size={24} className="text-muted mx-auto mb-2" />
-              <p className="text-sm font-medium">{profile.display_name} keeps their detailed stats private</p>
-              <p className="text-xs text-muted mt-1">They have turned off stat sharing.</p>
+              <EyeOff size={24} className="text-ink-tertiary mx-auto mb-2" />
+              <p className="text-label font-semibold">{profile.display_name} keeps their detailed stats private</p>
+              <p className="text-label text-ink-tertiary mt-1">They have turned off stat sharing.</p>
             </>
           ) : (
             <>
-              <Lock size={24} className="text-muted mx-auto mb-2" />
-              <p className="text-sm font-medium">Add {profile.display_name.split(' ')[0]} to compare lifts</p>
-              <p className="text-xs text-muted mt-1 leading-relaxed">
+              <Lock size={24} className="text-ink-tertiary mx-auto mb-2" />
+              <p className="text-label font-semibold">Add {profile.display_name.split(' ')[0]} to compare lifts</p>
+              <p className="text-label text-ink-tertiary mt-1 leading-relaxed">
                 Friends see each other's totals and top lifts side by side. You can still
                 challenge them without it.
               </p>
@@ -216,13 +216,13 @@ export default function UserProfile({
       )}
 
       {canView && stats && (
-        <section className="bg-surface border border-border rounded-2xl p-3">
-          <h2 className="text-sm font-semibold mb-3">Head to head</h2>
+        <section className="bg-glass border border-glass-border rounded-card p-3">
+          <h2 className="text-label font-semibold mb-3">Head to head</h2>
 
           <div className="grid grid-cols-[1fr_auto_1fr] gap-x-3 items-center mb-2">
-            <span className="text-[11px] text-muted text-right">You</span>
+            <span className="text-micro tracking-normal text-ink-tertiary text-right">You</span>
             <span />
-            <span className="text-[11px] text-muted truncate">{profile.display_name.split(' ')[0]}</span>
+            <span className="text-micro tracking-normal text-ink-tertiary truncate">{profile.display_name.split(' ')[0]}</span>
           </div>
 
           <CompareRow
@@ -260,13 +260,13 @@ export default function UserProfile({
           })}
 
           {shared.length === 0 && (
-            <p className="text-xs text-muted text-center py-3">
+            <p className="text-label text-ink-tertiary text-center py-3">
               No lifts in common yet. Train some of the same exercises to compare.
             </p>
           )}
 
           {stats.last_workout_at && (
-            <p className="text-[11px] text-muted mt-3 pt-2 border-t border-border text-center">
+            <p className="text-micro tracking-normal text-ink-tertiary mt-3 pt-2 border-t border-glass-border text-center">
               Last trained {relativeDay(new Date(stats.last_workout_at).getTime()).toLowerCase()}
             </p>
           )}
@@ -282,13 +282,13 @@ export default function UserProfile({
       )}
 
       {canView && lifts?.length > 0 && (
-        <section className="bg-surface border border-border rounded-2xl p-3">
-          <h2 className="text-sm font-semibold mb-2">Their top lifts</h2>
-          <ul className="divide-y divide-border">
+        <section className="bg-glass border border-glass-border rounded-card p-3">
+          <h2 className="text-label font-semibold mb-2">Their top lifts</h2>
+          <ul className="divide-y divide-hairline">
             {lifts.slice(0, 5).map((l) => (
               <li key={l.exercise_id} className="py-2.5 flex items-center justify-between gap-2">
-                <span className="text-sm truncate">{exNames.get(l.exercise_id) || l.exercise_id}</span>
-                <span className="text-sm font-bold tabular-nums shrink-0">
+                <span className="text-label truncate">{exNames.get(l.exercise_id) || l.exercise_id}</span>
+                <span className="text-label font-semibold tabular-nums shrink-0">
                   {Number(l.top_weight_kg) > 0
                     ? `${formatWeight(Number(l.top_weight_kg))} × ${l.top_weight_reps}`
                     : `${l.top_weight_reps} reps`}
@@ -300,9 +300,9 @@ export default function UserProfile({
       )}
 
       {activity.length > 0 && (
-        <section className="bg-surface border border-border rounded-2xl p-3">
-          <h2 className="text-sm font-semibold mb-1">Recent activity</h2>
-          <ul className="divide-y divide-border">
+        <section className="bg-glass border border-glass-border rounded-card p-3">
+          <h2 className="text-label font-semibold mb-1">Recent activity</h2>
+          <ul className="divide-y divide-hairline">
             {activity.map((ev) => {
               const d = describeEvent(ev, exNames);
               // An event type this build does not know about is skipped rather
@@ -310,14 +310,14 @@ export default function UserProfile({
               if (!d) return null;
               return (
                 <li key={ev.id} className="py-2.5 flex items-start gap-2.5">
-                  <span aria-hidden="true" className="text-base leading-none mt-0.5">{d.emoji}</span>
+                  <span aria-hidden="true" className="text-body leading-none mt-0.5">{d.emoji}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm leading-snug">{d.headline}</p>
+                    <p className="text-label leading-snug">{d.headline}</p>
                     {d.detail && (
-                      <p className="text-sm font-bold tabular-nums mt-0.5">{d.detail}</p>
+                      <p className="text-label font-semibold tabular-nums mt-0.5">{d.detail}</p>
                     )}
                   </div>
-                  <span className="text-[11px] text-muted shrink-0">
+                  <span className="text-micro tracking-normal text-ink-tertiary shrink-0">
                     {relativeDay(new Date(ev.created_at).getTime())}
                   </span>
                 </li>
@@ -333,7 +333,7 @@ export default function UserProfile({
         title={`Remove ${profile.display_name}?`}
         footer={
           <div className="flex gap-2">
-            <button onClick={() => setConfirmRemove(false)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button onClick={() => setConfirmRemove(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
                 try {
@@ -344,12 +344,12 @@ export default function UserProfile({
                   onBack();
                 } catch (err) { toast(err.message, { tone: 'error' }); }
               }}
-              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold"
+              className="flex-1 h-tap rounded-row bg-danger text-on-primary font-semibold"
             >Remove</button>
           </div>
         }
       >
-        <p className="text-sm text-muted">
+        <p className="text-label text-ink-tertiary">
           You will both stop seeing each other's stats. You can add them again later.
         </p>
       </Modal>
@@ -359,7 +359,7 @@ export default function UserProfile({
 
 function BackBar({ onBack }) {
   return (
-    <button onClick={onBack} className="h-11 -ml-2 px-2 text-sm text-muted flex items-center gap-1 active:text-text">
+    <button onClick={onBack} className="h-tap -ml-2 px-2 text-label text-ink-tertiary flex items-center gap-1 active:text-ink">
       <ArrowLeft size={18} /> Back
     </button>
   );
@@ -378,24 +378,24 @@ function CompareRow({ label, mine, theirs, format = (v) => String(v) }) {
   return (
     <div className="py-1.5">
       <div className="grid grid-cols-[1fr_auto_1fr] gap-x-3 items-baseline">
-        <span className={`text-sm font-bold tabular-nums text-right ${
-          tie ? 'text-text' : iWin ? 'text-success' : 'text-muted'
+        <span className={`text-label font-semibold tabular-nums text-right ${
+          tie ? 'text-ink' : iWin ? 'text-done' : 'text-ink-tertiary'
         }`}>
           {format(m)}
         </span>
-        <span className="text-[11px] text-muted text-center whitespace-nowrap max-w-[104px] truncate">{label}</span>
-        <span className={`text-sm font-bold tabular-nums ${
-          tie ? 'text-text' : !iWin ? 'text-success' : 'text-muted'
+        <span className="text-micro tracking-normal text-ink-tertiary text-center whitespace-nowrap max-w-[104px] truncate">{label}</span>
+        <span className={`text-label font-semibold tabular-nums ${
+          tie ? 'text-ink' : !iWin ? 'text-done' : 'text-ink-tertiary'
         }`}>
           {format(t)}
         </span>
       </div>
       <div className="flex h-1 mt-1 rounded-full overflow-hidden bg-border" aria-hidden="true">
         <span
-          className={`h-full ${tie ? 'bg-muted' : iWin ? 'bg-success' : 'bg-border'}`}
+          className={`h-full ${tie ? 'bg-muted' : iWin ? 'bg-done' : 'bg-border'}`}
           style={{ width: `${minePct}%` }}
         />
-        <span className={`h-full flex-1 ${tie ? 'bg-muted' : !iWin ? 'bg-success' : 'bg-border'}`} />
+        <span className={`h-full flex-1 ${tie ? 'bg-muted' : !iWin ? 'bg-done' : 'bg-border'}`} />
       </div>
     </div>
   );

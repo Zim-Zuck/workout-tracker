@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Trophy, CloudOff, Info, EyeOff } from 'lucide-react';
 import { Avatar } from './AppHeader.jsx';
-import Segmented from './Segmented.jsx';
+import { SegmentedTrack, SegmentedPills } from '../ui/index.js';
 import { fetchLeaderboard } from '../services/challengesApi.js';
 import { fetchGlobalLeaderboard } from '../services/communityApi.js';
 import { useToast } from './Toast.jsx';
@@ -69,20 +69,20 @@ export default function LeaderboardPanel({ onOpenProfile, refreshToken, profile,
 
   return (
     <div className="space-y-3">
-      <Segmented value={scope} onChange={setScope} options={SCOPES} />
-      <Segmented value={metric} onChange={setMetric} options={METRICS} />
+      <SegmentedTrack ariaLabel="Board scope" value={scope} onChange={setScope} options={SCOPES} />
+      <SegmentedPills className="mt-md" ariaLabel="Board metric" size="sm" value={metric} onChange={setMetric} options={METRICS} />
 
       {/* Absent from the global board is a confusing thing to be without being
           told why. */}
       {hidden && (
         <button
           onClick={onOpenSettings}
-          className="w-full text-left bg-card border border-border rounded-2xl p-3 flex items-start gap-2.5 active:border-accent"
+          className="w-full text-left bg-glass-inset border border-glass-border rounded-card p-3 flex items-start gap-2.5 active:border-focus"
         >
-          <EyeOff size={16} className="text-muted shrink-0 mt-0.5" />
+          <EyeOff size={16} className="text-ink-tertiary shrink-0 mt-0.5" />
           <span className="min-w-0">
-            <span className="text-sm block">You are not on this board</span>
-            <span className="text-[11px] text-muted block leading-snug mt-0.5">
+            <span className="text-label block">You are not on this board</span>
+            <span className="text-micro tracking-normal text-ink-tertiary block leading-snug mt-0.5">
               Community sharing is off, so your totals are hidden. Tap to change it.
             </span>
           </span>
@@ -90,7 +90,7 @@ export default function LeaderboardPanel({ onOpenProfile, refreshToken, profile,
       )}
 
       {stale && (
-        <p className="text-[11px] text-warn flex items-center gap-1.5 px-1">
+        <p className="text-micro tracking-normal text-ink-secondary flex items-center gap-1.5 px-1">
           <CloudOff size={12} /> Showing the saved board — you are offline.
         </p>
       )}
@@ -102,10 +102,10 @@ export default function LeaderboardPanel({ onOpenProfile, refreshToken, profile,
       )}
 
       {!loading && rows.length <= 1 && (
-        <div className="bg-surface border border-border rounded-2xl p-6 text-center">
-          <Trophy size={26} className="text-muted mx-auto mb-2" />
-          <p className="text-sm font-medium">Just you so far</p>
-          <p className="text-xs text-muted mt-1">
+        <div className="bg-glass border border-glass-border rounded-card p-6 text-center">
+          <Trophy size={26} className="text-ink-tertiary mx-auto mb-2" />
+          <p className="text-label font-semibold">Just you so far</p>
+          <p className="text-label text-ink-tertiary mt-1">
             {scope === 'friends'
               ? 'Add friends and you will all show up here.'
               : 'Nobody else has published a workout yet.'}
@@ -114,7 +114,7 @@ export default function LeaderboardPanel({ onOpenProfile, refreshToken, profile,
       )}
 
       {rows.length > 1 && (
-        <ul className="bg-surface border border-border rounded-2xl p-3 divide-y divide-border">
+        <ul className="bg-glass border border-glass-border rounded-card p-3 divide-y divide-hairline">
           {rows.map((r, i) => (
             <li key={r.user_id}>
               <button
@@ -122,26 +122,28 @@ export default function LeaderboardPanel({ onOpenProfile, refreshToken, profile,
                 disabled={r.is_me}
                 className="w-full py-2.5 flex items-center gap-3 text-left active:opacity-70 disabled:active:opacity-100"
               >
-                <span className={`min-w-[24px] text-center text-sm font-bold tabular-nums shrink-0 ${
-                  placeFor(r, i) === 1 ? 'text-warn' : 'text-muted'
+                <span className={`min-w-[24px] text-center text-label font-semibold tabular-nums shrink-0 ${
+                  // First place is ink, not gold. Gold means a personal
+                  // record; a rank is not one.
+                  placeFor(r, i) === 1 ? 'text-ink' : 'text-ink-tertiary'
                 }`}>
                   {placeFor(r, i)}
                 </span>
                 <Avatar profile={r} size={34} />
                 <div className="flex-1 min-w-0">
-                  <div className={`text-sm truncate ${r.is_me ? 'font-bold' : 'font-medium'}`}>
-                    {r.display_name}{r.is_me && <span className="text-muted font-normal"> · you</span>}
+                  <div className={`text-label truncate ${r.is_me ? 'font-semibold' : 'font-semibold'}`}>
+                    {r.display_name}{r.is_me && <span className="text-ink-tertiary font-regular"> · you</span>}
                   </div>
-                  <div className="text-[11px] text-muted truncate">@{r.username}</div>
+                  <div className="text-micro tracking-normal text-ink-tertiary truncate">@{r.username}</div>
                 </div>
-                <span className="text-base font-bold tabular-nums shrink-0">{valueFor(r)}</span>
+                <span className="text-body font-semibold tabular-nums shrink-0">{valueFor(r)}</span>
               </button>
             </li>
           ))}
         </ul>
       )}
 
-      <p className="text-[11px] text-muted px-1 flex items-start gap-1.5 leading-relaxed">
+      <p className="text-micro tracking-normal text-ink-tertiary px-1 flex items-start gap-1.5 leading-relaxed">
         <Info size={12} className="mt-0.5 shrink-0" />
         Ranked by how often you train, not by total weight moved — a volume board
         would just reward padding out junk sets.

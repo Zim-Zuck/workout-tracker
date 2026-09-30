@@ -78,13 +78,13 @@ export default function ChallengesPanel({
     <div className="space-y-3">
       <button
         onClick={() => setCreating(true)}
-        className="w-full h-11 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80"
+        className="w-full h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80"
       >
         <Plus size={16} /> New challenge
       </button>
 
       {stale && (
-        <p className="text-[11px] text-warn flex items-center gap-1.5 px-1">
+        <p className="text-micro tracking-normal text-ink-secondary flex items-center gap-1.5 px-1">
           <CloudOff size={12} /> Showing saved challenges — you are offline.
         </p>
       )}
@@ -96,10 +96,10 @@ export default function ChallengesPanel({
       )}
 
       {!loading && rows.length === 0 && (
-        <div className="bg-surface border border-border rounded-2xl p-6 text-center">
-          <Swords size={26} className="text-muted mx-auto mb-2" />
-          <p className="text-sm font-medium">No challenges yet</p>
-          <p className="text-xs text-muted mt-1 leading-relaxed">
+        <div className="bg-glass border border-glass-border rounded-card p-6 text-center">
+          <Swords size={26} className="text-ink-tertiary mx-auto mb-2" />
+          <p className="text-label font-semibold">No challenges yet</p>
+          <p className="text-label text-ink-tertiary mt-1 leading-relaxed">
             Pick a lift, pick anyone on Kun, and they get your current PR as a target to beat.
           </p>
         </div>
@@ -110,13 +110,13 @@ export default function ChallengesPanel({
           <div className="flex gap-2 mt-3">
             <button
               onClick={() => respond(c.id, true)}
-              className="flex-1 h-10 rounded-xl bg-success text-white font-semibold text-sm flex items-center justify-center gap-1.5 active:opacity-80"
+              className="flex-1 h-10 rounded-row bg-done text-on-primary font-semibold text-label flex items-center justify-center gap-1.5 active:opacity-80"
             >
               <Check size={15} /> Accept
             </button>
             <button
               onClick={() => respond(c.id, false)}
-              className="flex-1 h-10 rounded-xl border border-border text-muted text-sm flex items-center justify-center gap-1.5 active:bg-card"
+              className="flex-1 h-10 rounded-row border border-glass-border text-ink-tertiary text-label flex items-center justify-center gap-1.5 active:bg-glass-inset"
             >
               <X size={15} /> Decline
             </button>
@@ -156,21 +156,21 @@ function Card({ c, exNames, myId, accent, children }) {
   const hasTheirs = Number(c.their_best_weight_kg) > 0 || c.their_best_reps > 0;
 
   return (
-    <section className={`bg-surface border rounded-2xl p-3 ${accent ? 'border-accent/50' : 'border-border'}`}>
+    <section className={`bg-glass border rounded-card p-3 ${accent ? 'border-focus/50' : 'border-glass-border'}`}>
       <div className="flex items-center gap-2.5">
         <Avatar profile={{ display_name: c.other_display_name, username: c.other_username, avatar_url: c.other_avatar_url }} size={34} />
         <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-semibold truncate">{name}</h3>
-          <p className="text-[11px] text-muted truncate">
+          <h3 className="text-label font-semibold truncate">{name}</h3>
+          <p className="text-micro tracking-normal text-ink-tertiary truncate">
             {c.i_created ? 'You challenged' : 'Challenged by'} {c.other_display_name}
           </p>
         </div>
         <StatusPill c={c} myId={myId} />
       </div>
 
-      <div className="mt-3 rounded-xl bg-card border border-border p-2.5 text-center">
-        <p className="text-[10px] tracking-wider text-muted font-semibold">TARGET TO BEAT</p>
-        <p className="text-lg font-bold tabular-nums mt-0.5">
+      <div className="mt-3 rounded-row bg-glass-inset border border-glass-border p-2.5 text-center">
+        <p className="text-micro tracking-normal tracking-wider text-ink-tertiary font-semibold">TARGET TO BEAT</p>
+        <p className="text-body font-semibold tabular-nums mt-0.5">
           {fmt(c.target_weight_kg, c.target_reps)}
         </p>
       </div>
@@ -183,7 +183,7 @@ function Card({ c, exNames, myId, accent, children }) {
       )}
 
       {c.status === 'active' && c.ends_at && (
-        <p className="text-[11px] text-muted text-center mt-2 flex items-center justify-center gap-1">
+        <p className="text-micro tracking-normal text-ink-tertiary text-center mt-2 flex items-center justify-center gap-1">
           <Clock size={12} /> {timeLeft(c.ends_at)}
         </p>
       )}
@@ -195,25 +195,25 @@ function Card({ c, exNames, myId, accent, children }) {
 
 function Score({ label, value }) {
   return (
-    <div className="rounded-xl border border-border p-2 text-center">
-      <p className="text-[10px] text-muted truncate">{label}</p>
-      <p className="text-sm font-bold tabular-nums mt-0.5">{value}</p>
+    <div className="rounded-row border border-glass-border p-2 text-center">
+      <p className="text-micro tracking-normal text-ink-tertiary truncate">{label}</p>
+      <p className="text-label font-semibold tabular-nums mt-0.5">{value}</p>
     </div>
   );
 }
 
 function StatusPill({ c, myId }) {
   if (c.status === 'pending') {
-    return <span className="text-[11px] text-muted flex items-center gap-1 shrink-0"><Clock size={12} /> Pending</span>;
+    return <span className="text-micro tracking-normal text-ink-tertiary flex items-center gap-1 shrink-0"><Clock size={12} /> Pending</span>;
   }
   if (c.status === 'active') {
-    return <span className="text-[11px] text-accent font-semibold shrink-0">Live</span>;
+    return <span className="text-micro tracking-normal text-ink font-semibold shrink-0">Live</span>;
   }
   if (c.status === 'complete') {
-    if (!c.winner_id) return <span className="text-[11px] text-muted shrink-0">Draw</span>;
+    if (!c.winner_id) return <span className="text-micro tracking-normal text-ink-tertiary shrink-0">Draw</span>;
     const won = c.winner_id === myId;
     return (
-      <span className={`text-[11px] font-semibold flex items-center gap-1 shrink-0 ${won ? 'text-warn' : 'text-muted'}`}>
+      <span className={`text-micro tracking-normal font-semibold flex items-center gap-1 shrink-0 ${won ? 'text-ink-secondary' : 'text-ink-tertiary'}`}>
         <Trophy size={12} /> {won ? 'Won' : 'Lost'}
       </span>
     );
@@ -314,7 +314,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
         <button
           onClick={submit}
           disabled={!opponent || !exerciseId || busy}
-          className="w-full h-11 rounded-xl bg-accent text-white font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
+          className="w-full h-tap rounded-row bg-primary text-on-primary font-semibold disabled:opacity-40 flex items-center justify-center gap-2"
         >
           {busy && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
           Send challenge
@@ -323,19 +323,19 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
     >
       <div className="space-y-4">
         <div>
-          <label className="text-xs text-muted mb-1.5 block">Who</label>
+          <label className="text-label text-ink-tertiary mb-1.5 block">Who</label>
 
           {opponent ? (
-            <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-accent bg-accent/10">
+            <div className="flex items-center gap-2.5 h-tap px-3 rounded-row border border-focus bg-glass">
               <Avatar profile={opponent} size={28} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{opponent.display_name}</div>
-                <div className="text-[11px] text-muted truncate">@{opponent.username}</div>
+                <div className="text-label font-semibold truncate">{opponent.display_name}</div>
+                <div className="text-micro tracking-normal text-ink-tertiary truncate">@{opponent.username}</div>
               </div>
               <button
                 onClick={() => setOpponent(null)}
                 aria-label="Choose someone else"
-                className="text-xs text-muted px-2 h-8 active:text-text shrink-0"
+                className="text-label text-ink-tertiary px-2 h-8 active:text-ink shrink-0"
               >
                 Change
               </button>
@@ -343,7 +343,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
           ) : (
             <>
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -352,26 +352,26 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
                   autoCorrect="off"
                   spellCheck={false}
                   aria-label="Search for someone to challenge"
-                  className="w-full h-11 pl-9 pr-3 rounded-xl bg-card border border-border outline-none focus:border-accent text-sm"
+                  className="w-full h-tap pl-9 pr-3 rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
                 />
               </div>
 
               {query.trim().length < 2 && friends.length > 0 && (
-                <p className="text-[11px] text-muted mt-2">Your friends</p>
+                <p className="text-micro tracking-normal text-ink-tertiary mt-2">Your friends</p>
               )}
 
               {searching && (
-                <p className="text-xs text-muted py-3 text-center">Searching…</p>
+                <p className="text-label text-ink-tertiary py-3 text-center">Searching…</p>
               )}
 
               {!searching && query.trim().length >= 2 && results.length === 0 && (
-                <p className="text-xs text-muted py-3 text-center">
+                <p className="text-label text-ink-tertiary py-3 text-center">
                   No one with that username.
                 </p>
               )}
 
               {shown.length > 0 && (
-                <ul className="mt-1.5 divide-y divide-border max-h-56 overflow-y-auto">
+                <ul className="mt-1.5 divide-y divide-hairline max-h-56 overflow-y-auto">
                   {shown.map((p) => (
                     <li key={p.id}>
                       <button
@@ -380,8 +380,8 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
                       >
                         <Avatar profile={p} size={30} />
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{p.display_name}</div>
-                          <div className="text-[11px] text-muted truncate">@{p.username}</div>
+                          <div className="text-label font-semibold truncate">{p.display_name}</div>
+                          <div className="text-micro tracking-normal text-ink-tertiary truncate">@{p.username}</div>
                         </div>
                       </button>
                     </li>
@@ -390,7 +390,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
               )}
 
               {query.trim().length < 2 && friends.length === 0 && (
-                <p className="text-xs text-muted py-3 leading-relaxed">
+                <p className="text-label text-ink-tertiary py-3 leading-relaxed">
                   Type at least 2 characters of someone's username. You do not have to be
                   friends to challenge them.
                 </p>
@@ -400,16 +400,16 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
         </div>
 
         <div>
-          <label className="text-xs text-muted mb-1.5 block">Which lift</label>
+          <label className="text-label text-ink-tertiary mb-1.5 block">Which lift</label>
           {myLifts.length === 0 ? (
-            <p className="text-sm text-muted py-2">
+            <p className="text-label text-ink-tertiary py-2">
               Log some working sets on a built-in exercise first — a challenge needs a PR to beat.
             </p>
           ) : (
             <select
               value={exerciseId}
               onChange={(e) => setExerciseId(e.target.value)}
-              className="w-full h-11 px-3 rounded-xl bg-card border border-border text-sm outline-none focus:border-accent"
+              className="w-full h-tap px-3 rounded-row bg-glass-inset border border-glass-border text-label outline-none focus:border-focus"
             >
               <option value="">Choose a lift…</option>
               {myLifts.map((l) => (
@@ -422,26 +422,26 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
         </div>
 
         {target && (
-          <div className="rounded-xl bg-card border border-border p-3 text-center">
-            <p className="text-[10px] tracking-wider text-muted font-semibold">THEY HAVE TO BEAT</p>
-            <p className="text-xl font-bold tabular-nums mt-1">
+          <div className="rounded-row bg-glass-inset border border-glass-border p-3 text-center">
+            <p className="text-micro tracking-normal tracking-wider text-ink-tertiary font-semibold">THEY HAVE TO BEAT</p>
+            <p className="text-title font-semibold tabular-nums mt-1">
               {Number(target.top_weight_kg) > 0
                 ? `${formatWeight(target.top_weight_kg)} × ${target.top_weight_reps}`
                 : `${target.top_weight_reps} reps`}
             </p>
-            <p className="text-[11px] text-muted mt-1">Your current best. It is locked in when you send this.</p>
+            <p className="text-micro tracking-normal text-ink-tertiary mt-1">Your current best. It is locked in when you send this.</p>
           </div>
         )}
 
         <div>
-          <label className="text-xs text-muted mb-1.5 block">How long</label>
+          <label className="text-label text-ink-tertiary mb-1.5 block">How long</label>
           <div className="flex gap-2">
             {[7, 14, 30].map((d) => (
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                className={`flex-1 h-10 rounded-xl border text-sm font-medium ${
-                  days === d ? 'border-accent bg-accent/10 text-text' : 'border-border text-muted'
+                className={`flex-1 h-10 rounded-row border text-label font-semibold ${
+                  days === d ? 'border-focus bg-glass text-ink' : 'border-glass-border text-ink-tertiary'
                 }`}
               >
                 {d} days
@@ -450,7 +450,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
           </div>
         </div>
 
-        {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+        {error && <p role="alert" className="text-label text-danger">{error}</p>}
       </div>
     </Modal>
   );

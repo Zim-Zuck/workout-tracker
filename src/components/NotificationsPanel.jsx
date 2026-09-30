@@ -9,17 +9,17 @@ import { relativeDay } from '../utils/date.js';
 // Deliberately not an activity feed. With three friends a feed looks dead, and a
 // feed invites posting — this product is about training, not posts.
 const META = {
-  friend_request:     { icon: UserPlus,  tone: 'text-accent',  text: (n) => `${name(n)} sent you a friend request` },
-  friend_accepted:    { icon: UserCheck, tone: 'text-success', text: (n) => `${name(n)} accepted your friend request` },
-  challenge_received: { icon: Swords,    tone: 'text-accent',  text: (n) => `${name(n)} challenged you to beat ${n.payload?.target_label || 'their PR'}` },
-  challenge_accepted: { icon: Swords,    tone: 'text-accent',  text: (n) => `${name(n)} accepted your challenge` },
-  challenge_declined: { icon: Flag,      tone: 'text-muted',   text: (n) => `${name(n)} declined your challenge` },
-  challenge_beaten:   { icon: Trophy,    tone: 'text-warn',    text: (n) => `${name(n)} beat your ${n.payload?.exercise_label || 'PR'}` },
-  challenge_ended:    { icon: Trophy,    tone: 'text-warn',    text: (n) => n.payload?.won ? 'You won your challenge' : 'A challenge you were in has ended' },
+  friend_request:     { icon: UserPlus,  tone: 'text-ink',  text: (n) => `${name(n)} sent you a friend request` },
+  friend_accepted:    { icon: UserCheck, tone: 'text-done', text: (n) => `${name(n)} accepted your friend request` },
+  challenge_received: { icon: Swords,    tone: 'text-ink',  text: (n) => `${name(n)} challenged you to beat ${n.payload?.target_label || 'their PR'}` },
+  challenge_accepted: { icon: Swords,    tone: 'text-ink',  text: (n) => `${name(n)} accepted your challenge` },
+  challenge_declined: { icon: Flag,      tone: 'text-ink-tertiary',   text: (n) => `${name(n)} declined your challenge` },
+  challenge_beaten:   { icon: Trophy,    tone: 'text-ink-secondary',    text: (n) => `${name(n)} beat your ${n.payload?.exercise_label || 'PR'}` },
+  challenge_ended:    { icon: Trophy,    tone: 'text-ink-secondary',    text: (n) => n.payload?.won ? 'You won your challenge' : 'A challenge you were in has ended' },
   // Collapsed server-side: one row per event, with a running count, rather than
   // one row per reaction (migration 011). The copy has to carry that count or
   // the collapsing is invisible and the row looks stale.
-  event_reaction:     { icon: Heart,     tone: 'text-accent',  text: (n) => {
+  event_reaction:     { icon: Heart,     tone: 'text-ink',  text: (n) => {
     const count = Number(n.payload?.count) || 1;
     if (count <= 1) return `${name(n)} reacted to your activity`;
     return `${name(n)} and ${count - 1} other${count - 1 === 1 ? '' : 's'} reacted to your activity`;
@@ -67,9 +67,9 @@ export default function NotificationsPanel({ onOpenProfile, onRead, refreshToken
   if (rows.length === 0) {
     return (
       <div className="text-center py-12 px-6">
-        <Bell size={28} className="text-muted mx-auto mb-3" />
-        <p className="text-sm font-medium">Nothing yet</p>
-        <p className="text-xs text-muted mt-1">
+        <Bell size={28} className="text-ink-tertiary mx-auto mb-3" />
+        <p className="text-label font-semibold">Nothing yet</p>
+        <p className="text-label text-ink-tertiary mt-1">
           Challenges, reactions to your activity and friend requests show up here.
         </p>
       </div>
@@ -79,13 +79,13 @@ export default function NotificationsPanel({ onOpenProfile, onRead, refreshToken
   return (
     <div className="space-y-2">
       {stale && (
-        <p className="text-[11px] text-warn flex items-center gap-1.5 px-1">
+        <p className="text-micro tracking-normal text-ink-secondary flex items-center gap-1.5 px-1">
           <CloudOff size={12} /> Showing saved notifications — you are offline.
         </p>
       )}
-      <ul className="bg-surface border border-border rounded-2xl p-3 divide-y divide-border">
+      <ul className="bg-glass border border-glass-border rounded-card p-3 divide-y divide-hairline">
         {rows.map((n) => {
-          const meta = META[n.type] || { icon: Bell, tone: 'text-muted', text: () => 'Activity' };
+          const meta = META[n.type] || { icon: Bell, tone: 'text-ink-tertiary', text: () => 'Activity' };
           const Icon = meta.icon;
           return (
             <li key={n.id}>
@@ -97,17 +97,17 @@ export default function NotificationsPanel({ onOpenProfile, onRead, refreshToken
                 {n.actor ? (
                   <Avatar profile={n.actor} size={34} />
                 ) : (
-                  <span className="w-[34px] h-[34px] rounded-full bg-card border border-border flex items-center justify-center shrink-0">
+                  <span className="w-[34px] h-[34px] rounded-full bg-glass-inset border border-glass-border flex items-center justify-center shrink-0">
                     <Icon size={15} className={meta.tone} />
                   </span>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm leading-snug">{meta.text(n)}</p>
-                  <p className="text-[11px] text-muted mt-0.5">
+                  <p className="text-label leading-snug">{meta.text(n)}</p>
+                  <p className="text-micro tracking-normal text-ink-tertiary mt-0.5">
                     {relativeDay(new Date(n.created_at).getTime())}
                   </p>
                 </div>
-                {!n.read_at && <span className="w-2 h-2 rounded-full bg-accent mt-2 shrink-0" aria-label="Unread" />}
+                {!n.read_at && <span className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" aria-label="Unread" />}
               </button>
             </li>
           );

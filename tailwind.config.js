@@ -44,30 +44,6 @@ export default {
       'data-strong': color.dataStrong,
       focus: color.focus,
 
-      // ----------------------------------------------------------------------
-      // DEPRECATED — the pre-redesign palette, remapped onto the new tokens.
-      //
-      // Screens not yet restyled (everything outside src/ui and Today) still
-      // reference these names. Mapping them keeps the app usable between phases
-      // instead of shipping three releases of unstyled text. Nothing new may use
-      // them, and the whole block is deleted at the end of Phase 3 — at which
-      // point any remaining usage becomes a visible, findable break.
-      //
-      // Note `accent` maps to ink, not to a colour: the old blue is retired and
-      // there is deliberately nothing to inherit it.
-      // ----------------------------------------------------------------------
-      card: color.glassInset,
-      border: color.glassBorder,
-      muted: color.inkTertiary,
-      text: color.ink,
-      accent: color.ink,
-      success: color.done,
-      warn: color.pr,
-      // `text-white` in unrestyled code is almost always the label ON a filled
-      // button (bg-accent / bg-success / bg-danger). Since `accent` now maps to
-      // the near-white primary, mapping `white` to the primary's INK keeps those
-      // buttons legible instead of painting white on white.
-      white: color.onPrimary
     },
     fontSize: Object.fromEntries(
       Object.entries(text).map(([k, v]) => [
@@ -80,9 +56,7 @@ export default {
     ),
     fontWeight: {
       regular: font.weight.regular,
-      semibold: font.weight.semibold,
-      // DEPRECATED (see the colour block above): unrestyled screens use these.
-      normal: font.weight.regular, medium: font.weight.semibold, bold: font.weight.semibold
+      semibold: font.weight.semibold
     },
     fontFamily: { sans: font.family },
     borderRadius: px(radius),
@@ -97,17 +71,6 @@ export default {
       spacing: px(space),
       maxWidth: { app: `${layout.maxWidth}px` },
       inset: px({ header: layout.header }),
-      // DEPRECATED: Tailwind's default size/radius names, remapped onto the
-      // token scale so unrestyled screens stay legible. Deleted after Phase 3.
-      fontSize: {
-        '[10px]': `${text.micro.size}px`,
-        xs: `${text.micro.size}px`, sm: `${text.label.size}px`, base: `${text.body.size}px`,
-        lg: `${text.body.size}px`, xl: `${text.title.size}px`, '2xl': `${text.title.size}px`
-      },
-      borderRadius: {
-        lg: `${radius.control}px`, xl: `${radius.row}px`,
-        '2xl': `${radius.card}px`, '3xl': `${radius.hero}px`
-      },
       height: px({ header: layout.header, tab: layout.tabBar, resume: layout.resumePill, tap: layout.tapMin }),
       minHeight: px({ tap: layout.tapMin }),
       minWidth: px({ tap: layout.tapMin })

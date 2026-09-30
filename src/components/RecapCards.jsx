@@ -66,10 +66,10 @@ export default function RecapCards({ open, recap, onClose }) {
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
       <div className="relative flex-1 flex flex-col safe-top safe-bottom min-h-0">
         <div className="flex items-center justify-between px-4 py-3 shrink-0">
-          <button onClick={onClose} className="text-muted p-2 -ml-2 active:opacity-60" aria-label="Close">
+          <button onClick={onClose} className="text-ink-tertiary p-2 -ml-2 active:opacity-60" aria-label="Close">
             <X size={22} />
           </button>
-          <div className="text-[13px] font-medium text-muted tracking-tight">
+          <div className="text-label font-semibold text-ink-tertiary tracking-tight">
             {CARD_META[index].label} · {recap.rangeLabel}
           </div>
           <div className="w-8" />
@@ -88,7 +88,7 @@ export default function RecapCards({ open, recap, onClose }) {
               <canvas
                 ref={(el) => { canvasRefs.current[i] = el; }}
                 aria-label={`${meta.label} card`}
-                className="rounded-2xl shadow-2xl bg-black"
+                className="rounded-card shadow-2xl bg-black"
                 style={{ aspectRatio: '1080 / 1350', height: '100%', width: 'auto', maxWidth: '100%', maxHeight: '100%' }}
               />
             </div>
@@ -99,7 +99,7 @@ export default function RecapCards({ open, recap, onClose }) {
           {CARD_META.map((meta, i) => (
             <span
               key={meta.id}
-              className={`h-1.5 rounded-full transition-all ${i === index ? 'w-5 bg-accent' : 'w-1.5 bg-border'}`}
+              className={`h-1.5 rounded-full transition-all ${i === index ? 'w-5 bg-primary' : 'w-1.5 bg-border'}`}
             />
           ))}
         </div>
@@ -112,7 +112,7 @@ export default function RecapCards({ open, recap, onClose }) {
             <button
               onClick={download}
               disabled={!current}
-              className="flex-1 h-12 rounded-xl border border-border bg-surface/80 text-text font-medium flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
+              className="flex-1 h-tap rounded-row border border-glass-border bg-glass/80 text-ink font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
             >
               <Download size={18} /> Save
             </button>
@@ -120,7 +120,7 @@ export default function RecapCards({ open, recap, onClose }) {
           <button
             onClick={canShareFile ? share : download}
             disabled={!current}
-            className="flex-1 h-12 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
+            className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
           >
             {canShareFile ? <><Share2 size={18} /> Share</> : <><Download size={18} /> Save image</>}
           </button>

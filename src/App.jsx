@@ -156,8 +156,8 @@ function Root() {
   if (dbError) {
     return (
       <div className="min-h-screen p-6 flex flex-col items-center justify-center text-center">
-        <h1 className="text-lg font-bold text-danger mb-2">Storage unavailable</h1>
-        <p className="text-sm text-muted max-w-sm">
+        <h1 className="text-body font-semibold text-danger mb-2">Storage unavailable</h1>
+        <p className="text-label text-ink-tertiary max-w-sm">
           {dbError}. Private-browsing mode disables IndexedDB on some browsers. Try a normal browser window.
         </p>
       </div>
@@ -175,7 +175,7 @@ function Root() {
   if (authOpen) {
     return (
       <div className="min-h-screen flex flex-col safe-top">
-        <main className="max-w-lg w-full mx-auto flex-1">
+        <main className="max-w-app w-full mx-auto flex-1">
           <AuthScreen
             auth={auth}
             initialMode={authOpen}
@@ -197,7 +197,7 @@ function Root() {
   if (auth.signedIn && profileState.needsSetup) {
     return (
       <div className="min-h-screen flex flex-col safe-top">
-        <main className="max-w-lg w-full mx-auto flex-1">
+        <main className="max-w-app w-full mx-auto flex-1">
           <ProfileSetup
             userId={auth.userId}
             defaultDisplayName={(auth.user?.email || '').split('@')[0]}
@@ -226,7 +226,7 @@ function Root() {
         }}
       />
 
-      <main className="max-w-lg w-full mx-auto flex-1 pb-nav">
+      <main className="max-w-app w-full mx-auto flex-1 pb-nav">
         {viewingUserId ? (
           <UserProfile
             targetId={viewingUserId}

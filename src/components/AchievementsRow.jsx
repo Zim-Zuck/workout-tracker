@@ -8,10 +8,10 @@ export default function AchievementsRow({ stats, lifts, title = 'Achievements' }
   const earnedCount = items.filter((a) => a.earned).length;
 
   return (
-    <section className="bg-surface border border-border rounded-2xl p-3">
+    <section className="bg-glass border border-glass-border rounded-card p-3">
       <div className="flex items-baseline justify-between mb-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <span className="text-[11px] text-muted">{earnedCount} of {items.length}</span>
+        <h2 className="text-label font-semibold">{title}</h2>
+        <span className="text-micro tracking-normal text-ink-tertiary">{earnedCount} of {items.length}</span>
       </div>
       <ul className="grid grid-cols-3 gap-2">
         {items.map((a) => {
@@ -20,23 +20,23 @@ export default function AchievementsRow({ stats, lifts, title = 'Achievements' }
           return (
             <li
               key={a.id}
-              className={`rounded-xl border p-2 text-center ${
-                a.earned ? 'border-warn/40 bg-warn/10' : 'border-border bg-card'
+              className={`rounded-row border p-2 text-center ${
+                a.earned ? 'border-glass-border bg-glass-inset' : 'border-glass-border bg-glass-inset'
               }`}
             >
-              <span className={`text-xl block leading-none ${a.earned ? '' : 'grayscale opacity-40'}`} aria-hidden="true">
+              <span className={`text-title block leading-none ${a.earned ? '' : 'grayscale opacity-40'}`} aria-hidden="true">
                 {a.icon}
               </span>
-              <span className={`text-[11px] font-semibold block mt-1.5 leading-tight ${
-                a.earned ? 'text-warn' : 'text-muted'
+              <span className={`text-micro tracking-normal font-semibold block mt-1.5 leading-tight ${
+                a.earned ? 'text-ink-secondary' : 'text-ink-tertiary'
               }`}>
                 {a.name}
               </span>
               {a.earned ? (
-                <span className="text-[10px] text-muted block mt-0.5 leading-tight">{a.description}</span>
+                <span className="text-micro tracking-normal text-ink-tertiary block mt-0.5 leading-tight">{a.description}</span>
               ) : (
                 <>
-                  <span className="text-[10px] text-muted block mt-0.5 tabular-nums">
+                  <span className="text-micro tracking-normal text-ink-tertiary block mt-0.5 tabular-nums">
                     {fmt(a.current)} / {fmt(a.target)}
                   </span>
                   <span className="block h-1 mt-1 rounded-full bg-border overflow-hidden">

@@ -56,29 +56,29 @@ export default function ShareCard({ open, workout, workouts, exercises, onClose 
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
       <div className="relative flex-1 flex flex-col safe-top safe-bottom">
         <div className="flex items-center justify-between px-4 py-3">
-          <button onClick={onClose} className="text-muted p-2 -ml-2 active:opacity-60" aria-label="Close">
+          <button onClick={onClose} className="text-ink-tertiary p-2 -ml-2 active:opacity-60" aria-label="Close">
             <X size={22} />
           </button>
-          <div className="text-[13px] font-medium text-muted tracking-tight">Share workout</div>
+          <div className="text-label font-semibold text-ink-tertiary tracking-tight">Share workout</div>
           <div className="w-8" />
         </div>
         <div className="flex-1 overflow-auto px-4 pb-2 flex items-start justify-center">
           <canvas
             ref={canvasRef}
-            className="rounded-2xl shadow-2xl w-full max-w-[360px] h-auto bg-black"
+            className="rounded-card shadow-2xl w-full max-w-[360px] h-auto bg-black"
             style={{ aspectRatio: '4 / 5' }}
           />
         </div>
         <div className="px-4 pb-4 pt-2 flex items-center gap-2">
           <button
             onClick={download}
-            className="flex-1 h-12 rounded-xl border border-border bg-surface/80 text-text font-medium flex items-center justify-center gap-2 active:opacity-80"
+            className="flex-1 h-tap rounded-row border border-glass-border bg-glass/80 text-ink font-semibold flex items-center justify-center gap-2 active:opacity-80"
           >
             <Download size={18} /> Save image
           </button>
           <button
             onClick={share}
-            className="flex-1 h-12 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80"
+            className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80"
           >
             <Share2 size={18} /> {canShareFile ? 'Share' : 'Save'}
           </button>
