@@ -1,6 +1,7 @@
 // Summaries used by the share card. Reuses existing calculations rather than
 // re-deriving PRs/volume in a second place.
 import { isWorking, workingVolume, detectPRs, bestWorkingSet, estimate1RM, setVolume } from './calculations.js';
+import { workoutTitle } from './splits.js';
 
 // Ordered list of "leg-family" muscles used by the split-name heuristic.
 const LEG_MUSCLES = new Set(['Quads', 'Hamstrings', 'Glutes', 'Calves']);
@@ -25,8 +26,12 @@ export function muscleBreakdown(workout, exerciseMap) {
 }
 
 // Turn the muscle breakdown into a "[X] Day" style title.
-// Heuristics: leg-family, push (chest+triceps±shoulders), pull (back+biceps),
-// otherwise "A", "A & B", "A, B & C" from the top groups.
+//
+// NO LONGER THE SHARE CARD'S TITLE. Sessions now carry a real split, and
+// splits.js/workoutTitle() is the single answer to "what was this session" —
+// the card said "Push Day" while History said "Push" for the same workout.
+// Kept and still exported: it is the nicer phrasing for a share image, and
+// callers that want "Push Day" rather than "Push" can still ask for it.
 export function dayTitle(workout, exerciseMap) {
   const bd = muscleBreakdown(workout, exerciseMap);
   if (bd.size === 0) return 'Workout';
@@ -119,7 +124,7 @@ export function workoutSummary(workout, allWorkouts, exercises) {
     .filter((r) => r.sets > 0);
 
   return {
-    title: dayTitle(workout, exMap),
+    title: workoutTitle(workout, exMap),
     date: workout.date,
     durationMs: (workout.endTime || Date.now()) - (workout.startTime || workout.date),
     totalVolumeKg,

@@ -14,10 +14,10 @@ export function ToastProvider({ children }) {
       {children}
       <div className="fixed left-0 right-0 top-4 z-[60] flex flex-col items-center gap-2 pointer-events-none safe-top">
         {toasts.map((t) => (
-          <div key={t.id} className={`pointer-events-auto px-4 py-2 rounded-full text-sm shadow-lg border ${
-            t.tone === 'error' ? 'bg-danger/95 border-danger text-white' :
-            t.tone === 'success' ? 'bg-success/95 border-success text-white' :
-            'bg-surface border-border text-text'
+          <div key={t.id} className={`pointer-events-auto px-4 py-2 rounded-full text-label shadow-lg border ${
+            t.tone === 'error' ? 'bg-danger-soft border-danger text-on-primary' :
+            t.tone === 'success' ? 'bg-done-soft border-done-border text-on-primary' :
+            'bg-glass border-glass-border text-ink'
           }`}>
             {t.msg}
           </div>

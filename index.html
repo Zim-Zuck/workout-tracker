@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#0a0a0b" />
+    <meta name="theme-color" content="#5A1230" />
     <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -12,6 +12,12 @@
     <meta name="apple-mobile-web-app-title" content="Kun Workouts" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <!-- Inter Tight is preloaded, not fetched from a CDN: this is an
+         offline-first PWA and a typeface that only arrives with a network is a
+         typeface the app does not have at the gym. The @font-face rules live in
+         index.css; the latin subset is preloaded because it is what renders
+         first. -->
+    <link rel="preload" href="./fonts/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>Kun Workouts</title>
   </head>
   <body>

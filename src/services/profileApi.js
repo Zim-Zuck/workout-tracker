@@ -43,7 +43,7 @@ export async function fetchMyProfile(userId) {
 
   const { data, error } = await sb
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, share_stats, created_at')
+    .select('id, username, display_name, avatar_url, bio, share_stats, share_activity, community_notice_pending, created_at')
     .eq('id', userId)
     .maybeSingle();
 
@@ -91,6 +91,15 @@ export async function updateProfile(userId, patch) {
   if (patch.bio !== undefined) allowed.bio = String(patch.bio || '').trim().slice(0, 160) || null;
   if (patch.avatar_url !== undefined) allowed.avatar_url = patch.avatar_url || null;
   if (patch.share_stats !== undefined) allowed.share_stats = !!patch.share_stats;
+  // The second, separate switch (migration 009). Kept distinct from share_stats
+  // on purpose: one governs what accepted friends see of your numbers, the other
+  // whether the rest of Kun sees that you are training. Merging them here would
+  // undo in one line the distinction the whole migration exists to draw.
+  if (patch.share_activity !== undefined) allowed.share_activity = !!patch.share_activity;
+  // Cleared, never set, by the client: it is raised once by migration 009 for
+  // accounts that predate community sharing, and lowered the moment that person
+  // has seen what changed.
+  if (patch.community_notice_pending === false) allowed.community_notice_pending = false;
   allowed.updated_at = new Date().toISOString();
 
   const { data, error } = await sb
@@ -132,20 +141,34 @@ export async function fetchLifts(userId) {
 
 // Two steps, in this order deliberately.
 //
-// Supabase forbids deleting storage.objects rows from SQL, so the backup file
-// cannot be removed by the database function — it has to go through the Storage
-// API as the user. The file is deleted FIRST: if that fails we abort and the
-// account survives, because leaving someone's training data in a bucket after
-// they asked to be deleted is worse than a deletion they can retry.
+// Supabase forbids deleting storage.objects rows from SQL, so the user's files
+// cannot be removed by the database function — they have to go through the
+// Storage API as the user. Files are deleted FIRST: if that fails we abort and
+// the account survives, because leaving someone's training data in a bucket
+// after they asked to be deleted is worse than a deletion they can retry.
+//
+// Both buckets are handled here, not in SQL. Migration 004 tried the SQL route
+// and broke deletion outright; 005 fixed it by moving the work here; 007 added
+// avatars and reinstated the same broken SQL, breaking deletion a second time
+// for everything after it. 016 removes it again. If a third bucket is ever
+// added, it gets cleaned up in this function — not in the database.
+const DELETABLE_FILES = [
+  { bucket: 'backups', path: (id) => `${id}/latest.json`, label: 'cloud backup' },
+  { bucket: 'avatars', path: (id) => `${id}/avatar.jpg`, label: 'profile picture' }
+];
+
 export async function deleteMyAccount(userId) {
   const sb = await getSupabase();
   if (!sb) throw new Error('Cloud features are not configured.');
 
   if (userId) {
-    const { error: storageError } = await sb.storage.from('backups').remove([`${userId}/latest.json`]);
-    // A missing file is success, not failure — plenty of users never back up.
-    if (storageError && !/not found|does not exist/i.test(storageError.message || '')) {
-      throw new Error(`Could not remove your cloud backup, so your account was not deleted. ${friendlyError(storageError)}`);
+    for (const f of DELETABLE_FILES) {
+      const { error: storageError } = await sb.storage.from(f.bucket).remove([f.path(userId)]);
+      // A missing file is success, not failure — plenty of users never back up
+      // and plenty never set a picture.
+      if (storageError && !/not found|does not exist/i.test(storageError.message || '')) {
+        throw new Error(`Could not remove your ${f.label}, so your account was not deleted. ${friendlyError(storageError)}`);
+      }
     }
   }
 

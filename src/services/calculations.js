@@ -6,10 +6,22 @@ export function isWorking(set) {
   return set && set.completed && set.type !== 'warmup';
 }
 
-// Epley 1RM estimate, capped at reps <= 12 for reasonable accuracy.
+// Epley 1RM estimate.
+//
+// Capped at 12 reps, which is what the comment always claimed and what the
+// formula is actually good for — the code capped at 20, where Epley inflates
+// badly (20 reps reads as 1.67x the bar, which nobody's true single is). The cap
+// matters because this number decides PR ties, leaderboard order and challenge
+// results, so an inflated set of 20 light curls could out-rank a hard triple.
+//
+// Above the cap the estimate stops rising: a set of 20 is scored as a set of 12
+// at the same weight. That understates a genuinely strong high-rep set, which is
+// the safer direction to be wrong in for a number used to rank people.
+export const E1RM_REP_CAP = 12;
+
 export function estimate1RM(weightKg, reps) {
   if (!weightKg || !reps) return 0;
-  const r = Math.min(reps, 20);
+  const r = Math.min(reps, E1RM_REP_CAP);
   return weightKg * (1 + r / 30);
 }
 
@@ -66,13 +78,24 @@ export function summarizeSets(sets, formatWeightFn) {
 }
 
 // Detect PRs achieved *in this workout* for a given exercise vs prior history.
-// prevSets = all working sets for this exercise from workouts BEFORE `workout`.
-// currentSets = working sets from `workout` for this exercise.
+//
+// prevSets     = all working sets for this exercise from workouts BEFORE this one.
+// currentSets  = working sets from this workout for this exercise.
+// prevSessions = those same prior sets GROUPED BY WORKOUT, needed for volume.
+//
 // Returns { weight, reps, e1rm, volume } with `true` for each new PR.
-export function detectPRs(prevSets, currentSets) {
+//
+// VOLUME IS PER SESSION, NOT CUMULATIVE.
+// This used to compare one session's volume against the sum of every previous
+// session's, which no single workout can ever beat — so the volume PR existed in
+// the code and never once fired. A volume PR means "the most work you have done
+// on this lift in one session", which is the only reading that is both
+// achievable and worth telling somebody about.
+export function detectPRs(prevSets, currentSets, prevSessions = null) {
   const prevMaxWeight = prevSets.reduce((m, s) => Math.max(m, s.weightKg), 0);
   const prevMaxE1rm = prevSets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0);
-  const prevVol = prevSets.reduce((a, s) => a + setVolume(s), 0);
+  const prevBestSessionVol = (prevSessions || [])
+    .reduce((m, sessionSets) => Math.max(m, sessionSets.reduce((a, s) => a + setVolume(s), 0)), 0);
   // Reps PR is "at a given weight": for each weight the current sets hit,
   // was more reps achieved than the previous best at that weight?
   const prevRepsAtWeight = new Map();
@@ -80,7 +103,9 @@ export function detectPRs(prevSets, currentSets) {
 
   let weightPR = false, e1rmPR = false, repsPR = false;
   const curVol = currentSets.reduce((a, s) => a + setVolume(s), 0);
-  const volumePR = prevSets.length > 0 && curVol > prevVol;
+  // Without session grouping there is nothing honest to compare against, so no
+  // volume PR is claimed rather than one being invented from the wrong baseline.
+  const volumePR = prevBestSessionVol > 0 && curVol > prevBestSessionVol;
   for (const s of currentSets) {
     if (s.weightKg > prevMaxWeight) weightPR = true;
     if (estimate1RM(s.weightKg, s.reps) > prevMaxE1rm) e1rmPR = true;

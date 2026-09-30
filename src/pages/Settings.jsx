@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX } from 'lucide-react';
+import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX, History } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { SCHEMA_VERSION } from '../db/database.js';
-import { downloadBackup, importReplaceAll, wipeAllData, validateBackup } from '../services/dataManager.js';
+import {
+  downloadBackup, importReplaceAll, wipeAllData, validateBackup,
+  getAutomaticBackupStatus, restoreFromAutomaticBackup, downloadAutomaticBackup, getLastExportAt
+} from '../services/dataManager.js';
+import { storageEstimate } from '../db/database.js';
 import { maybeSeed } from '../db/seedData.js';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { backupNow, fetchBackup, restoreBackup, getBackupInfo } from '../services/backupApi.js';
@@ -20,6 +24,18 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   const [backupBusy, setBackupBusy] = useState(false);
   const [pendingRestore, setPendingRestore] = useState(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  // The automatic pre-upgrade snapshot: null while unknown, null forever on a
+  // device that never had data to protect.
+  const [autoBackup, setAutoBackup] = useState(null);
+  const [confirmAutoRestore, setConfirmAutoRestore] = useState(false);
+  const [lastExport, setLastExport] = useState(undefined); // undefined = loading
+  const [storage, setStorage] = useState(null);
+
+  useEffect(() => {
+    getAutomaticBackupStatus().then(setAutoBackup).catch(() => setAutoBackup(null));
+    getLastExportAt().then(setLastExport).catch(() => setLastExport(null));
+    storageEstimate().then(setStorage).catch(() => {});
+  }, []);
 
   // Backup metadata is a listing, not a download — cheap enough to fetch on
   // mount and it keeps the row from saying "never" when a backup exists.
@@ -45,13 +61,13 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   };
 
   return (
-    <div className="p-3 space-y-4">
+    <div className="px-base pb-nav">
       {auth?.cloudConfigured && (
         <Section title="Account">
           {auth.signedIn ? (
             <>
               <Row label="Signed in as">
-                <span className="text-sm text-muted truncate max-w-[55%]">{auth.user?.email}</span>
+                <span className="text-label font-regular text-ink-tertiary truncate max-w-[55%]">{auth.user?.email}</span>
               </Row>
               <ActionButton icon={LogOut} label="Sign out" onClick={async () => {
                 await auth.signOut();
@@ -60,7 +76,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
             </>
           ) : (
             <>
-              <p className="text-xs text-muted mb-2">
+              <p className="text-label font-regular text-ink-tertiary py-sm">
                 An account adds friends, challenges and cloud backup. Your workouts stay on this device either way.
               </p>
               <ActionButton icon={LogIn} label="Sign in or create account" onClick={onSignIn} />
@@ -74,7 +90,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
           <select
             value={settings.defaultRestSec}
             onChange={(e) => updateSettings({ defaultRestSec: Number(e.target.value) })}
-            className="h-10 rounded-lg bg-card border border-border px-2 text-sm"
+            className="h-tap rounded-full bg-glass-inset border border-glass-inset-border px-md text-label font-semibold text-ink outline-none"
           >
             {[60, 90, 120, 150, 180, 240].map((s) => <option key={s} value={s}>{s < 60 ? `${s}s` : `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}</option>)}
           </select>
@@ -83,11 +99,11 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
           <div className="flex items-center gap-2">
             <input type="number" inputMode="numeric" value={settings.defaultRepsLow}
               onChange={(e) => updateSettings({ defaultRepsLow: Number(e.target.value) })}
-              className="w-16 h-10 rounded-lg bg-card border border-border text-center text-sm" />
-            <span className="text-muted">–</span>
+              className="w-16 h-tap rounded-full bg-glass-inset border border-glass-inset-border text-center text-label font-semibold text-ink outline-none" />
+            <span className="text-ink-tertiary">–</span>
             <input type="number" inputMode="numeric" value={settings.defaultRepsHigh}
               onChange={(e) => updateSettings({ defaultRepsHigh: Number(e.target.value) })}
-              className="w-16 h-10 rounded-lg bg-card border border-border text-center text-sm" />
+              className="w-16 h-tap rounded-full bg-glass-inset border border-glass-inset-border text-center text-label font-semibold text-ink outline-none" />
           </div>
         </Row>
         <Row label="Rest timer sound">
@@ -107,16 +123,29 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       </Section>
 
       <Section title="Exercises">
-        <p className="text-xs text-muted mb-2">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
+        <p className="text-label font-regular text-ink-tertiary py-sm">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
         <ActionButton icon={ListChecks} label="Exercise library" onClick={() => setLibraryOpen(true)} />
       </Section>
 
       <Section title="Data">
-        <p className="text-xs text-muted mb-2">
+        <p className="text-label font-regular text-ink-tertiary py-sm">
           Your workouts are stored locally on this device. Export a backup regularly, or sign in to back them up to the cloud.
         </p>
-        <div className="grid grid-cols-1 gap-2">
-          <ActionButton icon={Download} label="Export JSON backup" onClick={async () => { await downloadBackup(); toast('Backup downloaded'); }} />
+        {/* A REMINDER, NOT A GATE.
+            It states a fact and stops. No badge, no modal, no interstitial on
+            launch, nothing that stands between somebody and logging a set —
+            an app that nags about backups is an app people close. */}
+        <Row label="Last export from this device">
+          <span className={`text-label font-regular ${lastExport ? 'text-ink-tertiary' : 'text-ink-secondary'}`}>
+            {lastExport === undefined ? '—' : lastExport ? relativeDay(lastExport) : 'Never'}
+          </span>
+        </Row>
+        <div className="flex flex-col divide-y divide-hairline">
+          <ActionButton icon={Download} label="Export JSON backup" onClick={async () => {
+            await downloadBackup();
+            setLastExport(await getLastExportAt());
+            toast('Backup downloaded');
+          }} />
           <ActionButton icon={Upload} label="Import JSON backup" onClick={() => fileRef.current?.click()} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
           <ActionButton icon={Trash2} label="Clear all data" danger onClick={() => setConfirmWipe(true)} />
@@ -130,21 +159,49 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         </div>
       </Section>
 
+      {/* THE AUTOMATIC SAFETY NET.
+          Only rendered when a snapshot actually exists, so it appears for the
+          users who were upgraded and quietly disappears once it has aged out —
+          no dead row promising a restore of nothing. */}
+      {autoBackup && (
+        <Section title="Automatic backup">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
+            Before this version changed anything, it copied your data as it was. Nothing since has
+            touched that copy. It is kept for 30 days and then removed on its own.
+          </p>
+          <Row label="Taken">
+            <span className="text-label font-regular text-ink-tertiary">{relativeDay(autoBackup.createdAt)}</span>
+          </Row>
+          <Row label="Contains">
+            <span className="text-label font-regular text-ink-tertiary">
+              {plural(autoBackup.counts.workouts, 'workout')} · {plural(autoBackup.counts.exercises, 'exercise')}
+            </span>
+          </Row>
+          <div className="flex flex-col divide-y divide-hairline">
+            <ActionButton icon={Download} label="Download it as a file" onClick={async () => {
+              try { await downloadAutomaticBackup(); toast('Pre-upgrade backup downloaded'); }
+              catch (err) { toast(err.message, { tone: 'error' }); }
+            }} />
+            <ActionButton icon={History} label="Restore from automatic backup" danger onClick={() => setConfirmAutoRestore(true)} />
+          </div>
+        </Section>
+      )}
+
       {auth?.signedIn && (
         <Section title="Cloud backup">
-          <p className="text-xs text-muted mb-2">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
             A copy of your workouts stored against your account, so a new phone can pick up where this one left off.
             It backs up automatically once a day after a workout.
           </p>
           <Row label="Last backup">
-            <span className="text-sm text-muted">
+            <span className="text-label font-regular text-ink-tertiary">
               {backupInfo === null ? '—'
                 : backupInfo.updatedAt ? relativeDay(backupInfo.updatedAt)
                 : backupInfo.localLast ? relativeDay(backupInfo.localLast)
                 : 'Never'}
             </span>
           </Row>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="flex flex-col divide-y divide-hairline">
             <ActionButton
               icon={CloudUpload}
               label={backupBusy ? 'Working…' : 'Back up now'}
@@ -177,7 +234,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
 
       {auth?.signedIn && (
         <Section title="Danger zone">
-          <p className="text-xs text-muted mb-2">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
             Deleting your account removes your profile, friends, challenges and cloud backup permanently.
             Workouts on this device are not touched.
           </p>
@@ -186,21 +243,28 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       )}
 
       <Section title="About">
-        <Row label="App"><span className="text-sm text-text font-medium">Kun Workouts</span></Row>
-        <Row label="App version"><span className="text-sm text-muted">1.0.0</span></Row>
-        <Row label="Data schema"><span className="text-sm text-muted">v{SCHEMA_VERSION}</span></Row>
+        <Row label="App"><span className="text-label text-ink font-semibold">Kun Workouts</span></Row>
+        <Row label="App version"><span className="text-label font-regular text-ink-tertiary">1.0.0</span></Row>
+        <Row label="Data schema"><span className="text-label font-regular text-ink-tertiary">v{SCHEMA_VERSION}</span></Row>
+        {storage?.usage != null && (
+          <Row label="Data on this device">
+            <span className="text-label font-regular text-ink-tertiary">
+              {(storage.usage / 1048576).toFixed(1)} MB used
+            </span>
+          </Row>
+        )}
         <Row label="Connection">
-          <span className={`inline-flex items-center gap-1 text-sm ${online ? 'text-success' : 'text-warn'}`}>
+          <span className={`inline-flex items-center gap-1 text-label ${online ? 'text-done' : 'text-ink-secondary'}`}>
             {online ? <Wifi size={14} /> : <WifiOff size={14} />} {online ? 'Online' : 'Offline'}
           </span>
         </Row>
-        <p className="text-xs text-muted mt-3">This app works fully offline after first load. Add it to your Home Screen from Safari's Share menu for an app-like experience.</p>
+        <p className="text-label text-ink-tertiary mt-3">This app works fully offline after first load. Add it to your Home Screen from Safari's Share menu for an app-like experience.</p>
       </Section>
 
       <Modal open={!!pendingRestore} onClose={() => setPendingRestore(null)} title="Restore from cloud?"
         footer={
           <div className="flex gap-2">
-            <button onClick={() => setPendingRestore(null)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button onClick={() => setPendingRestore(null)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
                 try {
@@ -211,16 +275,16 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
                   toast(`Restore failed: ${err.message}`, { tone: 'error' });
                 } finally { setPendingRestore(null); }
               }}
-              className="flex-1 h-11 rounded-xl bg-warn text-white font-semibold"
+              className="flex-1 h-tap rounded-full bg-danger-soft border border-danger-border text-danger font-semibold"
             >Replace</button>
           </div>
         }
       >
-        <p className="text-sm">
+        <p className="text-label">
           This will <span className="text-danger font-semibold">replace everything on this device</span> with your cloud backup.
         </p>
         {pendingRestore && (
-          <p className="text-xs text-muted mt-2">
+          <p className="text-label text-ink-tertiary mt-2">
             {pendingRestore.exercises?.length ?? 0} exercises · {pendingRestore.workouts?.length ?? 0} workouts ·
             backed up {pendingRestore.exportedAt?.slice(0, 10)}
           </p>
@@ -230,7 +294,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       <Modal open={confirmDeleteAccount} onClose={() => setConfirmDeleteAccount(false)} title="Delete your account?"
         footer={
           <div className="flex gap-2">
-            <button onClick={() => setConfirmDeleteAccount(false)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button onClick={() => setConfirmDeleteAccount(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
                 try {
@@ -242,15 +306,15 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
                   toast(err.message, { tone: 'error' });
                 }
               }}
-              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold"
+              className="flex-1 h-tap rounded-row bg-danger text-on-primary font-semibold"
             >Delete account</button>
           </div>
         }
       >
-        <p className="text-sm">
+        <p className="text-label">
           Your profile, friendships, challenges and cloud backup are deleted permanently. This cannot be undone.
         </p>
-        <p className="text-xs text-muted mt-2">
+        <p className="text-label text-ink-tertiary mt-2">
           Your workout history stays on this device — export a backup first if you want to keep a copy elsewhere.
         </p>
       </Modal>
@@ -260,38 +324,75 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       <Modal open={!!pendingImport} onClose={() => setPendingImport(null)} title="Import backup?"
         footer={
           <div className="flex gap-2">
-            <button onClick={() => setPendingImport(null)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button onClick={() => setPendingImport(null)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
                 try {
-                  await importReplaceAll(pendingImport);
+                  const r = await importReplaceAll(pendingImport);
                   await workout.refresh();
-                  toast('Data restored', { tone: 'success' });
+                  const repaired = r.problems.repairedWorkouts + r.problems.duplicateWorkouts;
+                  toast(
+                    `Restored ${r.workouts} workouts${repaired ? ` · ${repaired} repaired` : ''}`,
+                    { tone: 'success', duration: 4000 }
+                  );
                 } catch (err) {
                   toast(`Import failed: ${err.message}`, { tone: 'error' });
                 } finally {
                   setPendingImport(null);
                 }
               }}
-              className="flex-1 h-11 rounded-xl bg-warn text-white font-semibold"
+              className="flex-1 h-tap rounded-full bg-danger-soft border border-danger-border text-danger font-semibold"
             >Replace</button>
           </div>
         }
       >
-        <p className="text-sm">
+        <p className="text-label">
           This will <span className="text-danger font-semibold">replace all of your current data</span> with the backup contents.
         </p>
         {pendingImport && (
-          <p className="text-xs text-muted mt-2">
+          <p className="text-label text-ink-tertiary mt-2">
             {pendingImport.exercises?.length ?? 0} exercises · {pendingImport.workouts?.length ?? 0} workouts · schema v{pendingImport.schemaVersion} · exported {pendingImport.exportedAt?.slice(0,19).replace('T',' ')}
           </p>
         )}
       </Modal>
 
+      <Modal open={confirmAutoRestore} onClose={() => setConfirmAutoRestore(false)} title="Restore the automatic backup?"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmAutoRestore(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
+            <button
+              onClick={async () => {
+                try {
+                  const r = await restoreFromAutomaticBackup();
+                  await workout.refresh();
+                  const repaired = r.problems.repairedWorkouts + r.problems.duplicateWorkouts;
+                  toast(
+                    `Restored ${r.workouts} workouts${repaired ? ` · ${repaired} repaired` : ''}`,
+                    { tone: 'success', duration: 4000 }
+                  );
+                } catch (err) {
+                  toast(`Restore failed: ${err.message}`, { tone: 'error', duration: 4500 });
+                } finally { setConfirmAutoRestore(false); }
+              }}
+              className="flex-1 h-tap rounded-full bg-danger-soft border border-danger-border text-danger font-semibold"
+            >Restore</button>
+          </div>
+        }
+      >
+        <p className="text-label">
+          This will <span className="text-danger font-semibold">replace everything on this device</span> with
+          your data as it was before this version.
+        </p>
+        <p className="text-label text-ink-tertiary mt-2">
+          Anything logged since then will be gone — export a backup first if you want to keep it.
+          The automatic copy itself is not consumed, so this can be done again.
+        </p>
+      </Modal>
+
       <Modal open={confirmWipe} onClose={() => setConfirmWipe(false)} title="Clear all data?"
         footer={
           <div className="flex gap-2">
-            <button onClick={() => setConfirmWipe(false)} className="flex-1 h-11 rounded-xl border border-border">Cancel</button>
+            <button onClick={() => setConfirmWipe(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
                 await wipeAllData();
@@ -301,55 +402,82 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
                 // Ensure default exercises come back and app doesn't get stuck in an empty state.
                 setTimeout(() => window.location.reload(), 400);
               }}
-              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold"
+              className="flex-1 h-tap rounded-row bg-danger text-on-primary font-semibold"
             >Delete everything</button>
           </div>
         }
       >
-        <p className="text-sm">This permanently deletes all workouts, custom exercises and settings on this device. Export a backup first if you want to keep them.</p>
+        <p className="text-label">This permanently deletes all workouts, custom exercises and settings on this device. Export a backup first if you want to keep them.</p>
       </Modal>
     </div>
   );
 }
 
+// "1 exercises" is the kind of thing that makes an app feel unfinished.
+function plural(n, word) {
+  return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// The section heading sits OUTSIDE the card, on the page. A heading inside a
+// card is a title for the card; a heading above it is a title for the group,
+// which is what these are.
 function Section({ title, children }) {
   return (
-    <section className="bg-surface border border-border rounded-2xl p-3">
-      <h3 className="text-sm font-semibold mb-2">{title}</h3>
-      <div className="space-y-2">{children}</div>
+    <section className="mt-xl">
+      <h2 className="text-micro font-semibold uppercase text-ink-tertiary mb-sm">{title}</h2>
+      <div className="bg-glass border border-glass-border rounded-card px-base divide-y divide-hairline">
+        {children}
+      </div>
     </section>
   );
 }
 function Row({ label, children }) {
   return (
-    <div className="flex items-center justify-between gap-2 min-h-[44px]">
-      <span className="text-sm">{label}</span>
+    <div className="flex items-center justify-between gap-md min-h-tap py-sm">
+      <span className="text-body font-regular text-ink">{label}</span>
       {children}
     </div>
   );
 }
+// A two-state switch, shaped like a switch. The old inline segmented control
+// made On/Off look like a pair of equal choices rather than a thing that is
+// currently one way.
 function Segmented({ value, onChange, options }) {
+  const on = value === options[0].value;
   return (
-    <div className="inline-flex rounded-lg bg-card border border-border overflow-hidden">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={`px-3 h-10 text-sm ${value === o.value ? 'bg-accent text-white' : 'text-muted'}`}
-        >{o.label}</button>
-      ))}
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(on ? options[1].value : options[0].value)}
+      // The switch LOOKS 52x32 and IS 52x44: the track is drawn inside a
+      // full-height hit area rather than being the hit area.
+      className="relative w-[52px] h-tap shrink-0 flex items-center"
+    >
+      <span
+        className={`absolute inset-x-0 top-1/2 -translate-y-1/2 h-8 rounded-full border
+                    transition-colors duration-fast ease-out
+                    ${on ? 'bg-primary border-transparent' : 'bg-glass-inset border-glass-inset-border'}`}
+      />
+      <span
+        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full transition-[left] duration-fast ease-out
+                    ${on ? 'left-[23px] bg-on-primary' : 'left-[3px] bg-ink-tertiary'}`}
+      />
+    </button>
   );
 }
+// A full-width row that does something, rather than a bordered button inside a
+// bordered card. Cards group; they do not need a second frame inside them.
 function ActionButton({ icon: Icon, label, onClick, danger }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`w-full h-12 rounded-xl border flex items-center justify-center gap-2 font-medium ${
-        danger ? 'border-danger/50 text-danger active:bg-danger/10' : 'border-border text-text active:bg-card'
-      }`}
+      className={`w-full min-h-tap py-md -mx-base px-base flex items-center gap-md text-left
+                  text-body font-regular transition-colors duration-fast ease-out
+                  active:bg-glass-pressed ${danger ? 'text-danger' : 'text-ink'}`}
     >
-      <Icon size={18} /> {label}
+      <Icon size={18} strokeWidth={2} className="shrink-0" /> {label}
     </button>
   );
 }

@@ -55,7 +55,23 @@ Then in the repo settings enable Pages → Deploy from branch → `gh-pages` / `
 
 ### SPA routing & the Service Worker
 
-The app uses a single route (`/`) and internal tab state, so no SPA rewrite rules are required. The Service Worker (`public/sw.js`) uses **network-first** for HTML (so updates propagate on next launch) and **cache-first** for JS/CSS/icon assets. To force a full refresh after deploy, close and reopen the standalone app.
+The app uses a single route (`/`) and internal tab state, so no SPA rewrite rules are required. The Service Worker (`public/sw.js`) uses **network-first** for HTML (so updates propagate on next launch) and **cache-first** for JS/CSS/icon assets.
+
+The cache name is **generated at build time**, not typed by hand: `npm run build` runs `scripts/inject-sw-assets.mjs`, which precaches every hashed asset of the build and names the cache after a hash of that list plus the worker's own source. A build is therefore only ever in the cache complete, and the page reloads on `controllerchange` so a document and its assets always come from a single build. Nothing needs bumping manually, and users are never left on a mix of old and new code.
+
+## Tests
+
+```bash
+npm test
+```
+
+Node's own test runner against `fake-indexeddb` — no browser needed. It covers the schema migration (empty database, v1 jumping straight to current, 5,000 workouts, records with missing or null fields, duplicate ids, sets sharing a millisecond, unknown exercises, an in-progress session, and a mid-upgrade rollback), the export → wipe → import round trip, restoring from the automatic pre-upgrade backup, and the built service worker's precache and cache-eviction behaviour.
+
+The service-worker tests read `dist/`, so run `npm run build` first or they skip.
+
+Drop a real export at `fixtures/my-export.json` (git-ignored) and the suite will round-trip it too.
+
+There is also `public/migration-test.html` (dev server only, at `/migration-test.html`), which runs the migration against the **browser's own** IndexedDB rather than a polyfill. `?recovery=1` renders the boot-failure recovery screen in dev without having to break a database first.
 
 ## Install on iPhone
 

@@ -277,7 +277,7 @@ export default function WheelPicker({
         onClick={onCancel}
       />
       <div
-        className="relative w-full bg-surface/85 backdrop-blur-2xl border-t border-white/5 rounded-t-3xl shadow-2xl safe-bottom animate-[sheetUp_.28s_cubic-bezier(.32,.72,0,1)]"
+        className="relative w-full bg-glass/85 backdrop-blur-2xl border-t border-white/5 rounded-t-device shadow-2xl safe-bottom animate-[sheetUp_.28s_cubic-bezier(.32,.72,0,1)]"
         style={{ WebkitBackdropFilter: 'blur(24px) saturate(180%)' }}
       >
         <div className="flex justify-center pt-2">
@@ -287,15 +287,15 @@ export default function WheelPicker({
           <button
             type="button"
             onClick={onCancel}
-            className="text-muted text-[15px] py-1.5 px-1 active:opacity-60"
+            className="text-ink-tertiary text-body py-1.5 px-1 active:opacity-60"
           >
             Cancel
           </button>
-          <span className="text-[13px] font-medium tracking-tight text-muted">{title}</span>
+          <span className="text-label font-semibold tracking-tight text-ink-tertiary">{title}</span>
           <button
             type="button"
             onClick={() => onConfirm(items[nearestIndex(offsetRef.current)])}
-            className="text-accent font-semibold text-[15px] py-1.5 px-1 active:opacity-60"
+            className="text-ink font-semibold text-body py-1.5 px-1 active:opacity-60"
           >
             Done
           </button>
@@ -303,15 +303,15 @@ export default function WheelPicker({
 
         {stepOptions && stepOptions.length > 0 && (
           <div className="flex justify-center pb-2">
-            <div className="inline-flex rounded-lg bg-white/[.05] p-0.5">
+            <div className="inline-flex rounded-control bg-glass-inset p-0.5">
               {stepOptions.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => onStepChange?.(s)}
                   aria-pressed={s === step}
-                  className={`h-7 px-3 rounded-md text-[12px] font-medium tabular-nums transition-colors ${
-                    s === step ? 'bg-accent text-white' : 'text-muted active:bg-white/[.06]'
+                  className={`h-7 px-3 rounded-md text-label font-semibold tabular-nums transition-colors ${
+                    s === step ? 'bg-primary text-on-primary' : 'text-ink-tertiary active:bg-glass-inset'
                   }`}
                 >
                   {formatVal(s)}
@@ -343,7 +343,7 @@ export default function WheelPicker({
           >
             {/* Center selection band */}
             <div
-              className="pointer-events-none absolute left-0 right-0 rounded-xl bg-white/[.05]"
+              className="pointer-events-none absolute left-0 right-0 rounded-row bg-glass-inset"
               style={{
                 top: CENTER - ITEM_H / 2,
                 height: ITEM_H,
@@ -397,7 +397,7 @@ export default function WheelPicker({
                   </span>
                   {unit && (
                     <span
-                      className="text-muted text-[13px]"
+                      className="text-ink-tertiary text-label"
                       style={{ opacity: i === activeIdx ? 1 : 0.6 }}
                     >
                       {unit}

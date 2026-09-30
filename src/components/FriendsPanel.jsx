@@ -59,13 +59,13 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
     <div className="space-y-3">
       <button
         onClick={() => setSearching(true)}
-        className="w-full h-11 rounded-xl bg-card border border-border flex items-center gap-2 px-3 text-sm text-muted active:border-accent"
+        className="w-full h-tap rounded-row bg-glass-inset border border-glass-border flex items-center gap-2 px-3 text-label text-ink-tertiary active:border-focus"
       >
         <Search size={16} /> Find someone by username
       </button>
 
       {stale && (
-        <p className="text-[11px] text-warn flex items-center gap-1.5 px-1">
+        <p className="text-micro tracking-normal text-ink-secondary flex items-center gap-1.5 px-1">
           <CloudOff size={12} />
           Showing saved list{cachedAt ? ` from ${relativeDay(cachedAt).toLowerCase()}` : ''} — you are offline.
         </p>
@@ -83,20 +83,20 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
             <li key={r.other_id} className="py-2.5 flex items-center gap-3">
               <Avatar profile={r} size={38} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{r.display_name}</div>
-                <div className="text-xs text-muted truncate">@{r.username}</div>
+                <div className="text-label font-semibold truncate">{r.display_name}</div>
+                <div className="text-label text-ink-tertiary truncate">@{r.username}</div>
               </div>
               <button
                 onClick={() => respond(r.other_id, true)}
                 aria-label={`Accept ${r.display_name}`}
-                className="w-10 h-10 rounded-xl bg-success text-white flex items-center justify-center active:opacity-80"
+                className="w-10 h-10 rounded-row bg-done text-on-primary flex items-center justify-center active:opacity-80"
               >
                 <Check size={18} />
               </button>
               <button
                 onClick={() => respond(r.other_id, false)}
                 aria-label={`Decline ${r.display_name}`}
-                className="w-10 h-10 rounded-xl border border-border text-muted flex items-center justify-center active:bg-card"
+                className="w-10 h-10 rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center active:bg-glass-inset"
               >
                 <X size={18} />
               </button>
@@ -107,7 +107,7 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
 
       <Group title={friends.length ? `Friends (${friends.length})` : 'Friends'}>
         {friends.length === 0 && !loading && (
-          <li className="py-6 text-center text-sm text-muted">
+          <li className="py-6 text-center text-label text-ink-tertiary">
             No friends yet. Search for someone by their username to add them.
           </li>
         )}
@@ -119,14 +119,14 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
             >
               <Avatar profile={r} size={38} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{r.display_name}</div>
-                <div className="text-xs text-muted truncate">
+                <div className="text-label font-semibold truncate">{r.display_name}</div>
+                <div className="text-label text-ink-tertiary truncate">
                   {r.total_workouts != null
                     ? `${r.total_workouts} workouts${r.streak_weeks ? ` · ${r.streak_weeks}w streak` : ''}`
                     : `@${r.username}`}
                 </div>
               </div>
-              <ChevronRight size={18} className="text-muted shrink-0" />
+              <ChevronRight size={18} className="text-ink-tertiary shrink-0" />
             </button>
           </li>
         ))}
@@ -138,10 +138,10 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
             <li key={r.other_id} className="py-2.5 flex items-center gap-3">
               <Avatar profile={r} size={38} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{r.display_name}</div>
-                <div className="text-xs text-muted truncate">@{r.username}</div>
+                <div className="text-label font-semibold truncate">{r.display_name}</div>
+                <div className="text-label text-ink-tertiary truncate">@{r.username}</div>
               </div>
-              <span className="text-xs text-muted flex items-center gap-1 shrink-0">
+              <span className="text-label text-ink-tertiary flex items-center gap-1 shrink-0">
                 <Clock size={13} /> Pending
               </span>
             </li>
@@ -154,9 +154,9 @@ export default function FriendsPanel({ onOpenProfile, myId, refreshToken, onChan
 
 function Group({ title, children }) {
   return (
-    <section className="bg-surface border border-border rounded-2xl p-3">
-      <h3 className="text-sm font-semibold mb-1">{title}</h3>
-      <ul className="divide-y divide-border">{children}</ul>
+    <section className="bg-glass border border-glass-border rounded-card p-3">
+      <h3 className="text-label font-semibold mb-1">{title}</h3>
+      <ul className="divide-y divide-hairline">{children}</ul>
     </section>
   );
 }
@@ -217,7 +217,7 @@ function UserSearch({ onClose, onChanged }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
           <input
             autoFocus
             value={q}
@@ -227,18 +227,18 @@ function UserSearch({ onClose, onChanged }) {
             autoCorrect="off"
             spellCheck={false}
             aria-label="Search by username"
-            className="w-full h-11 pl-9 pr-3 rounded-xl bg-card border border-border outline-none focus:border-accent text-sm"
+            className="w-full h-tap pl-9 pr-3 rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
           />
         </div>
-        <button onClick={onClose} className="h-11 px-3 text-sm text-muted active:text-text">Done</button>
+        <button onClick={onClose} className="h-tap px-3 text-label text-ink-tertiary active:text-ink">Done</button>
       </div>
 
       {!isOnline() && (
-        <p className="text-xs text-warn px-1 flex items-center gap-1.5">
+        <p className="text-label text-ink-secondary px-1 flex items-center gap-1.5">
           <CloudOff size={12} /> Search needs a connection.
         </p>
       )}
-      {error && <p className="text-xs text-danger px-1">{error}</p>}
+      {error && <p className="text-label text-danger px-1">{error}</p>}
 
       {busy && (
         <div className="flex justify-center py-6">
@@ -247,20 +247,20 @@ function UserSearch({ onClose, onChanged }) {
       )}
 
       {!busy && searched && results.length === 0 && !error && (
-        <p className="text-center text-sm text-muted py-8">
+        <p className="text-center text-label text-ink-tertiary py-8">
           No one with that username.<br />
-          <span className="text-xs">Usernames have to match exactly from the start.</span>
+          <span className="text-label">Usernames have to match exactly from the start.</span>
         </p>
       )}
 
       {results.length > 0 && (
-        <ul className="bg-surface border border-border rounded-2xl p-3 divide-y divide-border">
+        <ul className="bg-glass border border-glass-border rounded-card p-3 divide-y divide-hairline">
           {results.map((r) => (
             <li key={r.id} className="py-2.5 flex items-center gap-3">
               <Avatar profile={r} size={38} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{r.display_name}</div>
-                <div className="text-xs text-muted truncate">@{r.username}</div>
+                <div className="text-label font-semibold truncate">{r.display_name}</div>
+                <div className="text-label text-ink-tertiary truncate">@{r.username}</div>
               </div>
               <RelationshipButton row={r} onAdd={() => add(r)} />
             </li>
@@ -269,7 +269,7 @@ function UserSearch({ onClose, onChanged }) {
       )}
 
       {q.trim().length < 2 && (
-        <p className="text-center text-xs text-muted py-8 px-6 leading-relaxed">
+        <p className="text-center text-label text-ink-tertiary py-8 px-6 leading-relaxed">
           Type at least 2 characters of someone's username.
           People can only be found by username, never by browsing.
         </p>
@@ -280,18 +280,18 @@ function UserSearch({ onClose, onChanged }) {
 
 function RelationshipButton({ row, onAdd }) {
   if (row.relationship === 'self') {
-    return <span className="text-xs text-muted shrink-0">You</span>;
+    return <span className="text-label text-ink-tertiary shrink-0">You</span>;
   }
   if (row.relationship === 'friends') {
-    return <span className="text-xs text-success flex items-center gap-1 shrink-0"><Check size={13} /> Friends</span>;
+    return <span className="text-label text-done flex items-center gap-1 shrink-0"><Check size={13} /> Friends</span>;
   }
   if (row.relationship === 'requested') {
-    return <span className="text-xs text-muted flex items-center gap-1 shrink-0"><Clock size={13} /> Sent</span>;
+    return <span className="text-label text-ink-tertiary flex items-center gap-1 shrink-0"><Clock size={13} /> Sent</span>;
   }
   return (
     <button
       onClick={onAdd}
-      className="h-9 px-3 rounded-lg bg-accent text-white text-xs font-semibold flex items-center gap-1.5 active:opacity-80 shrink-0"
+      className="h-9 px-3 rounded-control bg-primary text-on-primary text-label font-semibold flex items-center gap-1.5 active:opacity-80 shrink-0"
     >
       <UserPlus size={14} /> {row.relationship === 'incoming' ? 'Accept' : 'Add'}
     </button>

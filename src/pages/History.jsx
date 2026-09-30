@@ -1,143 +1,176 @@
 import { useMemo, useState } from 'react';
-import { Search, Trash2, Edit3, Filter, ChevronRight, Share2 } from 'lucide-react';
-import Modal from '../components/Modal.jsx';
-import SetRow from '../components/SetRow.jsx';
+import { Search, Trash2, SlidersHorizontal, ChevronRight, Share2, Check, X, MoreHorizontal } from 'lucide-react';
+import {
+  GlassCard, SegmentedTrack, BottomSheet, SheetAction, SetRow, SetRowHeader,
+  PrimaryButton, SecondaryButton, TextLink, StatBlock, EmptyState, useUndoToast, Pill
+} from '../ui/index.js';
 import ShareCard from '../components/ShareCard.jsx';
-import { formatDate, formatDuration, formatDateTime } from '../utils/date.js';
-import { formatWeight } from '../utils/units.js';
+import WheelPicker from '../components/WheelPicker.jsx';
+import { orderedSets, setLabels } from '../db/normalize.js';
+import { workoutTitle } from '../services/splits.js';
 import { workingVolume, isWorking } from '../services/calculations.js';
+import { formatDate, formatDuration, formatDateTime } from '../utils/date.js';
+import { formatWeight, formatVolume, roundDisplay } from '../utils/units.js';
 
+// HISTORY.
+//
+// Cards are titled by what was trained — "Pull", or "Chest · Shoulders" for a
+// session that predates splits — with the time of day as the quiet second line.
+// The old list led with "Afternoon Workout", which is the one thing about a
+// session nobody is ever looking for.
 export default function HistoryScreen({ workout }) {
-  const { workouts, exercises, updateHistoricalWorkout, deleteHistoricalWorkout, updateExercise } = workout;
+  const { workouts, exercises, updateHistoricalWorkout, deleteHistoricalWorkout, restoreHistoricalWorkout, updateExercise } = workout;
   const [q, setQ] = useState('');
   const [exerciseFilter, setExerciseFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
   const [filterOpen, setFilterOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [shareFor, setShareFor] = useState(null);
+  const undo = useUndoToast();
 
   const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
-  const fmt = (kg) => formatWeight(kg);
+  const titled = useMemo(
+    () => workouts.map((w) => ({ w, title: workoutTitle(w, exMap) })),
+    [workouts, exMap]
+  );
 
   const filtered = useMemo(() => {
-    return workouts.filter((w) => {
-      if (q && !w.name.toLowerCase().includes(q.toLowerCase())) return false;
+    const needle = q.trim().toLowerCase();
+    return titled.filter(({ w, title }) => {
+      if (needle) {
+        const hay = `${title} ${w.name || ''} ${(w.exercises || []).map((id) => exMap.get(id)?.name || '').join(' ')}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
       if (exerciseFilter && !w.exercises.includes(exerciseFilter)) return false;
-      if (dateFrom) {
-        const t = new Date(dateFrom).getTime();
-        if (w.date < t) return false;
-      }
-      if (dateTo) {
-        const t = new Date(dateTo).getTime() + 86399000;
-        if (w.date > t) return false;
-      }
       return true;
     });
-  }, [workouts, q, exerciseFilter, dateFrom, dateTo]);
+  }, [titled, q, exerciseFilter, exMap]);
 
   const opened = openId ? workouts.find((w) => w.id === openId) : null;
 
+  const removeWorkout = async (w, title) => {
+    setOpenId(null);
+    const snapshot = await deleteHistoricalWorkout(w.id);
+    // Deleting history is undoable, like everything else destructive in this
+    // app. The old detail screen had a one-tap Delete behind a "this can't be
+    // undone" panel; it can be, and now it is.
+    undo(`${title} · ${formatDate(w.date)} deleted`, {
+      tone: 'danger',
+      onUndo: () => restoreHistoricalWorkout(snapshot)
+    });
+  };
+
   return (
-    <div className="p-3">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="px-base pb-nav">
+      <div className="flex items-center gap-sm pt-md">
         <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <Search size={16} className="absolute left-base top-1/2 -translate-y-1/2 text-ink-tertiary" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search workouts"
-            className="w-full h-11 pl-9 pr-3 rounded-xl bg-card border border-border outline-none focus:border-accent text-sm"
+            aria-label="Search workouts"
+            className="w-full h-tap pl-4xl pr-base rounded-full bg-glass border border-glass-border
+                       text-body font-regular text-ink placeholder:text-ink-tertiary outline-none
+                       focus:border-focus"
           />
         </div>
-        <button
+        <Pill
+          selected={!!exerciseFilter}
           onClick={() => setFilterOpen(true)}
-          className={`h-11 px-3 rounded-xl border flex items-center gap-1 text-sm ${
-            (exerciseFilter || dateFrom || dateTo) ? 'border-accent text-accent bg-accent/10' : 'border-border text-muted'
-          }`}
-          aria-label="Filter"
+          aria-label="Filter workouts"
         >
-          <Filter size={16} /> Filter
-        </button>
+          <SlidersHorizontal size={16} strokeWidth={2.2} />
+          Filter
+        </Pill>
       </div>
 
-      {filtered.length === 0 && (
-        <div className="text-center text-muted text-sm py-16">
-          {workouts.length === 0 ? 'No workouts logged yet.' : 'No workouts match your filters.'}
-        </div>
+      {!filtered.length && (
+        <EmptyState
+          icon={Search}
+          title={workouts.length ? 'Nothing matches' : 'No workouts yet'}
+          body={workouts.length
+            ? 'Try a different search, or clear the filter.'
+            : 'Finish a session and it shows up here, titled by what you trained.'}
+          action={workouts.length
+            ? <SecondaryButton onClick={() => { setQ(''); setExerciseFilter(''); }}>Clear</SecondaryButton>
+            : null}
+        />
       )}
 
-      <ul className="space-y-2">
-        {filtered.map((w) => {
+      <ul className="mt-base flex flex-col gap-sm">
+        {filtered.map(({ w, title }) => {
           const vol = workingVolume(w.sets);
           const dur = w.endTime ? w.endTime - w.startTime : 0;
           return (
             <li key={w.id}>
-              <button
+              <GlassCard
+                as="button"
+                interactive
                 onClick={() => setOpenId(w.id)}
-                className="w-full text-left bg-surface border border-border rounded-2xl p-3 active:bg-card"
+                className="w-full text-left p-base"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">{w.name}</div>
-                    <div className="text-xs text-muted mt-0.5">{formatDate(w.date)} · {formatDuration(dur)}</div>
+                <div className="flex items-center gap-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body font-semibold text-ink truncate">{title}</p>
+                    <p className="text-label font-regular text-ink-tertiary mt-xxs truncate tabular">
+                      {formatDateTime(w.startTime || w.date)}
+                      {dur ? ` · ${formatDuration(dur)}` : ''}
+                    </p>
                   </div>
-                  <ChevronRight size={18} className="text-muted shrink-0" />
+                  <ChevronRight size={18} className="text-ink-tertiary shrink-0" />
                 </div>
-                <div className="mt-2 grid grid-cols-3 gap-1 text-xs text-muted">
-                  <Stat label="Exercises" value={w.exercises.length} />
-                  <Stat label="Sets" value={w.sets.filter(isWorking).length} />
-                  <Stat label="Volume" value={fmt(vol)} />
+                <div className="mt-md flex items-center justify-between">
+                  <StatBlock value={w.exercises.length} label="Exercises" />
+                  <StatBlock value={w.sets.filter(isWorking).length} label="Sets" align="center" />
+                  <StatBlock value={formatVolume(vol)} label="Volume" align="center" />
                 </div>
-              </button>
+              </GlassCard>
             </li>
           );
         })}
       </ul>
 
-      <Modal open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter workouts">
-        <div className="space-y-3">
-          <label className="block text-sm">
-            Exercise
-            <select
-              value={exerciseFilter}
-              onChange={(e) => setExerciseFilter(e.target.value)}
-              className="mt-1 w-full h-11 rounded-lg bg-card border border-border px-2 text-sm"
-            >
-              <option value="">All</option>
-              {[...exercises].sort((a,b)=>a.name.localeCompare(b.name)).map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-sm">From
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                className="mt-1 w-full h-11 rounded-lg bg-card border border-border px-2 text-sm" />
-            </label>
-            <label className="text-sm">To
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                className="mt-1 w-full h-11 rounded-lg bg-card border border-border px-2 text-sm" />
-            </label>
-          </div>
-          <button
-            onClick={() => { setExerciseFilter(''); setDateFrom(''); setDateTo(''); }}
-            className="w-full h-11 rounded-lg border border-border text-muted"
-          >
-            Clear filters
-          </button>
-        </div>
-      </Modal>
+      <BottomSheet
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        title="Filter"
+        footer={
+          <SecondaryButton full onClick={() => { setExerciseFilter(''); setFilterOpen(false); }}>
+            Clear filter
+          </SecondaryButton>
+        }
+      >
+        <ul>
+          {[...exercises]
+            .filter((e) => workouts.some((w) => w.exercises.includes(e.id)))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((e) => (
+              <li key={e.id}>
+                <button
+                  type="button"
+                  onClick={() => { setExerciseFilter(e.id); setFilterOpen(false); }}
+                  className="w-full min-h-tap px-md -mx-md rounded-row flex items-center justify-between gap-md
+                             text-body font-regular text-ink text-left
+                             transition-colors duration-fast ease-out active:bg-glass-pressed"
+                >
+                  {e.name}
+                  {exerciseFilter === e.id && <Check size={17} className="text-done shrink-0" />}
+                </button>
+              </li>
+            ))}
+        </ul>
+      </BottomSheet>
 
       {opened && (
         <WorkoutDetail
           key={opened.id}
           workout={opened}
+          title={workoutTitle(opened, exMap)}
           exMap={exMap}
           onUpdateExercise={updateExercise}
           onClose={() => setOpenId(null)}
           onSave={async (w) => { await updateHistoricalWorkout(w); }}
-          onDelete={async () => { await deleteHistoricalWorkout(opened.id); setOpenId(null); }}
+          onDelete={(w, title) => removeWorkout(w, title)}
           onShare={() => setShareFor(opened)}
         />
       )}
@@ -153,96 +186,137 @@ export default function HistoryScreen({ workout }) {
   );
 }
 
-function Stat({ label, value }) {
+// The detail view.
+//
+// The title appears ONCE, at the top, as the sheet's own heading — it used to be
+// both the sheet title and an editable field directly underneath, which read as
+// a mistake. Share is a secondary action, and Delete has moved into the "···"
+// menu with the same undo-toast semantics as everywhere else.
+function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSave, onDelete, onShare }) {
+  const [w, setW] = useState(workout);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [picker, setPicker] = useState(null);
+
+  const dur = w.endTime ? w.endTime - w.startTime : 0;
+  const groupedIds = w.exercises.length ? w.exercises : [...new Set(w.sets.map((s) => s.exerciseId))];
+  const updateSet = (id, patch) => setW({ ...w, sets: w.sets.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+
   return (
-    <div className="bg-card border border-border rounded-lg py-1.5 px-2">
-      <div className="text-[10px] uppercase text-muted">{label}</div>
-      <div className="text-xs font-semibold text-text">{value}</div>
-    </div>
+    <>
+      <BottomSheet
+        open
+        onClose={onClose}
+        title={title}
+        description={`${formatDateTime(w.startTime || w.date)}${dur ? ` · ${formatDuration(dur)}` : ''}`}
+        footer={
+          <div className="flex items-center gap-sm">
+            <SecondaryButton icon={Share2} className="flex-1" onClick={onShare}>Share</SecondaryButton>
+            <PrimaryButton className="flex-1" onClick={async () => { await onSave(w); onClose(); }}>Save</PrimaryButton>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="More options"
+              className="w-tap h-tap shrink-0 rounded-full flex items-center justify-center
+                         text-ink-tertiary transition-colors duration-fast ease-out
+                         active:text-ink active:bg-glass-pressed"
+            >
+              <MoreHorizontal size={20} strokeWidth={2} />
+            </button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-md">
+          {groupedIds.map((exId) => {
+            const ex = exMap.get(exId);
+            const rows = orderedSets(w.sets, exId);
+            const labelled = setLabels(rows);
+            return (
+              <GlassCard key={exId} variant="inset" className="p-md">
+                <p className="text-body font-semibold text-ink mb-sm">
+                  {ex ? ex.name : `Deleted exercise (${exId.slice(0, 8)}…)`}
+                </p>
+                <SetRowHeader />
+                {rows.map((s) => {
+                  const l = labelled.find((x) => x.set.id === s.id);
+                  return (
+                    <SetRow
+                      key={s.id}
+                      number={l?.number ?? null}
+                      set={s}
+                      weightLabel={fmtNum(roundDisplay(s.weightKg))}
+                      repsLabel={String(s.reps)}
+                      onEditWeight={() => setPicker({ id: s.id, field: 'weight', set: s, ex })}
+                      onEditReps={() => setPicker({ id: s.id, field: 'reps', set: s, ex })}
+                      onToggleComplete={() => updateSet(s.id, { completed: !s.completed })}
+                    />
+                  );
+                })}
+                {!rows.length && <p className="py-sm text-label font-regular text-ink-tertiary">No sets</p>}
+              </GlassCard>
+            );
+          })}
+          {w.notes && (
+            <p className="text-label font-regular text-ink-secondary whitespace-pre-wrap">{w.notes}</p>
+          )}
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={menuOpen} onClose={() => setMenuOpen(false)} title={title}>
+        <SheetAction
+          label="Rename session"
+          hint={w.name ? `Currently "${w.name}"` : 'Sessions are titled by what you trained.'}
+          onClick={() => { setMenuOpen(false); setRenaming(true); }}
+        />
+        <div className="border-t border-hairline mt-sm pt-sm">
+          <SheetAction
+            icon={Trash2}
+            tone="danger"
+            label="Delete workout"
+            hint="You get five seconds to undo it."
+            onClick={() => { setMenuOpen(false); onDelete(w, title); }}
+          />
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={renaming} onClose={() => setRenaming(false)} title="Rename session">
+        <input
+          autoFocus
+          value={w.name || ''}
+          onChange={(e) => setW({ ...w, name: e.target.value })}
+          placeholder={title}
+          aria-label="Session name"
+          className="w-full h-tap px-base rounded-full bg-glass-inset border border-glass-inset-border
+                     text-body font-regular text-ink placeholder:text-ink-tertiary outline-none
+                     focus:border-glass-border"
+        />
+        <div className="mt-md flex justify-end">
+          <PrimaryButton onClick={() => setRenaming(false)}>Done</PrimaryButton>
+        </div>
+      </BottomSheet>
+
+      {picker && (
+        <WheelPicker
+          open
+          title={picker.field === 'weight' ? 'Weight' : 'Reps'}
+          value={picker.field === 'weight' ? roundDisplay(picker.set.weightKg) : picker.set.reps}
+          min={0}
+          max={picker.field === 'weight' ? 500 : 50}
+          step={picker.field === 'weight' ? (picker.ex?.weightIncrement || 2.5) : 1}
+          unit={picker.field === 'weight' ? 'kg' : ''}
+          stepOptions={picker.field === 'weight' ? [1, 2.5, 5] : undefined}
+          onStepChange={picker.ex ? (inc) => onUpdateExercise(picker.ex.id, { weightIncrement: inc }) : undefined}
+          onCancel={() => setPicker(null)}
+          onConfirm={(v) => {
+            updateSet(picker.id, picker.field === 'weight' ? { weightKg: v } : { reps: Math.max(0, Math.round(v)) });
+            setPicker(null);
+          }}
+        />
+      )}
+    </>
   );
 }
 
-function WorkoutDetail({ workout, exMap, onUpdateExercise, onClose, onSave, onDelete, onShare }) {
-  const [w, setW] = useState(workout);
-  const [confirmDel, setConfirmDel] = useState(false);
-  const fmt = (kg) => formatWeight(kg);
-  const dur = w.endTime ? w.endTime - w.startTime : 0;
-  const groupedIds = w.exercises.length ? w.exercises : [...new Set(w.sets.map(s => s.exerciseId))];
-
-  const updateSet = (id, patch) => setW({ ...w, sets: w.sets.map((s) => s.id === id ? { ...s, ...patch } : s) });
-  const removeSet = (id) => setW({ ...w, sets: w.sets.filter((s) => s.id !== id) });
-
-  return (
-    <Modal
-      open={true}
-      onClose={onClose}
-      title={w.name || 'Workout'}
-      footer={
-        <div className="space-y-2">
-          <button
-            onClick={onShare}
-            className="w-full h-11 rounded-xl bg-surface border border-border text-text font-medium flex items-center justify-center gap-2 active:opacity-80"
-          >
-            <Share2 size={16} /> Share workout
-          </button>
-          <div className="flex gap-2">
-            <button onClick={() => setConfirmDel(true)} className="flex-1 h-11 rounded-xl border border-danger/60 text-danger flex items-center justify-center gap-2">
-              <Trash2 size={16} /> Delete
-            </button>
-            <button onClick={async () => { await onSave(w); onClose(); }} className="flex-1 h-11 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2">
-              <Edit3 size={16} /> Save
-            </button>
-          </div>
-        </div>
-      }
-    >
-      <div className="space-y-1 mb-3">
-        <input
-          value={w.name}
-          onChange={(e) => setW({ ...w, name: e.target.value })}
-          className="w-full h-10 bg-card border border-border rounded-lg px-3 text-sm font-medium"
-          aria-label="Workout name"
-        />
-        <div className="text-xs text-muted">{formatDateTime(w.startTime || w.date)} · {formatDuration(dur)}</div>
-      </div>
-      <div className="space-y-3">
-        {groupedIds.map((exId) => {
-          const ex = exMap.get(exId);
-          const rows = w.sets.filter((s) => s.exerciseId === exId).sort((a, b) => a.timestamp - b.timestamp);
-          return (
-            <div key={exId} className="bg-card border border-border rounded-xl p-2">
-              <div className="text-sm font-semibold mb-2">{ex ? ex.name : `Deleted exercise (${exId.slice(0,8)}…)`}</div>
-              <div className="space-y-2">
-                {rows.map((s, i) => (
-                  <SetRow
-                    key={s.id}
-                    index={i}
-                    set={s}
-                    weightIncrement={ex?.weightIncrement || 2.5}
-                    onChangeIncrement={ex ? (inc) => onUpdateExercise(ex.id, { weightIncrement: inc }) : undefined}
-                    onChange={(patch) => updateSet(s.id, patch)}
-                    onComplete={() => updateSet(s.id, { completed: !s.completed })}
-                    onDelete={() => removeSet(s.id)}
-                  />
-                ))}
-                {rows.length === 0 && <div className="text-xs text-muted p-2">No sets</div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {w.notes && (
-        <p className="mt-3 text-sm text-muted whitespace-pre-wrap">{w.notes}</p>
-      )}
-      {confirmDel && (
-        <div className="mt-4 p-3 border border-danger/40 bg-danger/10 rounded-xl text-sm">
-          Delete this workout? This can't be undone.
-          <div className="flex gap-2 mt-2">
-            <button onClick={() => setConfirmDel(false)} className="flex-1 h-10 rounded-lg border border-border">Cancel</button>
-            <button onClick={onDelete} className="flex-1 h-10 rounded-lg bg-danger text-white font-semibold">Delete</button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
+function fmtNum(v) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
 }

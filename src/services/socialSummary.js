@@ -8,8 +8,8 @@
 // What is published:  totals, streak, and per-exercise top weight.
 // What never is:      individual sets, reps, RPE, notes, timestamps, custom
 //                     exercises, settings.
-import { isWorking, workingVolume, estimate1RM, computeStreak } from './calculations.js';
-import { startOfWeek } from '../utils/date.js';
+import { isWorking, estimate1RM } from './calculations.js';
+import { computeTotals } from '../hooks/useWorkoutTotals.js';
 import { DEFAULT_EXERCISES } from '../data/defaultExercises.js';
 
 // Only built-in exercises are comparable between users: their ids are stable and
@@ -38,19 +38,19 @@ function plausibleLift(topWeightKg, reps, e1rmKg) {
 }
 
 // Headline totals for the profile.
+// Derived from computeTotals(), the same function the Progress header and the
+// week strip read. The published number is therefore a COPY of what the device
+// shows, not a second calculation that can drift from it — which is what put 26
+// on Progress and 25 on the leaderboard.
 export function buildStatsSummary(workouts, asOf = Date.now()) {
-  const finished = workouts.filter((w) => !w.isActive);
-  const weekStart = startOfWeek(asOf);
-
+  const t = computeTotals(workouts, asOf);
   return {
-    streak_weeks: computeStreak(finished, asOf),
-    total_workouts: finished.length,
+    streak_weeks: t.streakWeeks,
+    total_workouts: t.total,
     // Rounded to 0.1kg to match the numeric(12,1) column.
-    lifetime_volume_kg: Math.round(finished.reduce((a, w) => a + workingVolume(w.sets), 0) * 10) / 10,
-    workouts_this_week: finished.filter((w) => w.date >= weekStart).length,
-    last_workout_at: finished.length
-      ? new Date(Math.max(...finished.map((w) => w.date))).toISOString()
-      : null
+    lifetime_volume_kg: Math.round(t.volumeKg * 10) / 10,
+    workouts_this_week: t.thisWeek,
+    last_workout_at: t.lastWorkoutAt ? new Date(t.lastWorkoutAt).toISOString() : null
   };
 }
 

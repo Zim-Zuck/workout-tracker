@@ -1,16 +1,31 @@
-// Shared canvas primitives for generated share-card images. Palette and font stacks
-// mirror ShareCard.jsx exactly so every exported image feels like one visual family.
+// Shared canvas primitives for generated share-card images.
+//
+// A canvas cannot use CSS classes, so these are the one place in the app where
+// colours are read as values rather than applied as utilities — but they are
+// still READ FROM tokens.js, not retyped. An exported image that does not look
+// like the app is a worse advert for it than no image.
+//
+// `accent` was #5EA0FF: the retired blue, still being painted into every
+// exported card long after it left the screen.
+import { color, font } from '../theme/tokens.js';
+
 export const PALETTE = {
-  bg: '#0B0B0D',
-  text: '#F5F5F7',
-  muted: '#8E8E93',
-  faint: '#3A3A3E',
-  accent: '#5EA0FF',
-  success: '#34D399'
+  bg: color.bg,
+  text: color.ink,
+  muted: color.inkTertiary,
+  faint: color.glassBorder,
+  // The share card's one highlight is the primary white, matching what the app
+  // uses for the thing that matters on a screen.
+  accent: color.primary,
+  onAccent: color.onPrimary,
+  success: color.done,
+  pr: color.pr,
+  // The gradient the app sits on, for card backgrounds that want it.
+  gradient: color.gradient
 };
 
-export const FONT_DISPLAY = '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, system-ui, sans-serif';
-export const FONT_TEXT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif';
+export const FONT_DISPLAY = font.family;
+export const FONT_TEXT = font.family;
 
 export function paintBackground(ctx, W, H, glowX = W * 0.75, glowY = H * 0.15) {
   ctx.fillStyle = PALETTE.bg;
@@ -79,7 +94,7 @@ export function wrapText(ctx, text, maxW, maxLines = 3) {
 // avatar: drawing a remote image into the canvas taints it, and a tainted
 // canvas throws on toDataURL(), which would break sharing for exactly the
 // users who bothered to set a profile picture.
-export function drawInitial(ctx, cx, cy, r, name, fill = PALETTE.accent, textColor = '#FFFFFF') {
+export function drawInitial(ctx, cx, cy, r, name, fill = PALETTE.accent, textColor = PALETTE.onAccent) {
   const initial = String(name || '?').trim().charAt(0).toUpperCase() || '?';
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);

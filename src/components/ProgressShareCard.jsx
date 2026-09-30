@@ -287,10 +287,10 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
       <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={onClose} />
       <div className="relative flex-1 flex flex-col safe-top safe-bottom min-h-0">
         <div className="flex items-center justify-between px-4 py-3 shrink-0">
-          <button onClick={onClose} className="text-muted p-2 -ml-2 active:opacity-60" aria-label="Close">
+          <button onClick={onClose} className="text-ink-tertiary p-2 -ml-2 active:opacity-60" aria-label="Close">
             <X size={22} />
           </button>
-          <div className="text-[13px] font-medium text-muted tracking-tight">Share progress</div>
+          <div className="text-label font-semibold text-ink-tertiary tracking-tight">Share progress</div>
           <div className="w-8" />
         </div>
 
@@ -298,13 +298,13 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
           <div className="flex justify-center mb-4">
             <canvas
               ref={canvasRef}
-              className="rounded-2xl shadow-2xl w-full max-w-[280px] h-auto bg-black"
+              className="rounded-card shadow-2xl w-full max-w-[280px] h-auto bg-black"
               style={{ aspectRatio: style === 'detailed' ? '1080 / 1500' : '4 / 5' }}
             />
           </div>
 
           {!summary && timeframeId === 'custom' && (
-            <div className="text-center text-xs text-muted py-4">Pick a valid start and end date.</div>
+            <div className="text-center text-label text-ink-tertiary py-4">Pick a valid start and end date.</div>
           )}
 
           <div className="space-y-4">
@@ -314,8 +314,8 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
                   <button
                     key={tf.id}
                     onClick={() => setTimeframeId(tf.id)}
-                    className={`shrink-0 h-9 px-3 rounded-full text-xs font-medium border whitespace-nowrap ${
-                      timeframeId === tf.id ? 'bg-accent border-accent text-white' : 'border-border text-muted'
+                    className={`shrink-0 h-9 px-3 rounded-full text-label font-semibold border whitespace-nowrap ${
+                      timeframeId === tf.id ? 'bg-primary border-focus text-on-primary' : 'border-glass-border text-ink-tertiary'
                     }`}
                   >
                     {tf.label}
@@ -324,28 +324,28 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
               </div>
               {timeframeId === 'custom' && (
                 <div className="grid grid-cols-2 gap-2 mt-2">
-                  <label className="text-xs text-muted">
+                  <label className="text-label text-ink-tertiary">
                     From
                     <input
                       type="date"
                       value={customFrom}
                       onChange={(e) => setCustomFrom(e.target.value)}
-                      className="mt-1 w-full h-10 rounded-lg bg-card border border-border px-2 text-sm text-text"
+                      className="mt-1 w-full h-10 rounded-control bg-glass-inset border border-glass-border px-2 text-label text-ink"
                     />
                   </label>
-                  <label className="text-xs text-muted">
+                  <label className="text-label text-ink-tertiary">
                     To
                     <input
                       type="date"
                       value={customTo}
                       onChange={(e) => setCustomTo(e.target.value)}
-                      className="mt-1 w-full h-10 rounded-lg bg-card border border-border px-2 text-sm text-text"
+                      className="mt-1 w-full h-10 rounded-control bg-glass-inset border border-glass-border px-2 text-label text-ink"
                     />
                   </label>
                 </div>
               )}
               {summary?.limitedHistory && (
-                <div className="mt-2 text-[11px] text-muted">
+                <div className="mt-2 text-micro tracking-normal text-ink-tertiary">
                   Your history only goes back to {new Date(summary.firstWorkoutDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} — the card will reflect what's actually logged.
                 </div>
               )}
@@ -379,35 +379,35 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
                       <button
                         disabled={!isAvailable}
                         onClick={() => toggleMetric(m.id)}
-                        className={`w-full flex items-center justify-between gap-2 h-11 px-3 rounded-xl border text-left ${
-                          !isAvailable ? 'border-border/50 opacity-40' : isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
+                        className={`w-full flex items-center justify-between gap-2 h-tap px-3 rounded-row border text-left ${
+                          !isAvailable ? 'border-glass-border/50 opacity-40' : isChecked ? 'border-focus/60 bg-glass' : 'border-glass-border'
                         }`}
                       >
-                        <span className="text-sm">
+                        <span className="text-label">
                           {m.label}
-                          {!isAvailable && <span className="text-[10px] text-muted ml-1.5">no data yet</span>}
-                          {isAvailable && isTrimmed && <span className="text-[10px] text-warn ml-1.5">not shown — card is full</span>}
+                          {!isAvailable && <span className="text-micro tracking-normal text-ink-tertiary ml-1.5">no data yet</span>}
+                          {isAvailable && isTrimmed && <span className="text-micro tracking-normal text-ink-secondary ml-1.5">not shown — card is full</span>}
                         </span>
                         <span className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                          isChecked ? 'bg-accent border-accent' : 'border-border'
+                          isChecked ? 'bg-primary border-focus' : 'border-glass-border'
                         }`}>
-                          {isChecked && <Check size={13} className="text-white" />}
+                          {isChecked && <Check size={13} className="text-on-primary" />}
                         </span>
                       </button>
                       {m.id === 'volume' && isAvailable && isChecked && (
                         <div className="flex gap-2 mt-1.5 pl-1">
                           <button
                             onClick={() => setVolumeMode('pct')}
-                            className={`h-8 px-3 rounded-full text-xs border ${
-                              volumeMode === 'pct' ? 'bg-accent/15 border-accent/60 text-accent' : 'border-border text-muted'
+                            className={`h-8 px-3 rounded-full text-label border ${
+                              volumeMode === 'pct' ? 'bg-glass border-focus/60 text-ink' : 'border-glass-border text-ink-tertiary'
                             }`}
                           >
                             % change
                           </button>
                           <button
                             onClick={() => setVolumeMode('avg')}
-                            className={`h-8 px-3 rounded-full text-xs border ${
-                              volumeMode === 'avg' ? 'bg-accent/15 border-accent/60 text-accent' : 'border-border text-muted'
+                            className={`h-8 px-3 rounded-full text-label border ${
+                              volumeMode === 'avg' ? 'bg-glass border-focus/60 text-ink' : 'border-glass-border text-ink-tertiary'
                             }`}
                           >
                             Avg / workout
@@ -419,7 +419,7 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
                 })}
               </div>
               {trimmed.length > 0 && (
-                <div className="mt-2 text-[11px] text-warn">
+                <div className="mt-2 text-micro tracking-normal text-ink-secondary">
                   {style === 'minimal'
                     ? 'That’s a lot for Minimal — switch to Detailed to fit everything.'
                     : 'A couple of metrics were left off so the card stays readable.'}
@@ -431,21 +431,21 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
               <ConfigSection label="Exercises">
                 {exerciseOptions.length > 6 && (
                   <div className="relative mb-2">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
                     <input
                       value={exerciseSearch}
                       onChange={(e) => setExerciseSearch(e.target.value)}
                       placeholder="Search exercises"
-                      className="w-full h-10 pl-8 pr-3 rounded-lg bg-card border border-border outline-none focus:border-accent text-sm"
+                      className="w-full h-10 pl-8 pr-3 rounded-control bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
                     />
                   </div>
                 )}
-                <p className="text-[11px] text-muted mb-2">
+                <p className="text-micro tracking-normal text-ink-tertiary mb-2">
                   Check to include · tap <Star size={10} className="inline -mt-0.5" /> to feature in the Strength graph
                 </p>
                 <div className="space-y-1.5 max-h-[280px] overflow-y-auto no-scrollbar">
                   {filteredExerciseOptions.length === 0 && (
-                    <div className="text-xs text-muted text-center py-4">No exercises match "{exerciseSearch}".</div>
+                    <div className="text-label text-ink-tertiary text-center py-4">No exercises match "{exerciseSearch}".</div>
                   )}
                   {filteredExerciseOptions.map((ex) => {
                     const isChecked = effectiveExerciseIds.includes(ex.exerciseId);
@@ -454,21 +454,21 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
                     return (
                       <div
                         key={ex.exerciseId}
-                        className={`w-full flex items-center gap-2 h-11 pl-3 pr-2 rounded-xl border ${
-                          isChecked ? 'border-accent/60 bg-accent/10' : 'border-border'
+                        className={`w-full flex items-center gap-2 h-tap pl-3 pr-2 rounded-row border ${
+                          isChecked ? 'border-focus/60 bg-glass' : 'border-glass-border'
                         }`}
                       >
                         <button onClick={() => toggleExercise(ex.exerciseId)} className="flex-1 min-w-0 flex items-center text-left">
-                          <span className="text-sm truncate">{ex.exerciseName}</span>
-                          {isChecked && isTrimmed && <span className="text-[10px] text-warn ml-1.5 shrink-0">not shown</span>}
+                          <span className="text-label truncate">{ex.exerciseName}</span>
+                          {isChecked && isTrimmed && <span className="text-micro tracking-normal text-ink-secondary ml-1.5 shrink-0">not shown</span>}
                         </button>
-                        <span className="text-[11px] text-muted tabular-nums shrink-0">
+                        <span className="text-micro tracking-normal text-ink-tertiary tabular-nums shrink-0">
                           {formatWeight(ex.valueKg)} · {exerciseDeltaLabel(ex)}
                         </span>
                         <button
                           onClick={() => featureExercise(ex.exerciseId)}
                           aria-label={`Feature ${ex.exerciseName} in Strength graph`}
-                          className={`p-1 shrink-0 ${isFeatured ? 'text-accent' : 'text-muted/60'}`}
+                          className={`p-1 shrink-0 ${isFeatured ? 'text-ink' : 'text-ink-tertiary'}`}
                         >
                           <Star size={15} fill={isFeatured ? 'currentColor' : 'none'} />
                         </button>
@@ -476,17 +476,17 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
                           onClick={() => toggleExercise(ex.exerciseId)}
                           aria-label={`${isChecked ? 'Remove' : 'Add'} ${ex.exerciseName}`}
                           className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                            isChecked ? 'bg-accent border-accent' : 'border-border'
+                            isChecked ? 'bg-primary border-focus' : 'border-glass-border'
                           }`}
                         >
-                          {isChecked && <Check size={13} className="text-white" />}
+                          {isChecked && <Check size={13} className="text-on-primary" />}
                         </button>
                       </div>
                     );
                   })}
                 </div>
                 {trimmedExercises.length > 0 && (
-                  <div className="mt-2 text-[11px] text-warn">
+                  <div className="mt-2 text-micro tracking-normal text-ink-secondary">
                     {style === 'minimal'
                       ? `Minimal fits ${EXERCISE_CAP.minimal} exercises — switch to Detailed for more.`
                       : `Detailed fits ${EXERCISE_CAP.detailed} exercises — the rest were left off.`}
@@ -501,14 +501,14 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
           <button
             onClick={download}
             disabled={!pngUrl}
-            className="flex-1 h-12 rounded-xl border border-border bg-surface/80 text-text font-medium flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
+            className="flex-1 h-tap rounded-row border border-glass-border bg-glass/80 text-ink font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
           >
             <Download size={18} /> Save image
           </button>
           <button
             onClick={share}
             disabled={!pngUrl}
-            className="flex-1 h-12 rounded-xl bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
+            className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80 disabled:opacity-40"
           >
             <Share2 size={18} /> {canShareFile ? 'Share' : 'Save'}
           </button>
@@ -521,7 +521,7 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
 function ConfigSection({ label, children }) {
   return (
     <section>
-      <h3 className="text-[11px] uppercase tracking-wide text-muted mb-2 font-semibold">{label}</h3>
+      <h3 className="text-micro tracking-normal uppercase tracking-wide text-ink-tertiary mb-2 font-semibold">{label}</h3>
       {children}
     </section>
   );
@@ -531,10 +531,10 @@ function StyleOption({ active, title, desc, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`text-left rounded-xl border p-3 ${active ? 'border-accent bg-accent/10' : 'border-border'}`}
+      className={`text-left rounded-row border p-3 ${active ? 'border-focus bg-glass' : 'border-glass-border'}`}
     >
-      <div className="text-sm font-semibold">{title}</div>
-      <div className="text-[11px] text-muted mt-0.5">{desc}</div>
+      <div className="text-label font-semibold">{title}</div>
+      <div className="text-micro tracking-normal text-ink-tertiary mt-0.5">{desc}</div>
     </button>
   );
 }

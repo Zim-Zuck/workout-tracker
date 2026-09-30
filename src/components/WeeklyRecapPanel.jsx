@@ -105,9 +105,9 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
   if (error && !recap) {
     return (
       <Card>
-        <p className="text-sm font-medium">Could not load this week</p>
-        <p className="text-xs text-muted mt-1">{error}</p>
-        <button onClick={load} className="mt-3 h-10 px-4 rounded-xl border border-border text-sm active:bg-card">
+        <p className="text-label font-semibold">Could not load this week</p>
+        <p className="text-label text-ink-tertiary mt-1">{error}</p>
+        <button onClick={load} className="mt-3 h-10 px-4 rounded-row border border-glass-border text-label active:bg-glass-inset">
           Try again
         </button>
       </Card>
@@ -123,10 +123,10 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
     return (
       <Card>
         <div className="flex items-center gap-2 mb-1">
-          <Users size={16} className="text-accent" />
-          <p className="text-sm font-medium">Your week, on your own</p>
+          <Users size={16} className="text-ink" />
+          <p className="text-label font-semibold">Your week, on your own</p>
         </div>
-        <p className="text-xs text-muted leading-relaxed">
+        <p className="text-label text-ink-tertiary leading-relaxed">
           Add a friend and every Monday you both get a recap of the week — who moved the most,
           who set the most records, and a few things neither of you expected.
         </p>
@@ -139,17 +139,17 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
 
   return (
     <div className="space-y-3">
-      <section className="bg-surface border border-border rounded-2xl overflow-hidden">
+      <section className="bg-glass border border-glass-border rounded-card overflow-hidden">
         <div className="p-4 pb-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[11px] tracking-[0.18em] font-semibold text-muted">
+              <div className="flex items-center gap-1.5 text-micro tracking-normal tracking-[0.18em] font-semibold text-ink-tertiary">
                 <CalendarRange size={12} /> THIS WEEK
               </div>
-              <h2 className="text-2xl font-bold leading-tight mt-1">{recap.rangeLabel}</h2>
+              <h2 className="text-title font-semibold leading-tight mt-1">{recap.rangeLabel}</h2>
             </div>
             {recap.awards.length > 0 && (
-              <span className="shrink-0 mt-1 inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-accent/15 border border-accent/30 text-[11px] font-semibold text-accent">
+              <span className="shrink-0 mt-1 inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-glass border border-focus/30 text-micro tracking-normal font-semibold text-ink">
                 <Sparkles size={12} />
                 {recap.awards.length} award{recap.awards.length === 1 ? '' : 's'}
               </span>
@@ -158,7 +158,7 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
 
           {/* The teaser. Enough to make you want the cards, not enough to
               replace them — the point of the feature is the reveal. */}
-          <p className="text-xs text-muted mt-2 leading-relaxed">
+          <p className="text-label text-ink-tertiary mt-2 leading-relaxed">
             {recap.hasData && leader
               ? `${namesOf(leader.members, 2)} leads on ${recap.hero.category.label.replace(/^Most /, '').replace(/^Biggest /, '')}. ${recap.totals.people} of ${recap.totals.members} have trained.`
               : 'Nobody has logged a session yet. Be the first and the week is yours.'}
@@ -166,7 +166,7 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
         </div>
 
         {recap.hasData && (
-          <ul className="px-4 pb-1 divide-y divide-border">
+          <ul className="px-4 pb-1 divide-y divide-hairline">
             {sorted.slice(0, 6).map((m) => (
               <li key={m.id}>
                 <button
@@ -176,11 +176,11 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
                 >
                   <Avatar profile={m} size={32} />
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm truncate ${m.is_me ? 'font-bold' : 'font-medium'}`}>
+                    <div className={`text-label truncate ${m.is_me ? 'font-semibold' : 'font-semibold'}`}>
                       {m.display_name}
-                      {m.is_me && <span className="text-muted font-normal"> · you</span>}
+                      {m.is_me && <span className="text-ink-tertiary font-regular"> · you</span>}
                     </div>
-                    <div className="text-[11px] text-muted truncate">
+                    <div className="text-micro tracking-normal text-ink-tertiary truncate">
                       {/* Someone who has not trained is shown as waiting, not
                           as losing. They have six days left. */}
                       {m.trained
@@ -188,7 +188,7 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
                         : 'Yet to train this week'}
                     </div>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums shrink-0 text-muted">
+                  <span className="text-label font-semibold tabular-nums shrink-0 text-ink-tertiary">
                     {m.trained ? formatWeight(m.vol, { group: true }) : '—'}
                   </span>
                 </button>
@@ -198,15 +198,15 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
         )}
 
         {sorted.length > 6 && (
-          <p className="px-4 pb-2 text-[11px] text-muted">+{sorted.length - 6} more in the recap</p>
+          <p className="px-4 pb-2 text-micro tracking-normal text-ink-tertiary">+{sorted.length - 6} more in the recap</p>
         )}
 
         {/* Split action: viewing and sharing are both one tap, and neither is
             hidden behind the other. */}
-        <div className="flex border-t border-border">
+        <div className="flex border-t border-glass-border">
           <button
             onClick={openCards}
-            className="flex-1 h-12 bg-accent text-white font-semibold flex items-center justify-center gap-2 active:opacity-80"
+            className="flex-1 h-tap bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80"
           >
             View the recap <ChevronRight size={18} />
           </button>
@@ -215,23 +215,23 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
               onClick={shareHero}
               disabled={sharing}
               aria-label={canShareFiles() ? 'Share this week' : 'Save this week as an image'}
-              className="w-[92px] h-12 bg-accent/15 text-accent font-semibold border-l border-accent/30 flex items-center justify-center gap-1.5 active:opacity-70 disabled:opacity-50"
+              className="w-[92px] h-tap bg-glass text-ink font-semibold border-l border-focus/30 flex items-center justify-center gap-1.5 active:opacity-70 disabled:opacity-50"
             >
               {sharing
-                ? <span className="w-4 h-4 rounded-full border-2 border-accent/40 border-t-accent animate-spin" />
-                : <>{canShareFiles() ? <Share2 size={16} /> : <Download size={16} />} <span className="text-[13px]">{canShareFiles() ? 'Share' : 'Save'}</span></>}
+                ? <span className="w-4 h-4 rounded-full border-2 border-focus/40 border-t-accent animate-spin" />
+                : <>{canShareFiles() ? <Share2 size={16} /> : <Download size={16} />} <span className="text-label">{canShareFiles() ? 'Share' : 'Save'}</span></>}
             </button>
           )}
         </div>
       </section>
 
       {stale && (
-        <p className="text-[11px] text-warn flex items-center gap-1.5 px-1">
+        <p className="text-micro tracking-normal text-ink-secondary flex items-center gap-1.5 px-1">
           <CloudOff size={12} /> Showing the saved week — you are offline.
         </p>
       )}
 
-      <p className="text-[11px] text-muted px-1 leading-relaxed">
+      <p className="text-micro tracking-normal text-ink-tertiary px-1 leading-relaxed">
         Built from weekly totals your friends chose to share. Nobody sees your individual sets,
         reps or notes — those never leave your device.
       </p>
@@ -242,5 +242,5 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
 }
 
 function Card({ children }) {
-  return <div className="bg-surface border border-border rounded-2xl p-4">{children}</div>;
+  return <div className="bg-glass border border-glass-border rounded-card p-4">{children}</div>;
 }

@@ -25,10 +25,10 @@ export default function ExerciseLibrarySheet({ open, onClose, workout }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-bg flex flex-col safe-top" role="dialog" aria-modal="true" aria-label="Exercise library">
-      <div className="flex items-center justify-between px-3 h-12 border-b border-border shrink-0">
-        <h2 className="text-base font-semibold">Exercise library</h2>
-        <button aria-label="Close" onClick={onClose} className="p-2 -mr-2 text-muted active:text-text">
+    <div className="fixed inset-0 z-50 bg-transparent flex flex-col safe-top" role="dialog" aria-modal="true" aria-label="Exercise library">
+      <div className="flex items-center justify-between px-3 h-tap border-b border-glass-border shrink-0">
+        <h2 className="text-body font-semibold">Exercise library</h2>
+        <button aria-label="Close" onClick={onClose} className="p-2 -mr-2 text-ink-tertiary active:text-ink">
           <X size={22} />
         </button>
       </div>

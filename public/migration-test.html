@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Kun Workouts — migration test</title>
+<style>
+  body{font:14px ui-monospace,monospace;background:#0A0507;color:#F6EEF0;padding:16px;margin:0}
+  .p{color:#4ADE80}.f{color:#FF8A8A}h1{font-size:16px}
+</style>
+<h1>v2 → current migration, in a real browser, against realistic old data</h1>
+<p style="color:#A89298">The Node suite (<code>npm test</code>) is the authority and covers far more cases.
+This page exists because it runs against the browser's OWN IndexedDB — the thing users actually have —
+rather than against fake-indexeddb.</p>
+<pre id="out">running…</pre>
+<script type="module">
+// Exercises the REAL applyUpgrades() from src/db/database.js against a database
+// built to look exactly like one written by the pre-redesign app: v2 stores, no
+// order, no completedAt, no skipped, and completion timestamps rewritten out of
+// logging sequence — the shape that produced the duplicate set number.
+import { applyUpgrades, CURRENT_DB_VERSION, BACKUP_STORES, BACKUP_META_KEY } from '/src/db/database.js';
+import { orderedSets, setLabels } from '/src/db/normalize.js';
+
+const out = document.getElementById('out');
+let pass = 0, fail = 0;
+const line = (c, m) => { c ? pass++ : fail++; out.innerHTML += `<span class="${c?'p':'f'}">${c?'PASS':'FAIL'}</span> ${m}\n`; };
+const NAME = 'lift-db-migration-test';
+
+const t = 1727000000000;
+// Two months of old-format history, plus an active session mid-flight.
+const OLD = [];
+for (let i = 0; i < 24; i++) {
+  const d = t - i * 3 * 86400000;
+  OLD.push({
+    id: 'wo_' + i, date: d, startTime: d, endTime: d + 55 * 60000,
+    name: ['Morning Workout','Afternoon Workout','Evening Workout'][i % 3],
+    exercises: ['ex_bench_press', 'ex_lat_pulldown'],
+    notes: i % 4 === 0 ? 'felt strong' : '',
+    isActive: 0,
+    sets: [
+      { id: `s${i}a`, exerciseId: 'ex_bench_press', type: 'warmup',  weightKg: 40, reps: 10, timestamp: d + 400, completed: true },
+      { id: `s${i}b`, exerciseId: 'ex_bench_press', type: 'working', weightKg: 80 + i * .5, reps: 8, timestamp: d + 900, completed: true },
+      { id: `s${i}c`, exerciseId: 'ex_bench_press', type: 'working', weightKg: 80 + i * .5, reps: 8, timestamp: d + 700, completed: true },
+      // the millisecond tie that rendered two rows as "2"
+      { id: `s${i}d`, exerciseId: 'ex_lat_pulldown', type: 'working', weightKg: 60, reps: 10, timestamp: d + 1000, completed: true },
+      { id: `s${i}e`, exerciseId: 'ex_lat_pulldown', type: 'working', weightKg: 60, reps: 10, timestamp: d + 1000, completed: false }
+    ]
+  });
+}
+OLD.push({
+  id: 'wo_active', date: t + 86400000, startTime: t + 86400000, endTime: null,
+  name: 'Afternoon Workout', exercises: ['ex_squat'], isActive: 1, notes: '',
+  sets: [{ id: 'sa1', exerciseId: 'ex_squat', type: 'working', weightKg: 100, reps: 5, timestamp: t, completed: false }]
+});
+const OLD_EXERCISES = [{ id: 'ex_custom', name: 'My Lift', muscleGroups: ['Chest'], defaultReps: [8, 10] }];
+const OLD_SETTINGS = [{ key: 'defaultRestSec', value: 150 }];
+
+const req = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+
+async function buildV2() {
+  await new Promise((res) => { const d = indexedDB.deleteDatabase(NAME); d.onsuccess = d.onerror = d.onblocked = res; });
+  const db = await new Promise((res, rej) => {
+    const q = indexedDB.open(NAME, 2);
+    // The v1 + v2 schema exactly as the old build created it.
+    q.onupgradeneeded = () => {
+      const d = q.result;
+      const w = d.createObjectStore('workouts', { keyPath: 'id' });
+      w.createIndex('date', 'date'); w.createIndex('isActive', 'isActive');
+      d.createObjectStore('exercises', { keyPath: 'id' });
+      d.createObjectStore('settings', { keyPath: 'key' });
+      d.createObjectStore('meta', { keyPath: 'key' });
+      const o = d.createObjectStore('outbox', { keyPath: 'id' });
+      o.createIndex('kind', 'kind'); o.createIndex('createdAt', 'createdAt');
+      d.createObjectStore('socialCache', { keyPath: 'key' });
+    };
+    q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+  });
+  const tx = db.transaction(['workouts', 'exercises', 'settings'], 'readwrite');
+  for (const w of OLD) tx.objectStore('workouts').put(w);
+  for (const e of OLD_EXERCISES) tx.objectStore('exercises').put(e);
+  for (const s of OLD_SETTINGS) tx.objectStore('settings').put(s);
+  await new Promise((res) => { tx.oncomplete = res; });
+  db.close();
+}
+
+async function upgrade() {
+  return new Promise((res, rej) => {
+    const q = indexedDB.open(NAME, CURRENT_DB_VERSION);
+    q.onupgradeneeded = (e) => applyUpgrades(q.result, e.oldVersion, e.target.transaction);
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+    q.onblocked = () => rej(new Error('blocked'));
+  });
+}
+
+try {
+  out.textContent = '';
+  await buildV2();
+  line(true, 'built a v2 database with 25 old-format workouts');
+
+  const db = await upgrade();
+  line(db.version === CURRENT_DB_VERSION, `upgraded to v${CURRENT_DB_VERSION}`);
+  const names = [...db.objectStoreNames].sort();
+  line(['exercises','meta','outbox','settings','socialCache','workouts'].every(n => names.includes(n)),
+       'every original store survived: ' + names.join(', '));
+
+  // THE SAFETY NET, in a real browser.
+  const bw = await req(db.transaction(BACKUP_STORES.workouts).objectStore(BACKUP_STORES.workouts).getAll());
+  line(bw.length === 25, `the pre-upgrade backup holds all 25 workouts (got ${bw.length})`);
+  line(bw.every(w => w.sets.every(s => s.order === undefined)),
+       'the backup is the OLD shape — not a copy of the migrated result');
+  const man = await req(db.transaction('meta').objectStore('meta').get(BACKUP_META_KEY));
+  line(man?.value?.fromVersion === 2 && man.value.counts.workouts === 25,
+       'the backup manifest records 25 workouts taken from v2');
+  const vol = (list) => list.reduce((a, w) => a + w.sets.filter(s => s.completed && s.type !== 'warmup')
+    .reduce((n, s) => n + s.weightKg * s.reps, 0), 0);
+
+  const rows = await req(db.transaction('workouts').objectStore('workouts').getAll());
+  line(rows.length === 25, `all 25 workouts survived (got ${rows.length})`);
+  line(Math.round(vol(rows)) === Math.round(vol(OLD)),
+       `total volume is unchanged: ${Math.round(vol(OLD)).toLocaleString()} kg before, ${Math.round(vol(rows)).toLocaleString()} kg after`);
+  line(rows.reduce((n,w)=>n+w.sets.length,0) === OLD.reduce((n,w)=>n+w.sets.length,0),
+       `set count is unchanged: ${OLD.reduce((n,w)=>n+w.sets.length,0)}`);
+
+  const ex = await req(db.transaction('exercises').objectStore('exercises').getAll());
+  line(ex.length === 1 && ex[0].name === 'My Lift', 'the custom exercise survived untouched');
+  const st = await req(db.transaction('settings').objectStore('settings').getAll());
+  line(st[0]?.value === 150, 'settings survived untouched');
+
+  line(rows.every(w => Array.isArray(w.skipped) && w.skipped.length === 0), 'every workout has an empty skipped list');
+  line(rows.every(w => w.split === null), 'every workout has a null split');
+  line(rows.every(w => w.sets.every(s => typeof s.order === 'number')), 'every set has an order');
+  line(rows.every(w => w.sets.every(s => s.completedAt !== undefined)), 'every set has a completedAt');
+  line(rows.every(w => w.sets.every(s => s.completed ? s.completedAt === s.timestamp : s.completedAt === null)),
+       'completedAt carries the old completion time; uncompleted sets are null');
+
+  const orig = new Map(OLD.map(w => [w.id, w]));
+  line(rows.every(w => w.name === orig.get(w.id).name && w.notes === orig.get(w.id).notes && w.date === orig.get(w.id).date),
+       'names, notes and dates are untouched');
+  line(rows.every(w => w.sets.every(s => s.weightKg === orig.get(w.id).sets.find(o => o.id === s.id).weightKg)),
+       'no weight was altered');
+
+  const act = rows.find(w => w.id === 'wo_active');
+  line(act && act.isActive === 1 && act.sets[0].order === 0, 'the in-flight active session migrated and stayed active');
+
+  // THE BUG, on migrated data.
+  const w0 = rows.find(w => w.id === 'wo_0');
+  const bench = setLabels(orderedSets(w0.sets, 'ex_bench_press')).map(x => x.tag ?? x.number);
+  line(bench.join() === 'W,1,2', `bench renders as W,1,2 (was W,2,3 with a duplicate) — got ${bench.join()}`);
+  const lat = setLabels(orderedSets(w0.sets, 'ex_lat_pulldown')).map(x => x.number);
+  line(lat.join() === '1,2', `the millisecond-tie pair renders as 1,2 — got ${lat.join()}`);
+  line(rows.every(w => {
+    for (const exId of ['ex_bench_press', 'ex_lat_pulldown']) {
+      const n = orderedSets(w.sets, exId).map(s => s.order);
+      if (new Set(n).size !== n.length) return false;
+    }
+    return true;
+  }), 'no two sets of one exercise share an order, in any of the 25 workouts');
+
+  // Re-running the upgrade must be a no-op.
+  const before = JSON.stringify(rows);
+  db.close();
+  const db2 = await new Promise((res, rej) => { const q = indexedDB.open(NAME, CURRENT_DB_VERSION); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  const again = await req(db2.transaction('workouts').objectStore('workouts').getAll());
+  line(JSON.stringify(again) === before, `re-opening at v${CURRENT_DB_VERSION} changes nothing`);
+  db2.close();
+  await new Promise((res) => { const d = indexedDB.deleteDatabase(NAME); d.onsuccess = d.onerror = d.onblocked = res; });
+
+  out.innerHTML += `\n${pass} passed, ${fail} failed\n`;
+  document.title = fail ? `FAIL ${fail}` : `PASS ${pass}`;
+} catch (err) {
+  out.innerHTML += `<span class="f">ERROR</span> ${err.message}\n`;
+  document.title = 'ERROR';
+}
+</script>
