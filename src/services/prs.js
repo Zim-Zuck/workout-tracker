@@ -62,7 +62,10 @@ function describe(kind, current, prevSets, prevSessions) {
   if (kind === 'weight') {
     const best = current.reduce((m, s) => Math.max(m, s.weightKg), 0);
     const prev = prevSets.reduce((m, s) => Math.max(m, s.weightKg), 0);
-    return { unit: 'kg', value: best, previous: prev, delta: best - prev };
+    // The reps that carried the record, so the feed can say "107.5 kg × 5"
+    // rather than a bare number with no context.
+    const atBest = current.filter((s) => s.weightKg === best).reduce((m, s) => Math.max(m, s.reps), 0);
+    return { unit: 'kg', value: best, previous: prev, delta: best - prev, reps: atBest };
   }
   if (kind === 'reps') {
     // The set that beat its own weight's previous best by the most.

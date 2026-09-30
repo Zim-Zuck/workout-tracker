@@ -11,7 +11,10 @@ export function Pill({
   tone = 'neutral',                       // 'neutral' | 'done' | 'pr' | 'danger'
   className = '', ...rest
 }) {
-  const sizes = { base: 'h-tap px-lg text-body', sm: 'h-9 px-md text-label' };
+  // Both sizes are 44pt tall. "sm" is smaller TYPE and tighter padding, not a
+  // smaller target — a filter chip you have to aim at is a filter chip people
+  // stop using. The visual difference is carried by the label, not the box.
+  const sizes = { base: 'h-tap px-lg text-body', sm: 'h-tap px-md text-label' };
   const tones = {
     neutral: selected
       ? 'bg-primary text-on-primary border-transparent shadow-pill'

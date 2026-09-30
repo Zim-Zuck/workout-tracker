@@ -26,7 +26,7 @@ export default function SetRow({
 }) {
   if (loading) {
     return (
-      <div className="grid items-center h-tap gap-sm" style={{ gridTemplateColumns: '32px 1fr 1fr 44px 32px' }}>
+      <div className="grid items-center h-tap gap-sm" style={{ gridTemplateColumns: 'var(--set-grid)' }}>
         <span className="skeleton h-4 rounded-control" />
         <span className="skeleton h-6 rounded-control" />
         <span className="skeleton h-6 rounded-control" />
@@ -45,7 +45,7 @@ export default function SetRow({
     <div
       className={`grid items-center gap-sm rounded-row px-xs transition-colors duration-fast ease-out
                   ${done ? 'bg-done-soft' : ''} ${disabled ? 'opacity-40 pointer-events-none' : ''}`}
-      style={{ gridTemplateColumns: '32px 1fr 1fr 44px 32px', minHeight: 48 }}
+      style={{ gridTemplateColumns: 'var(--set-grid)', minHeight: 48 }}
     >
       <span
         className={`text-label font-semibold tabular text-center
@@ -91,7 +91,7 @@ export default function SetRow({
           type="button"
           onClick={onOpenMenu}
           aria-label={`Set options${number ? ` for set ${number}` : ''}`}
-          className="w-8 h-tap flex items-center justify-center text-ink-tertiary
+          className="w-tap h-tap -mr-sm flex items-center justify-center text-ink-tertiary
                      transition-colors duration-fast ease-out active:text-ink"
         >
           <MoreHorizontal size={18} strokeWidth={2} />
@@ -124,7 +124,7 @@ export function SetRowHeader() {
   return (
     <div
       className="grid items-center gap-sm px-xs pb-sm text-micro font-semibold uppercase text-ink-tertiary"
-      style={{ gridTemplateColumns: '32px 1fr 1fr 44px 32px' }}
+      style={{ gridTemplateColumns: 'var(--set-grid)' }}
       aria-hidden="true"
     >
       <span className="text-center">Set</span>

@@ -32,9 +32,18 @@ export default function Today({
   const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
   const totals = useWorkoutTotals(workouts);
 
-  // The split that comes next in the rotation you are already running. Chosen
-  // once per mount; after that the pills are yours.
-  const [split, setSplit] = useState(() => nextSplitInRotation(workouts, exerciseMap));
+  // The split that comes next in the rotation you are already running.
+  //
+  // It keeps following the rotation until you tap a pill yourself — so finishing
+  // a Push session moves Today to Pull without a reload — and from that moment
+  // on the choice is yours and nothing moves it again.
+  const [chosenSplit, setChosenSplit] = useState(null);
+  const rotationSplit = useMemo(
+    () => nextSplitInRotation(workouts, exerciseMap),
+    [workouts, exerciseMap]
+  );
+  const split = chosenSplit ?? rotationSplit;
+  const setSplit = setChosenSplit;
   const [plan, setPlan] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);

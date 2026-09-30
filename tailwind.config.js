@@ -72,6 +72,9 @@ export default {
       maxWidth: { app: `${layout.maxWidth}px` },
       inset: px({ header: layout.header }),
       height: px({ header: layout.header, tab: layout.tabBar, resume: layout.resumePill, tap: layout.tapMin }),
+      // `width` as well as `height`: w-tap was silently a no-op, which left every
+      // icon-only control 44pt tall and as narrow as its glyph.
+      width: px({ tap: layout.tapMin }),
       minHeight: px({ tap: layout.tapMin }),
       minWidth: px({ tap: layout.tapMin })
     }

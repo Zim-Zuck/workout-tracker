@@ -99,6 +99,12 @@ body[data-resume="1"] .pb-nav {
 
 .tabular { font-variant-numeric: tabular-nums; }
 
+/* The set row's five columns, defined once so the header and the rows can never
+   drift apart. The last two are 44pt because they hold controls, not text: the
+   "⋯" column was 32px, which silently capped its button below the minimum
+   target size no matter what the button itself asked for. */
+:root { --set-grid: 28px 1fr 1fr 44px 44px; }
+
 /* ---------------------------------------------------------------------------
    Blur, rationed.
 

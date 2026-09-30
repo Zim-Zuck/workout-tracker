@@ -226,7 +226,7 @@ disabled, empty and loading states where those states are meaningful.
 | `Pill` / `StaticPill` | `selected` is the only state that uses the primary fill. There is no coloured *interactive* pill. |
 | `SegmentedPills` | Scrolls rather than compressing — a clipped "Challeng…" is worse than a swipe. Arrow-key navigable. |
 | `SegmentedTrack` | A track with one white pill inside. Use for **scopes over the same content** (Everyone / Friends); use `SegmentedPills` for **different content**. |
-| `SetRow` | **The set number is a prop, not an array index.** See §9. Warm-ups are lettered (`W`/`D`/`F`), not numbered — they don't count toward volume or PRs, so they don't consume a working-set number. |
+| `SetRow` | **The set number is a prop, not an array index.** See §9. Its five columns come from `--set-grid`, defined once so the header and the rows cannot drift apart. Warm-ups are lettered (`W`/`D`/`F`), not numbered — they don't count toward volume or PRs, so they don't consume a working-set number. |
 | `ExerciseCard` | Swipe left reveals **Skip**. Skip ≠ Remove (§9). The `⋮` opens a **bottom sheet**, never a dropdown. |
 | `PRBadge` / `PRHighlight` | The only components allowed to use the PR colour. Three typed kinds: Weight / Reps / Volume. |
 | `StatBlock` / `StatRow` | The value is loud, the label is quiet. The reverse is how dashboards become unreadable. |
@@ -321,3 +321,59 @@ Recorded here rather than raised as questions, per the brief:
    something with five seconds to be understood.
 6. **The gallery is dev-only**, at `?gallery=1`. It is a workbench for the design
    system, not a screen of the app, and it is not in a production bundle.
+7. **Inter Tight is vendored**, not fetched from a CDN — this is an offline-first
+   PWA, and a typeface that only arrives with a network is a typeface the app
+   does not have at the gym. Two subsets (latin, latin-ext) of the variable font
+   cover 400–600 in 135 KB, preloaded and precached by the service worker.
+8. **The deprecation shim is gone.** Tailwind's palette is now exactly the design
+   system's.
+
+### Decisions from Phases 2 and 3
+
+9. **Splits are derived, with a per-exercise override.** Push = Chest /
+   Shoulders / Triceps, Pull = Back / Biceps / Rear Delt / Traps / Forearms,
+   Legs = Quads / Hamstrings / Glutes / Calves, Upper = Push ∪ Pull, Lower =
+   Legs. `Core` belongs to no split: it rides along with whatever you are
+   training rather than defining a day. A custom exercise joins automatically;
+   `exercise.split` wins when set.
+10. **Frequency picks exercises; estimated 1RM only breaks ties.** Raw weight is
+    never compared across exercises — 60 kg of lat pulldown and 60 kg of curl are
+    not the same claim, and a builder that ranked by kilograms would fill every
+    session with leg press. When frequency and 1RM are both silent (a cold
+    start), a **focus score** breaks the tie: the lift that most directly trains
+    the target muscle wins, which is what surfaces a leg curl for hamstrings
+    rather than whatever comes first alphabetically.
+11. **The under-trained slot is filled first**, before the 5–6 exercise cap
+    applies, so it can never be squeezed out.
+12. **Measured pace is clamped to 60–300 s/set.** Outside that band the number
+    is not telling us about training — a session left running while somebody
+    drove home reads as 900 s/set, and a "~150 min" estimate would be both wrong
+    and discouraging.
+13. **Replacing an exercise never reassigns logged sets.** If nothing is logged,
+    the swap is clean. If sets exist, they stay attributed to the lift actually
+    performed, the replacement is added after it, and the replaced lift is
+    marked skipped so its card collapses instead of competing for attention.
+14. **Cancelling a workout is undoable, not a dialog.** The session leaves the
+    database immediately, so a reload cannot resurrect a half-cancelled state,
+    and is held in memory for the life of the toast.
+15. **Deleting history is undoable too.** It used to be one tap behind a panel
+    claiming it could not be undone. It can be.
+16. **Volume totals are grouped and whole** (`6,808 kg`); bar loads keep the
+    half-kilo and lose the separator. Charts switch to **tonnes** past ~2 t,
+    because "20k kg" reads as "twenty kilo kilograms".
+17. **A rank is not a personal record.** First place on the leaderboard is ink,
+    not gold. `warn` gold was previously doing three unrelated jobs; offline
+    notices became tertiary ink and "replace everything on this device" became
+    the destructive colour it always was.
+18. **`sm` pills are 44pt tall.** The size difference is carried by type and
+    padding, not by the target — a filter chip you have to aim at is a filter
+    chip people stop using. The same rule widened the per-set `⋯` column from
+    32pt to 44pt.
+19. **Your own achievements appear in your feed without an account**, attributed
+    to "You". A signed-out user still has PRs, and they are still the most
+    interesting thing on their own screen.
+20. **The split pill follows the rotation until you tap one.** Finishing a Push
+    session moves Today to Pull on its own; from your first tap onward the choice
+    is yours and nothing moves it again.
+21. **The session header is sticky and owns the rest timer.** The floating rest
+    bar it replaced overlapped the set rows it was timing.

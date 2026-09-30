@@ -65,15 +65,18 @@ function detailFor(ev, described) {
 // with a `local: true` marker and a negative id so they can never collide with a
 // real bigint identity. They carry no reactions — you cannot cheer yourself, and
 // a cheer button on your own unpublished PR would be a button that does nothing.
+// A signed-out user still has PRs, and they are still the most interesting
+// thing on their own screen. There is no cloud identity to attach them to, so
+// they are attributed to "You" — which is also how the sentences read.
 export function ownAchievements(workouts, exercises, profile, limit = 6) {
-  if (!profile) return [];
+  if (!workouts?.length) return [];
   const exName = new Map(exercises.map((e) => [e.id, e.name]));
   const exMap = new Map(exercises.map((e) => [e.id, e]));
   const me = {
-    actor_id: profile.id,
-    actor_display_name: profile.display_name,
-    actor_username: profile.username,
-    actor_avatar_url: profile.avatar_url
+    actor_id: profile?.id ?? null,
+    actor_display_name: profile?.display_name ?? 'You',
+    actor_username: profile?.username ?? null,
+    actor_avatar_url: profile?.avatar_url ?? null
   };
   const rows = [];
   let seq = -1;
@@ -86,8 +89,8 @@ export function ownAchievements(workouts, exercises, profile, limit = 6) {
       created_at: new Date(pr.date).toISOString(),
       reaction_count: 0,
       metadata: {
-        weight_kg: pr.unit === 'kg' ? pr.value : undefined,
-        reps: pr.unit === 'reps' ? pr.value : undefined,
+        weight_kg: pr.unit === 'kg' ? pr.value : pr.atWeightKg,
+        reps: pr.unit === 'reps' ? pr.value : pr.reps,
         pr_kind: pr.kind,
         pr_label: pr.label,
         exercise_name: exName.get(pr.exerciseId)

@@ -45,13 +45,13 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   };
 
   return (
-    <div className="p-3 space-y-4">
+    <div className="px-base pb-nav">
       {auth?.cloudConfigured && (
         <Section title="Account">
           {auth.signedIn ? (
             <>
               <Row label="Signed in as">
-                <span className="text-label text-ink-tertiary truncate max-w-[55%]">{auth.user?.email}</span>
+                <span className="text-label font-regular text-ink-tertiary truncate max-w-[55%]">{auth.user?.email}</span>
               </Row>
               <ActionButton icon={LogOut} label="Sign out" onClick={async () => {
                 await auth.signOut();
@@ -60,7 +60,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
             </>
           ) : (
             <>
-              <p className="text-label text-ink-tertiary mb-2">
+              <p className="text-label font-regular text-ink-tertiary py-sm">
                 An account adds friends, challenges and cloud backup. Your workouts stay on this device either way.
               </p>
               <ActionButton icon={LogIn} label="Sign in or create account" onClick={onSignIn} />
@@ -74,7 +74,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
           <select
             value={settings.defaultRestSec}
             onChange={(e) => updateSettings({ defaultRestSec: Number(e.target.value) })}
-            className="h-10 rounded-control bg-glass-inset border border-glass-border px-2 text-label"
+            className="h-tap rounded-full bg-glass-inset border border-glass-inset-border px-md text-label font-semibold text-ink outline-none"
           >
             {[60, 90, 120, 150, 180, 240].map((s) => <option key={s} value={s}>{s < 60 ? `${s}s` : `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}</option>)}
           </select>
@@ -83,11 +83,11 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
           <div className="flex items-center gap-2">
             <input type="number" inputMode="numeric" value={settings.defaultRepsLow}
               onChange={(e) => updateSettings({ defaultRepsLow: Number(e.target.value) })}
-              className="w-16 h-10 rounded-control bg-glass-inset border border-glass-border text-center text-label" />
+              className="w-16 h-tap rounded-full bg-glass-inset border border-glass-inset-border text-center text-label font-semibold text-ink outline-none" />
             <span className="text-ink-tertiary">–</span>
             <input type="number" inputMode="numeric" value={settings.defaultRepsHigh}
               onChange={(e) => updateSettings({ defaultRepsHigh: Number(e.target.value) })}
-              className="w-16 h-10 rounded-control bg-glass-inset border border-glass-border text-center text-label" />
+              className="w-16 h-tap rounded-full bg-glass-inset border border-glass-inset-border text-center text-label font-semibold text-ink outline-none" />
           </div>
         </Row>
         <Row label="Rest timer sound">
@@ -107,15 +107,15 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       </Section>
 
       <Section title="Exercises">
-        <p className="text-label text-ink-tertiary mb-2">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
+        <p className="text-label font-regular text-ink-tertiary py-sm">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
         <ActionButton icon={ListChecks} label="Exercise library" onClick={() => setLibraryOpen(true)} />
       </Section>
 
       <Section title="Data">
-        <p className="text-label text-ink-tertiary mb-2">
+        <p className="text-label font-regular text-ink-tertiary py-sm">
           Your workouts are stored locally on this device. Export a backup regularly, or sign in to back them up to the cloud.
         </p>
-        <div className="grid grid-cols-1 gap-2">
+        <div className="flex flex-col divide-y divide-hairline">
           <ActionButton icon={Download} label="Export JSON backup" onClick={async () => { await downloadBackup(); toast('Backup downloaded'); }} />
           <ActionButton icon={Upload} label="Import JSON backup" onClick={() => fileRef.current?.click()} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
@@ -132,19 +132,19 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
 
       {auth?.signedIn && (
         <Section title="Cloud backup">
-          <p className="text-label text-ink-tertiary mb-2">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
             A copy of your workouts stored against your account, so a new phone can pick up where this one left off.
             It backs up automatically once a day after a workout.
           </p>
           <Row label="Last backup">
-            <span className="text-label text-ink-tertiary">
+            <span className="text-label font-regular text-ink-tertiary">
               {backupInfo === null ? '—'
                 : backupInfo.updatedAt ? relativeDay(backupInfo.updatedAt)
                 : backupInfo.localLast ? relativeDay(backupInfo.localLast)
                 : 'Never'}
             </span>
           </Row>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="flex flex-col divide-y divide-hairline">
             <ActionButton
               icon={CloudUpload}
               label={backupBusy ? 'Working…' : 'Back up now'}
@@ -177,7 +177,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
 
       {auth?.signedIn && (
         <Section title="Danger zone">
-          <p className="text-label text-ink-tertiary mb-2">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
             Deleting your account removes your profile, friends, challenges and cloud backup permanently.
             Workouts on this device are not touched.
           </p>
@@ -187,8 +187,8 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
 
       <Section title="About">
         <Row label="App"><span className="text-label text-ink font-semibold">Kun Workouts</span></Row>
-        <Row label="App version"><span className="text-label text-ink-tertiary">1.0.0</span></Row>
-        <Row label="Data schema"><span className="text-label text-ink-tertiary">v{SCHEMA_VERSION}</span></Row>
+        <Row label="App version"><span className="text-label font-regular text-ink-tertiary">1.0.0</span></Row>
+        <Row label="Data schema"><span className="text-label font-regular text-ink-tertiary">v{SCHEMA_VERSION}</span></Row>
         <Row label="Connection">
           <span className={`inline-flex items-center gap-1 text-label ${online ? 'text-done' : 'text-ink-secondary'}`}>
             {online ? <Wifi size={14} /> : <WifiOff size={14} />} {online ? 'Online' : 'Offline'}
@@ -312,44 +312,66 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   );
 }
 
+// The section heading sits OUTSIDE the card, on the page. A heading inside a
+// card is a title for the card; a heading above it is a title for the group,
+// which is what these are.
 function Section({ title, children }) {
   return (
-    <section className="bg-glass border border-glass-border rounded-card p-3">
-      <h3 className="text-label font-semibold mb-2">{title}</h3>
-      <div className="space-y-2">{children}</div>
+    <section className="mt-xl">
+      <h2 className="text-micro font-semibold uppercase text-ink-tertiary mb-sm">{title}</h2>
+      <div className="bg-glass border border-glass-border rounded-card px-base divide-y divide-hairline">
+        {children}
+      </div>
     </section>
   );
 }
 function Row({ label, children }) {
   return (
-    <div className="flex items-center justify-between gap-2 min-h-tap">
-      <span className="text-label">{label}</span>
+    <div className="flex items-center justify-between gap-md min-h-tap py-sm">
+      <span className="text-body font-regular text-ink">{label}</span>
       {children}
     </div>
   );
 }
+// A two-state switch, shaped like a switch. The old inline segmented control
+// made On/Off look like a pair of equal choices rather than a thing that is
+// currently one way.
 function Segmented({ value, onChange, options }) {
+  const on = value === options[0].value;
   return (
-    <div className="inline-flex rounded-control bg-glass-inset border border-glass-border overflow-hidden">
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value)}
-          className={`px-3 h-10 text-label ${value === o.value ? 'bg-primary text-on-primary' : 'text-ink-tertiary'}`}
-        >{o.label}</button>
-      ))}
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={() => onChange(on ? options[1].value : options[0].value)}
+      // The switch LOOKS 52x32 and IS 52x44: the track is drawn inside a
+      // full-height hit area rather than being the hit area.
+      className="relative w-[52px] h-tap shrink-0 flex items-center"
+    >
+      <span
+        className={`absolute inset-x-0 top-1/2 -translate-y-1/2 h-8 rounded-full border
+                    transition-colors duration-fast ease-out
+                    ${on ? 'bg-primary border-transparent' : 'bg-glass-inset border-glass-inset-border'}`}
+      />
+      <span
+        className={`absolute top-1/2 -translate-y-1/2 w-6 h-6 rounded-full transition-[left] duration-fast ease-out
+                    ${on ? 'left-[23px] bg-on-primary' : 'left-[3px] bg-ink-tertiary'}`}
+      />
+    </button>
   );
 }
+// A full-width row that does something, rather than a bordered button inside a
+// bordered card. Cards group; they do not need a second frame inside them.
 function ActionButton({ icon: Icon, label, onClick, danger }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`w-full h-tap rounded-row border flex items-center justify-center gap-2 font-semibold ${
-        danger ? 'border-danger-border text-danger active:bg-danger-soft' : 'border-glass-border text-ink active:bg-glass-inset'
-      }`}
+      className={`w-full min-h-tap py-md -mx-base px-base flex items-center gap-md text-left
+                  text-body font-regular transition-colors duration-fast ease-out
+                  active:bg-glass-pressed ${danger ? 'text-danger' : 'text-ink'}`}
     >
-      <Icon size={18} /> {label}
+      <Icon size={18} strokeWidth={2} className="shrink-0" /> {label}
     </button>
   );
 }

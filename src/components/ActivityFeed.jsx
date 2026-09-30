@@ -41,6 +41,8 @@ export default function ActivityFeed({
     [workouts, exercises, profile, variant, scope]
   );
 
+  const signedOut = !auth?.signedIn;
+
   const rows = useMemo(
     () => presentFeed(mergeOwn(feed?.events || [], mine), { exNames, myId: auth?.userId }),
     [feed?.events, mine, exNames, auth?.userId]
@@ -181,12 +183,14 @@ export default function ActivityFeed({
 
         {!feed?.loading && !shown.length && (
           <EmptyState
-            icon={Swords}
-            title="Nothing here yet"
-            body="Add a friend or send a challenge, and their PRs, streaks and sessions start showing up here."
+            icon={signedOut ? Users : Swords}
+            title={signedOut ? 'Your records, and everyone else\'s' : 'Nothing here yet'}
+            body={signedOut
+              ? 'Your own PRs and streaks show up here as you train. Create an account and you will see the rest of Kun too.'
+              : 'Add a friend or send a challenge, and their PRs, streaks and sessions start showing up here.'}
             action={
               <SecondaryButton icon={Users} onClick={onSeeAll}>
-                Find people
+                {signedOut ? 'See the community' : 'Find people'}
               </SecondaryButton>
             }
           />

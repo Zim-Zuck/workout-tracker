@@ -39,14 +39,19 @@ export default function FeedItem({
 
   const body = (
     <div className="flex items-start gap-md">
-      <button
-        type="button"
-        onClick={onOpenActor}
-        aria-label={actor?.display_name || actor?.username || 'Profile'}
-        className="shrink-0 rounded-full transition-opacity duration-fast ease-out active:opacity-70"
-      >
-        <Avatar profile={actor} size={36} />
-      </button>
+      {onOpenActor ? (
+        <button
+          type="button"
+          onClick={onOpenActor}
+          aria-label={actor?.display_name || actor?.username || 'Profile'}
+          className="shrink-0 w-tap h-tap -ml-xs flex items-center justify-center rounded-full
+                     transition-opacity duration-fast ease-out active:opacity-70"
+        >
+          <Avatar profile={actor} size={36} />
+        </button>
+      ) : (
+        <Avatar profile={actor} size={36} className="shrink-0" />
+      )}
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-sm">
@@ -64,7 +69,8 @@ export default function FeedItem({
           <p className={`mt-xs ml-[23px] text-body font-semibold tabular ${TONE_CLASS[tone]}`}>{detail}</p>
         )}
 
-        <div className="mt-sm ml-[23px] flex items-center gap-sm">
+        <div className="mt-sm ml-[23px] flex items-center gap-sm empty:hidden">
+          {onReact && (
           <button
             type="button"
             onClick={cheer}
@@ -79,6 +85,7 @@ export default function FeedItem({
             <Flame size={14} strokeWidth={2.4} className={pulse ? 'anim-cheer' : ''} />
             {event.reaction_count > 0 && <span className="tabular">{event.reaction_count}</span>}
           </button>
+          )}
           {action}
         </div>
       </div>

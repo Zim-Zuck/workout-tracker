@@ -28,7 +28,7 @@ export default function AppHeader({ signedIn, profile, onAccountTap, cloudConfig
           ) : (
             <button
               onClick={onAccountTap}
-              className="h-9 px-base -mr-sm rounded-full bg-glass border border-glass-border
+              className="h-tap px-base -mr-sm rounded-full bg-glass border border-glass-border
                          text-label font-semibold text-ink-secondary
                          transition-colors duration-fast ease-out active:bg-glass-pressed"
             >
