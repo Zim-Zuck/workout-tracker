@@ -136,12 +136,19 @@ comes from the glass border, not from a halo.
 
 ## 4. Blur — the performance rule
 
-`backdrop-filter` is allowed on **exactly four things**:
+`backdrop-filter` is allowed on **exactly five things**, all of them chrome that
+content scrolls underneath, or one hero element per screen:
 
 1. the hero "Next workout" card
-2. the resume pill
-3. bottom sheets
-4. the tab bar
+2. the sticky session header (added in Phase 2 — same role as the tab bar: it
+   carries the rest countdown and Finish while the exercise list moves beneath it)
+3. the resume pill
+4. bottom sheets
+5. the tab bar
+
+That is the whole list, and it is enforceable by grep: `glass-blur` appears in
+`GlassCard`, `BottomSheet`, `ResumePill`, `TabBar` and the session header, and
+nowhere else.
 
 **Never on a repeated list item.** Every blurred element is its own compositing
 layer; a scrolling list of them drops frames on a real phone. Repeated items use
