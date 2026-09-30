@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import RestTimer from './components/RestTimer.jsx';
 import { ToastProvider, useToast } from './components/Toast.jsx';
 import { TabBar, ResumePill, UndoToastProvider } from './ui/index.js';
 import TodayScreen from './pages/Today.jsx';
@@ -302,14 +301,6 @@ function Root() {
         </>
         )}
       </main>
-
-      <RestTimer
-        remainingSec={restTimer.remainingSec}
-        running={restTimer.running}
-        onAdd={restTimer.add}
-        onSub={restTimer.sub}
-        onSkip={restTimer.stop}
-      />
 
       {/* Above the tab bar on EVERY tab while a session is live, so wandering
           off to check the leaderboard mid-workout is never a one-way trip. */}

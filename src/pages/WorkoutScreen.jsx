@@ -107,8 +107,12 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
 
   return (
     <div className="px-base pb-nav">
-      {/* Header ---------------------------------------------------------- */}
-      <GlassCard className="mt-md p-base">
+      {/* Header.
+          Sticky, because it carries the rest countdown and the Finish button —
+          the two things you need while your thumb is somewhere down the list of
+          exercises. This replaced a separate floating rest bar that overlapped
+          the set rows it was timing. */}
+      <GlassCard className="sticky top-sm z-20 mt-md p-base glass-blur">
         <div className="flex items-center gap-md">
           <div className="flex-1 min-w-0">
             <h1 className="text-title font-semibold text-ink truncate">{title}</h1>
@@ -126,7 +130,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
           <div className="mt-md flex items-center gap-sm">
             <span className="flex-1 flex items-center gap-sm text-label font-semibold text-done tabular">
               <Timer size={15} strokeWidth={2.2} />
-              Rest {formatDuration(restTimer.remainingSec * 1000)}
+              Rest {mmss(restTimer.remainingSec)}
             </span>
             <button type="button" onClick={restTimer.sub}
               className="w-tap h-9 rounded-full text-label font-semibold text-ink-secondary active:bg-glass-pressed">−15</button>
@@ -409,6 +413,13 @@ function ExerciseMenuSheet({
       </div>
     </BottomSheet>
   );
+}
+
+// A rest countdown is read in seconds, not rounded to minutes: "2:59" is
+// information, "3m" is the same string for sixty seconds running.
+function mmss(totalSec) {
+  const s = Math.max(0, Math.round(totalSec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 function formatNum(v) {
