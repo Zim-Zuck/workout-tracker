@@ -18,9 +18,18 @@ const BUILTIN_NAMES = new Map(DEFAULT_EXERCISES.map((e) => [e.id, e.name]));
 // agrees — so the built-in table is always enough. A caller's own map is
 // preferred anyway, so somebody who renamed "Overhead Press" to "Press" on their
 // device reads their own name for it.
-function exerciseName(id, exNames) {
+function exerciseName(id, exNames, meta) {
+  // A locally-synthesised event carries the name outright, because it can be a
+  // custom exercise whose id means nothing to the built-in table.
+  if (meta?.exercise_name) return meta.exercise_name;
   if (!id) return null;
   return exNames?.get(id) || BUILTIN_NAMES.get(id) || null;
+}
+
+// "an 8-week streak", not "a 8-week streak". Only 8 and 11 start with a vowel
+// sound among the streak lengths this app emits.
+function article(n) {
+  return [8, 11, 18].includes(Number(n)) ? 'an' : 'a';
 }
 
 function actorName(ev) {
@@ -48,24 +57,34 @@ export function describeEvent(ev, exNames) {
 
   const who = actorName(ev);
   const meta = ev.metadata || {};
-  const exercise = exerciseName(ev.subject, exNames);
+  const exercise = exerciseName(ev.subject, exNames, meta);
   const opponent = meta.opponent_display_name || meta.opponent_username || null;
 
   switch (ev.event_type) {
-    case 'pr':
+    case 'pr': {
+      // Locally-derived PRs know which of the three kinds they are (Weight /
+      // Reps / Volume) and say so; server events predate typed PRs and stay on
+      // the generic wording rather than claiming a kind we cannot know.
+      // "New Bench Press weight PR" — the kind is lower-cased mid-sentence, and
+      // "PR" is kept, because "New Bench Press Weight" is not a sentence.
+      const kind = meta.pr_label ? `${meta.pr_label.replace(/ PR$/, '').toLowerCase()} PR` : 'PR';
+      const subject = ev.own
+        ? (exercise ? `New ${exercise} ${kind}` : `New ${kind}`)
+        : (exercise ? `${who} hit a new ${exercise} PR` : `${who} hit a new PR`);
       return {
         emoji: '🏆',
-        headline: exercise
-          ? `${who} hit a new ${exercise} PR`
-          : `${who} hit a new PR`,
-        detail: liftLine(meta.weight_kg, meta.reps),
+        headline: subject,
+        detail: meta.weight_kg != null || meta.reps != null
+          ? liftLine(meta.weight_kg, meta.reps)
+          : null,
         tone: 'accent'
       };
+    }
 
     case 'workout':
       return {
         emoji: '💪',
-        headline: `${who} completed a workout`,
+        headline: ev.own ? 'You completed a session' : `${who} completed a workout`,
         detail: null,
         tone: 'muted'
       };
@@ -73,7 +92,9 @@ export function describeEvent(ev, exNames) {
     case 'workout_milestone':
       return {
         emoji: '🎯',
-        headline: `${who} reached ${meta.total} workouts`,
+        headline: ev.own
+          ? `You reached ${meta.total} workouts`
+          : `${who} reached ${meta.total} workouts`,
         detail: null,
         tone: 'success'
       };
@@ -81,7 +102,9 @@ export function describeEvent(ev, exNames) {
     case 'streak':
       return {
         emoji: '🔥',
-        headline: `${who} is on a ${meta.weeks}-week streak`,
+        headline: ev.own
+          ? `You are on ${article(meta.weeks)} ${meta.weeks}-week streak`
+          : `${who} is on ${article(meta.weeks)} ${meta.weeks}-week streak`,
         detail: null,
         tone: 'warn'
       };

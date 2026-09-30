@@ -1,47 +1,62 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Play, Square, Plus, Search, Undo2, Timer, ListChecks, X } from 'lucide-react';
-import ExerciseCard from '../components/ExerciseCard.jsx';
-import Modal from '../components/Modal.jsx';
+import {
+  ArrowUp, ArrowDown, Repeat, SkipForward, Trash2, Plus, X, Timer, StickyNote
+} from 'lucide-react';
+import {
+  GlassCard, ExerciseCard, SetRow, PrimaryButton, SecondaryButton, TextLink,
+  BottomSheet, SheetAction, useUndoToast, EmptyState
+} from '../ui/index.js';
+import WheelPicker from '../components/WheelPicker.jsx';
+import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
 import ShareCard from '../components/ShareCard.jsx';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
-import { useToast, useHaptic } from '../components/Toast.jsx';
+import { useHaptic } from '../components/Toast.jsx';
+import { setLabels } from '../db/normalize.js';
+import { previousPerformance, summarizeSets, isWorking } from '../services/calculations.js';
+import { sessionPRForExercise } from '../services/prs.js';
+import { recommend } from '../services/progression.js';
+import { alternativesFor } from '../services/sessionBuilder.js';
+import { splitLabel } from '../services/splits.js';
+import { formatWeight, roundDisplay } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
-export default function WorkoutScreen({ workout, settings, restTimer, onFinishToast }) {
+const SET_TYPES = [
+  { type: 'working', label: 'Working set', hint: 'Counts toward volume and PRs.' },
+  { type: 'warmup', label: 'Warm-up', hint: 'Excluded from volume and PR calculations.' },
+  { type: 'drop', label: 'Drop set', hint: 'Counts toward volume.' },
+  { type: 'failure', label: 'To failure', hint: 'Counts, and tells the next session to hold the weight.' }
+];
+
+// THE ACTIVE SESSION.
+//
+// Everything destructive here is one tap and an undo toast. There is not a
+// single confirmation dialog on this screen, including cancelling the whole
+// workout — a dialog asks you to predict whether you will regret something,
+// which is a worse deal than letting you find out and take it back.
+export default function WorkoutScreen({ workout, settings, restTimer, onFinishToast, onExit }) {
   const {
-    exercises, active, workouts,
-    startWorkout, finishWorkout, cancelWorkout,
-    addExerciseToActive, removeExerciseFromActive, reorderExercises, replaceExercise, updateExercise,
-    addSet, updateSet, deleteSet, undo, canUndo, renameWorkout, setNotes
+    exercises, active, workouts, setsFor,
+    finishWorkout, cancelWorkout, restoreCancelled,
+    addExerciseToActive, removeExerciseFromActive, restoreRemovedExercise,
+    skipExercise, unskipExercise, reorderExercises, replaceExercise, updateExercise,
+    addSet, updateSet, toggleSetComplete, deleteSet, restoreSet, setNotes
   } = workout;
 
+  const [menuFor, setMenuFor] = useState(null);      // exerciseId -> ⋮ sheet
+  const [setSheet, setSetSheet] = useState(null);     // one set -> ⋯ sheet
+  const [replaceFor, setReplaceFor] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [replaceFor, setReplaceFor] = useState(null); // exerciseId being replaced
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [finishing, setFinishing] = useState(false);
-  const [shareFor, setShareFor] = useState(null); // finished workout to share
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [picker, setPicker] = useState(null);         // { setId, field, ... }
+  const [finishing, setFinishing] = useState(false);
+  const [shareFor, setShareFor] = useState(null);
   const [now, setNow] = useState(Date.now());
-  const toast = useToast();
+  const undo = useUndoToast();
   const haptic = useHaptic();
 
-  const handleFinish = async () => {
-    if (finishing) return;
-    setFinishing(true);
-    try {
-      const w = await finishWorkout();
-      restTimer.stop();
-      onFinishToast?.(w);
-      if (w) setShareFor(w);
-    } catch (err) {
-      console.error('Failed to finish workout', err);
-      toast('Could not save workout — please try again', { tone: 'error' });
-    } finally {
-      setFinishing(false);
-    }
-  };
+  const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
 
-  // Tick for the elapsed-time badge (1s).
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -61,245 +76,341 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   if (!active) {
     return (
       <>
-        <div className="p-4 flex flex-col items-center justify-center min-h-[70vh] text-center">
-          <div className="w-16 h-16 rounded-2xl bg-card border border-border flex items-center justify-center mb-4">
-            <Play size={28} className="text-accent" />
-          </div>
-          <h1 className="text-xl font-bold">Ready to lift?</h1>
-          <p className="text-muted text-sm mt-2 max-w-xs">
-            Start a workout to log sets, track PRs, and get progression targets for next time.
-          </p>
-          <button
-            onClick={async () => { await startWorkout(defaultName()); haptic(); }}
-            className="mt-6 h-12 px-6 rounded-xl bg-accent text-white font-semibold flex items-center gap-2 active:opacity-80"
-          >
-            <Play size={18} /> Start Workout
-          </button>
-        </div>
+        <EmptyState
+          icon={Timer}
+          title="No session in progress"
+          body="Head back to Today to start one — your split is already picked and the weights are already loaded."
+          action={<SecondaryButton onClick={onExit}>Go to Today</SecondaryButton>}
+        />
         {shareCardEl}
       </>
     );
   }
 
   const elapsed = now - active.startTime;
+  const title = active.split ? splitLabel(active.split) : (active.name || 'Workout');
+  const completedSets = active.sets.filter((s) => s.completed && s.type !== 'warmup').length;
+  const totalSets = active.sets.filter((s) => s.type !== 'warmup').length;
+  const skipped = active.skipped || [];
+
+  const handleFinish = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      const w = await finishWorkout();
+      restTimer.stop();
+      onFinishToast?.(w);
+      if (w) setShareFor(w);
+      onExit?.();
+    } finally { setFinishing(false); }
+  };
 
   return (
-    <div className="p-3 space-y-3">
-      <div className="bg-surface border border-border rounded-2xl p-3">
-        <div className="flex items-center gap-2">
-          <input
-            aria-label="Workout name"
-            value={active.name}
-            onChange={(e) => renameWorkout(e.target.value)}
-            className="flex-1 bg-transparent text-lg font-semibold outline-none"
-          />
-          <div className="flex items-center gap-1 text-xs text-muted">
-            <Timer size={14} /> {formatDuration(elapsed)}
+    <div className="px-base pb-nav">
+      {/* Header ---------------------------------------------------------- */}
+      <GlassCard className="mt-md p-base">
+        <div className="flex items-center gap-md">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-title font-semibold text-ink truncate">{title}</h1>
+            <p className="text-label font-regular text-ink-secondary mt-xxs tabular">
+              {active.exercises.length - skipped.length} exercises ·{' '}
+              {completedSets} of {totalSets} sets · {formatDuration(elapsed)}
+            </p>
           </div>
+          <PrimaryButton onClick={handleFinish} loading={finishing} className="shrink-0">
+            Finish
+          </PrimaryButton>
         </div>
-        <div className="flex items-center gap-2 mt-2 text-xs text-muted">
-          <span>{active.exercises.length} exercises</span>
-          <span>·</span>
-          <span>{active.sets.filter((s) => s.completed).length} sets done</span>
-        </div>
+
+        {restTimer.running && (
+          <div className="mt-md flex items-center gap-sm">
+            <span className="flex-1 flex items-center gap-sm text-label font-semibold text-done tabular">
+              <Timer size={15} strokeWidth={2.2} />
+              Rest {formatDuration(restTimer.remainingSec * 1000)}
+            </span>
+            <button type="button" onClick={restTimer.sub}
+              className="w-tap h-9 rounded-full text-label font-semibold text-ink-secondary active:bg-glass-pressed">−15</button>
+            <button type="button" onClick={restTimer.add}
+              className="w-tap h-9 rounded-full text-label font-semibold text-ink-secondary active:bg-glass-pressed">+15</button>
+            <button type="button" onClick={restTimer.stop}
+              className="px-md h-9 rounded-full text-label font-semibold text-ink active:bg-glass-pressed">Skip</button>
+          </div>
+        )}
+      </GlassCard>
+
+      {/* Exercises --------------------------------------------------------- */}
+      <div className="mt-base flex flex-col gap-sm">
+        {active.exercises.map((exId, idx) => {
+          const ex = exerciseMap.get(exId);
+          if (!ex) {
+            return (
+              <GlassCard key={exId} className="p-base border-danger-border bg-danger-soft">
+                <p className="text-label font-regular text-danger">
+                  Missing exercise ({exId}).{' '}
+                  <TextLink tone="danger" onClick={() => removeExerciseFromActive(exId)}>Remove</TextLink>
+                </p>
+              </GlassCard>
+            );
+          }
+
+          const sets = setsFor(exId);
+          const labelled = setLabels(sets);
+          const prev = previousPerformance(exId, workouts);
+          const rec = recommend({ exercise: ex, workoutHistory: workouts });
+          const pr = sessionPRForExercise(exId, active.sets, workouts);
+
+          return (
+            <ExerciseCard
+              key={exId}
+              exercise={ex}
+              skipped={skipped.includes(exId)}
+              sets={sets}
+              prevLine={prev ? summarizeSets(prev.sets, formatWeight) : 'No previous data'}
+              targetLine={rec.targetWeightKg > 0
+                ? `${formatWeight(rec.targetWeightKg)} × ${rec.targetRepsLow}–${rec.targetRepsHigh}`
+                : `${rec.targetRepsLow}–${rec.targetRepsHigh} reps`}
+              prs={pr ? [{ kind: pr.kind, value: pr.unit === 'kg' ? formatWeight(pr.value) : `${pr.value}` }] : []}
+              renderSet={(s) => {
+                const l = labelled.find((x) => x.set.id === s.id);
+                const prevSet = prev?.sets?.[(l?.number || 1) - 1] || null;
+                return {
+                  number: l?.number ?? null,
+                  set: s,
+                  weightLabel: formatNum(roundDisplay(s.weightKg)),
+                  repsLabel: String(s.reps),
+                  placeholderWeight: prevSet ? formatNum(roundDisplay(prevSet.weightKg)) : null,
+                  placeholderReps: prevSet ? String(prevSet.reps) : null,
+                  onEditWeight: () => setPicker({ setId: s.id, field: 'weight', set: s, exercise: ex, number: l?.number }),
+                  onEditReps: () => setPicker({ setId: s.id, field: 'reps', set: s, exercise: ex, number: l?.number }),
+                  onToggleComplete: async () => {
+                    const next = await toggleSetComplete(s.id);
+                    haptic();
+                    if (next?.completed && next.type !== 'warmup') {
+                      restTimer.start(ex.defaultRestSec || settings.defaultRestSec || 120);
+                    }
+                  },
+                  onOpenMenu: () => setSetSheet({ set: s, exercise: ex, number: l?.number, tag: l?.tag })
+                };
+              }}
+              onAddSet={() => {
+                const last = sets[sets.length - 1];
+                addSet(exId, last
+                  ? { weightKg: last.weightKg, reps: last.reps, type: last.type === 'warmup' ? 'working' : last.type }
+                  : { weightKg: rec.targetWeightKg, reps: rec.targetRepsLow, type: 'working' });
+              }}
+              onOpenMenu={() => setMenuFor(exId)}
+              onSkip={async () => {
+                await skipExercise(exId);
+                haptic();
+                undo(`${ex.name} skipped`, { onUndo: () => unskipExercise(exId) });
+              }}
+              onRestore={() => unskipExercise(exId)}
+            />
+          );
+        })}
       </div>
 
-      {active.exercises.map((exId, idx) => {
-        const ex = exercises.find((e) => e.id === exId);
-        if (!ex) {
-          return (
-            <div key={exId} className="rounded-xl border border-danger/40 bg-danger/10 p-3 text-sm">
-              Missing exercise (id: {exId}).
-              <button className="ml-2 underline" onClick={() => removeExerciseFromActive(exId)}>Remove</button>
-            </div>
-          );
-        }
-        const sets = active.sets.filter((s) => s.exerciseId === exId).sort((a, b) => a.timestamp - b.timestamp);
-        return (
-          <ExerciseCard
-            key={exId}
-            exercise={ex}
-            activeSets={sets}
-            history={workouts}
-            index={idx}
-            totalCount={active.exercises.length}
-            onAddSet={(seed) => addSet(exId, seed)}
-            onUpdateSet={updateSet}
-            onCompleteSet={async (s) => {
-              const nowCompleted = !s.completed;
-              await updateSet(s.id, { completed: nowCompleted, timestamp: Date.now() });
-              haptic();
-              // Start rest timer when marking a working (non-warmup) set complete.
-              if (nowCompleted && s.type !== 'warmup') {
-                const restSec = ex.defaultRestSec || settings.defaultRestSec || 120;
-                restTimer.start(restSec);
-              }
-            }}
-            onDeleteSet={(id) => { deleteSet(id); toast('Set deleted. Tap Undo to restore.'); }}
-            onRemoveExercise={() => { removeExerciseFromActive(exId); toast('Exercise removed. Tap Undo to restore.'); }}
-            onMoveUp={() => reorderExercises(idx, idx - 1)}
-            onMoveDown={() => reorderExercises(idx, idx + 1)}
-            onReplace={() => setReplaceFor(exId)}
-            onChangeIncrement={(inc) => updateExercise(exId, { weightIncrement: inc })}
-          />
-        );
-      })}
+      <SecondaryButton full icon={Plus} className="mt-md" onClick={() => setPickerOpen(true)}>
+        Add exercise
+      </SecondaryButton>
 
-      <button
-        onClick={() => setPickerOpen(true)}
-        className="w-full h-12 rounded-2xl border border-dashed border-border text-muted flex items-center justify-center gap-2 active:bg-card"
-      >
-        <Plus size={18} /> Add exercise
-      </button>
+      <div className="mt-md flex items-center justify-between gap-sm">
+        <button
+          type="button"
+          onClick={() => setNotesOpen(true)}
+          className="inline-flex items-center gap-xs min-h-tap px-sm -ml-sm rounded-full
+                     text-label font-semibold text-ink-secondary active:text-ink"
+        >
+          <StickyNote size={15} strokeWidth={2.2} />
+          {active.notes ? 'Notes added' : 'Add notes'}
+        </button>
 
-      <textarea
-        aria-label="Workout notes"
-        value={active.notes || ''}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Notes (optional)"
-        className="w-full bg-surface border border-border rounded-2xl p-3 text-sm outline-none focus:border-accent min-h-[80px]"
+        {/* Cancel is undoable, so it needs no dialog and no red button shouting
+            at somebody who is just tidying up. */}
+        <TextLink
+          tone="danger"
+          onClick={async () => {
+            const w = await cancelWorkout();
+            onExit?.();
+            undo(`${title} cancelled · ${completedSets} sets`, {
+              tone: 'danger',
+              onUndo: () => restoreCancelled()
+            });
+          }}
+        >
+          Cancel workout
+        </TextLink>
+      </div>
+
+      {/* ⋮ exercise sheet --------------------------------------------------- */}
+      <ExerciseMenuSheet
+        exerciseId={menuFor}
+        exercise={menuFor ? exerciseMap.get(menuFor) : null}
+        index={menuFor ? active.exercises.indexOf(menuFor) : -1}
+        total={active.exercises.length}
+        skipped={menuFor ? skipped.includes(menuFor) : false}
+        onClose={() => setMenuFor(null)}
+        onMoveUp={(id) => { reorderExercises(active.exercises.indexOf(id), active.exercises.indexOf(id) - 1); setMenuFor(null); }}
+        onMoveDown={(id) => { reorderExercises(active.exercises.indexOf(id), active.exercises.indexOf(id) + 1); setMenuFor(null); }}
+        onReplace={(id) => { setMenuFor(null); setReplaceFor(id); }}
+        onSkip={async (id) => {
+          const name = exerciseMap.get(id)?.name || 'Exercise';
+          setMenuFor(null);
+          await skipExercise(id);
+          undo(`${name} skipped`, { onUndo: () => unskipExercise(id) });
+        }}
+        onUnskip={(id) => { unskipExercise(id); setMenuFor(null); }}
+        onRemove={async (id) => {
+          const name = exerciseMap.get(id)?.name || 'Exercise';
+          setMenuFor(null);
+          const snapshot = await removeExerciseFromActive(id);
+          undo(`${name} removed${snapshot?.sets.length ? ` · ${snapshot.sets.length} sets` : ''}`, {
+            tone: 'danger',
+            onUndo: () => restoreRemovedExercise(snapshot)
+          });
+        }}
       />
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          className="h-12 w-12 shrink-0 rounded-xl border border-border text-text disabled:opacity-40 active:bg-card flex items-center justify-center"
-          aria-label="Undo"
-        >
-          <Undo2 size={16} />
-        </button>
-        <button
-          onClick={() => setConfirmCancel(true)}
-          className="h-12 w-12 shrink-0 rounded-xl border border-danger/60 text-danger active:bg-danger/10 flex items-center justify-center"
-          aria-label="Cancel workout"
-        >
-          <X size={16} />
-        </button>
-        <button
-          onClick={handleFinish}
-          disabled={finishing}
-          className="flex-1 h-12 rounded-xl bg-success text-white font-semibold active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
-        >
-          <Square size={16} /> {finishing ? 'Saving…' : 'Finish'}
-        </button>
-      </div>
+      {/* ⋯ set sheet -------------------------------------------------------- */}
+      <BottomSheet
+        open={!!setSheet}
+        onClose={() => setSetSheet(null)}
+        title={setSheet ? `${setSheet.exercise.name} · set ${setSheet.number || setSheet.tag}` : ''}
+        description="Warm-ups are excluded from volume and PR calculations."
+      >
+        {SET_TYPES.map((t) => (
+          <SheetAction
+            key={t.type}
+            label={t.label}
+            hint={t.hint}
+            tone={setSheet?.set.type === t.type ? 'neutral' : 'neutral'}
+            onClick={() => { updateSet(setSheet.set.id, { type: t.type }); setSetSheet(null); }}
+          />
+        ))}
+        <div className="border-t border-hairline mt-sm pt-sm">
+          <SheetAction
+            icon={Trash2}
+            tone="danger"
+            label="Delete set"
+            onClick={async () => {
+              const s = setSheet.set;
+              setSetSheet(null);
+              const removed = await deleteSet(s.id);
+              undo('Set deleted', { tone: 'danger', onUndo: () => restoreSet(removed) });
+            }}
+          />
+        </div>
+      </BottomSheet>
 
-      <ExercisePicker
+      {/* Replace — 3 suggestions, then the library ------------------------ */}
+      <ExercisePickerSheet
+        open={!!replaceFor}
+        onClose={() => setReplaceFor(null)}
+        exercises={exercises}
+        exclude={active.exercises}
+        splitId={active.split}
+        title="Replace with"
+        suggestions={replaceFor
+          ? alternativesFor(exerciseMap.get(replaceFor), active.split,
+              { exercises, workouts, exclude: active.exercises })
+          : []}
+        onPick={async (ex) => {
+          const oldName = exerciseMap.get(replaceFor)?.name || 'Exercise';
+          const target = recommend({ exercise: ex, workoutHistory: workouts });
+          const res = await replaceExercise(replaceFor, ex.id, target);
+          setReplaceFor(null);
+          // Logged sets are never reassigned to a different lift — they stay
+          // attributed to what was actually performed, and the user is told.
+          undo(res.kept
+            ? `${ex.name} added · your ${res.keptCount} logged ${oldName} sets were kept`
+            : `Replaced with ${ex.name}`);
+        }}
+        onManage={() => { setReplaceFor(null); setLibraryOpen(true); }}
+      />
+
+      <ExercisePickerSheet
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         exercises={exercises}
         exclude={active.exercises}
-        onPick={(id) => { addExerciseToActive(id); setPickerOpen(false); }}
+        splitId={active.split}
+        title="Add exercise"
+        onPick={(ex) => {
+          addExerciseToActive(ex.id, 3, recommend({ exercise: ex, workoutHistory: workouts }));
+          setPickerOpen(false);
+        }}
         onManage={() => { setPickerOpen(false); setLibraryOpen(true); }}
       />
 
-      <ExercisePicker
-        open={!!replaceFor}
-        onClose={() => setReplaceFor(null)}
-        exercises={exercises}
-        exclude={active.exercises.filter((e) => e !== replaceFor)}
-        title="Replace with…"
-        onPick={(id) => { replaceExercise(replaceFor, id); setReplaceFor(null); }}
-        onManage={() => { setReplaceFor(null); setLibraryOpen(true); }}
-      />
+      <BottomSheet open={notesOpen} onClose={() => setNotesOpen(false)} title="Session notes">
+        <textarea
+          autoFocus
+          value={active.notes || ''}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="How did it feel?"
+          className="w-full min-h-[120px] p-base rounded-card bg-glass-inset border border-glass-inset-border
+                     text-body font-regular text-ink placeholder:text-ink-tertiary outline-none
+                     focus:border-glass-border resize-none"
+        />
+      </BottomSheet>
 
-      <Modal
-        open={confirmCancel}
-        onClose={() => setConfirmCancel(false)}
-        title="Cancel workout?"
-        footer={
-          <div className="flex gap-2">
-            <button
-              onClick={() => setConfirmCancel(false)}
-              className="flex-1 h-11 rounded-xl border border-border text-text active:bg-card"
-            >
-              Keep going
-            </button>
-            <button
-              onClick={async () => { await cancelWorkout(); setConfirmCancel(false); toast('Workout cancelled', { tone: 'error' }); }}
-              className="flex-1 h-11 rounded-xl bg-danger text-white font-semibold active:opacity-80"
-            >
-              Cancel workout
-            </button>
-          </div>
-        }
-      >
-        <p className="text-sm text-muted">
-          This discards {active.sets.filter((s) => s.completed).length} completed sets across {active.exercises.length}{' '}
-          exercises over {formatDuration(elapsed)}. This cannot be undone.
-        </p>
-      </Modal>
+      {picker && (
+        <WheelPicker
+          open
+          title={`Set ${picker.number || ''} · ${picker.field === 'weight' ? 'Weight' : 'Reps'}`}
+          value={picker.field === 'weight' ? roundDisplay(picker.set.weightKg) : picker.set.reps}
+          min={0}
+          max={picker.field === 'weight' ? 500 : 50}
+          step={picker.field === 'weight' ? (picker.exercise.weightIncrement || 2.5) : 1}
+          unit={picker.field === 'weight' ? 'kg' : ''}
+          stepOptions={picker.field === 'weight' ? [1, 2.5, 5] : undefined}
+          onStepChange={picker.field === 'weight'
+            ? (inc) => updateExercise(picker.exercise.id, { weightIncrement: inc })
+            : undefined}
+          onCancel={() => setPicker(null)}
+          onConfirm={(v) => {
+            updateSet(picker.setId, picker.field === 'weight'
+              ? { weightKg: v }
+              : { reps: Math.max(0, Math.round(v)) });
+            setPicker(null);
+          }}
+        />
+      )}
 
       {shareCardEl}
-
       <ExerciseLibrarySheet open={libraryOpen} onClose={() => setLibraryOpen(false)} workout={workout} />
     </div>
   );
 }
 
-function defaultName() {
-  const d = new Date();
-  const h = d.getHours();
-  const period = h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening';
-  return `${period} Workout`;
+// The ⋮ menu. A SHEET, not a dropdown: the old menu rendered directly over the
+// weight and reps columns it was asking you to make a decision about.
+//
+// Skip and Remove sit next to each other and look equally final, so each one
+// says in a line what it actually does. Two destructive-looking options without
+// that line is a trap.
+function ExerciseMenuSheet({
+  exerciseId, exercise, index, total, skipped,
+  onClose, onMoveUp, onMoveDown, onReplace, onSkip, onUnskip, onRemove
+}) {
+  if (!exerciseId || !exercise) return null;
+  return (
+    <BottomSheet open onClose={onClose} title={exercise.name}>
+      <SheetAction icon={ArrowUp} label="Move up" disabled={index <= 0} onClick={() => onMoveUp(exerciseId)} />
+      <SheetAction icon={ArrowDown} label="Move down" disabled={index >= total - 1} onClick={() => onMoveDown(exerciseId)} />
+      <SheetAction icon={Repeat} label="Replace exercise" hint="Anything already logged stays with the lift you actually did." onClick={() => onReplace(exerciseId)} />
+      {skipped ? (
+        <SheetAction icon={SkipForward} label="Un-skip" hint="Put this exercise back in the session." onClick={() => onUnskip(exerciseId)} />
+      ) : (
+        <SheetAction icon={SkipForward} label="Skip" hint="Costs you nothing — no effect on your streak, volume or completion." onClick={() => onSkip(exerciseId)} />
+      )}
+      <div className="border-t border-hairline mt-sm pt-sm">
+        <SheetAction icon={Trash2} tone="danger" label="Remove from workout" hint="Deletes this exercise and every set logged for it." onClick={() => onRemove(exerciseId)} />
+      </div>
+    </BottomSheet>
+  );
 }
 
-function ExercisePicker({ open, onClose, exercises, exclude = [], onPick, onManage, title = 'Add exercise' }) {
-  const [q, setQ] = useState('');
-  const options = useMemo(() => {
-    const list = exercises
-      .filter((e) => !exclude.includes(e.id))
-      .filter((e) => e.name.toLowerCase().includes(q.toLowerCase()) || (e.muscleGroups || []).join(' ').toLowerCase().includes(q.toLowerCase()));
-    return list.sort((a, b) => a.name.localeCompare(b.name));
-  }, [exercises, exclude, q]);
-
-  return (
-    <Modal open={open} onClose={onClose} title={title}>
-      <div className="relative mb-3">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-        <input
-          autoFocus
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search exercises"
-          className="w-full h-11 pl-9 pr-3 rounded-xl bg-card border border-border outline-none focus:border-accent text-sm"
-        />
-      </div>
-      <ul className="divide-y divide-border">
-        {options.map((ex) => (
-          <li key={ex.id}>
-            <button
-              onClick={() => onPick(ex.id)}
-              className="w-full text-left py-3 flex items-center justify-between active:bg-card px-2 rounded-lg"
-            >
-              <div>
-                <div className="text-sm font-medium">{ex.name}</div>
-                <div className="text-xs text-muted">{(ex.muscleGroups || []).join(' · ')}</div>
-              </div>
-              <Plus size={16} className="text-muted" />
-            </button>
-          </li>
-        ))}
-        {options.length === 0 && (
-          <li className="text-center text-muted text-sm py-8">
-            No matches
-            {onManage && (
-              <button onClick={onManage} className="block mx-auto mt-3 text-accent text-sm underline">
-                Create "{q.trim() || 'a new exercise'}" in the library
-              </button>
-            )}
-          </li>
-        )}
-      </ul>
-      {onManage && (
-        <button
-          onClick={onManage}
-          className="w-full mt-2 h-11 rounded-xl border border-border text-muted text-sm flex items-center justify-center gap-2 active:bg-card"
-        >
-          <ListChecks size={16} /> Manage exercise library
-        </button>
-      )}
-    </Modal>
-  );
+function formatNum(v) {
+  return Number.isInteger(v) ? String(v) : v.toFixed(1).replace(/\.0$/, '');
 }

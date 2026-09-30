@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
-import Navigation from './components/Navigation.jsx';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import RestTimer from './components/RestTimer.jsx';
 import { ToastProvider, useToast } from './components/Toast.jsx';
+import { TabBar, ResumePill, UndoToastProvider } from './ui/index.js';
+import TodayScreen from './pages/Today.jsx';
 import WorkoutScreen from './pages/WorkoutScreen.jsx';
 import HistoryScreen from './pages/History.jsx';
 import ProgressScreen from './pages/Progress.jsx';
@@ -19,19 +20,27 @@ import { unreadCount } from './services/friendsApi.js';
 import { maybeAutoBackup } from './services/backupApi.js';
 import { useWorkout } from './hooks/useWorkout.js';
 import { useRestTimer } from './hooks/useRestTimer.js';
+import { useFeed } from './hooks/useFeed.js';
+import { splitLabel } from './services/splits.js';
 import { ensureInitialized } from './db/database.js';
 import { maybeSeed } from './db/seedData.js';
 
 export default function App() {
   return (
     <ToastProvider>
-      <Root />
+      <UndoToastProvider>
+        <Root />
+      </UndoToastProvider>
     </ToastProvider>
   );
 }
 
 function Root() {
-  const [tab, setTab] = useState('workout');
+  // Today is the default home. 'workout' is no longer a tab — the active session
+  // is a place you are sent to, from the hero or the resume pill, not a
+  // destination you browse to while nothing is running.
+  const [tab, setTab] = useState('today');
+  const [inSession, setInSession] = useState(false);
   // Auth is shown as an overlay rather than a tab: it is a detour, and you should
   // land back exactly where you were when you finish or back out.
   const [authOpen, setAuthOpen] = useState(null); // null | 'signin' | 'signup'
@@ -59,6 +68,23 @@ function Root() {
     workouts: workout.workouts
   });
   const toast = useToast();
+
+  // One feed instance for the whole app, so the Today preview and the Community
+  // tab read the same rows, share one poll, and can never disagree about what
+  // happened.
+  const feed = useFeed('global', { enabled: auth.signedIn && auth.cloudConfigured });
+
+  // The lift the resume pill names: the last one you touched, which is what
+  // "where was I?" actually means.
+  const currentExerciseName = useMemo(() => {
+    const a = workout.active;
+    if (!a) return null;
+    const touched = [...(a.sets || [])]
+      .filter((s) => s.completedAt)
+      .sort((x, y) => y.completedAt - x.completedAt)[0];
+    const id = touched?.exerciseId || a.exercises?.[0];
+    return workout.exercises.find((e) => e.id === id)?.name || null;
+  }, [workout.active, workout.exercises]);
 
   const restTimer = useRestTimer({
     onComplete: () => {
@@ -217,12 +243,26 @@ function Root() {
           />
         ) : (
         <>
-        {tab === 'workout' && (
+        {inSession && workout.active ? (
           <WorkoutScreen
             workout={workout}
             settings={settings}
             restTimer={restTimer}
             onFinishToast={onFinishToast}
+            onExit={() => setInSession(false)}
+          />
+        ) : (
+        <>
+        {tab === 'today' && (
+          <TodayScreen
+            workout={workout}
+            settings={settings}
+            auth={auth}
+            profile={profileState.profile}
+            feed={feed}
+            onResume={() => setInSession(true)}
+            onOpenCommunity={() => { setSocialSection('feed'); setTab('social'); }}
+            onOpenProfile={(id) => setViewingUserId(id)}
           />
         )}
         {tab === 'history' && <HistoryScreen workout={workout} />}
@@ -243,10 +283,13 @@ function Root() {
             onUnreadChange={onSocialChanged}
             refreshToken={socialRefresh}
             profile={profileState.profile}
+            feed={feed}
             onOpenSettings={() => { setViewingUserId(null); setProfileOpen(true); }}
           />
         )}
         {tab === 'settings' && <SettingsScreen settings={settings} updateSettings={updateSettings} workout={workout} auth={auth} onSignIn={() => setAuthOpen('signin')} />}
+        </>
+        )}
         </>
         )}
       </main>
@@ -259,11 +302,22 @@ function Root() {
         onSkip={restTimer.stop}
       />
 
-      <Navigation
-        current={profileOpen ? null : tab}
-        onChange={(t) => { setProfileOpen(false); setViewingUserId(null); setTab(t); }}
+      {/* Above the tab bar on EVERY tab while a session is live, so wandering
+          off to check the leaderboard mid-workout is never a one-way trip. */}
+      {workout.active && !inSession && (
+        <ResumePill
+          splitName={workout.active.split ? splitLabel(workout.active.split) : null}
+          currentExercise={currentExerciseName}
+          startedAt={workout.active.startTime}
+          onResume={() => { setProfileOpen(false); setViewingUserId(null); setInSession(true); }}
+        />
+      )}
+
+      <TabBar
+        current={inSession || profileOpen ? null : tab}
+        onChange={(t) => { setProfileOpen(false); setViewingUserId(null); setInSession(false); setTab(t); }}
         workoutActive={!!workout.active}
-        socialBadge={unread}
+        badges={{ social: unread }}
       />
     </div>
   );

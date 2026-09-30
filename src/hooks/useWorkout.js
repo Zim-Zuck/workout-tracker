@@ -1,58 +1,82 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   getActiveWorkout, saveWorkout, deleteWorkout, getAllWorkouts, getAllExercises, saveExercise
 } from '../db/database.js';
+import { nextOrder, orderedSets } from '../db/normalize.js';
 import { uid } from '../utils/id.js';
 
 // Central state for exercises, workout history and the (single) active workout.
-// The active workout is persisted to IndexedDB on every mutation so an unexpected
-// close never loses progress.
+// The active workout is persisted to IndexedDB on every mutation, so an
+// unexpected close never loses progress.
 export function useWorkout() {
   const [exercises, setExercises] = useState([]);
   const [workouts, setWorkouts] = useState([]);
   const [active, setActive] = useState(null);
   const [loaded, setLoaded] = useState(false);
-  const [undoStack, setUndoStack] = useState([]); // in-memory only
+
+  // A cancelled session, held in memory only, so Undo can put it back. It is
+  // already out of IndexedDB by the time it lands here: the toast is the last
+  // moment it exists, which is the honest way to offer an undo we can keep.
+  const cancelled = useRef(null);
 
   const refresh = useCallback(async () => {
     const [ex, wos, a] = await Promise.all([getAllExercises(), getAllWorkouts(), getActiveWorkout()]);
     setExercises(ex);
-    // History = non-active workouts.
-    setWorkouts(wos.filter((w) => !w.isActive));
+    setWorkouts(wos.filter((w) => !w.isActive)); // History = non-active workouts.
     setActive(a);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      await refresh();
-      setLoaded(true);
-    })();
+    (async () => { await refresh(); setLoaded(true); })();
   }, [refresh]);
 
-  // Save an updated active workout to IDB and state atomically.
   const persistActive = useCallback(async (next) => {
     setActive(next);
     if (next) await saveWorkout(next);
+    return next;
   }, []);
 
   // ---- Workout lifecycle ----
-  const startWorkout = useCallback(async (name = 'Workout') => {
-    // Re-check IDB (not just local `active` state) so a stale hook instance or a
-    // second tab can never create two concurrently active workouts.
+
+  // `plan` comes from sessionBuilder: [{ exercise, sets, target }]. Passing it
+  // here rather than adding exercises one by one means the session that starts
+  // is exactly the session that was previewed on the hero — same exercises, same
+  // set counts, same prefilled weights.
+  const startWorkout = useCallback(async ({ split = null, name = null, plan = [] } = {}) => {
+    // Re-check IDB (not just local state) so a stale hook instance or a second
+    // tab can never create two concurrently active workouts.
     const existing = await getActiveWorkout();
-    if (existing) {
-      setActive(existing);
-      return existing;
-    }
+    if (existing) { setActive(existing); return existing; }
+
     const now = Date.now();
+    const sets = [];
+    for (const item of plan) {
+      for (let i = 0; i < (item.sets || 0); i++) {
+        sets.push({
+          id: uid('set'),
+          exerciseId: item.exercise.id,
+          type: 'working',
+          weightKg: item.target?.targetWeightKg || 0,
+          reps: item.target?.targetRepsLow || 0,
+          order: i,
+          timestamp: now,
+          completedAt: null,
+          completed: false
+        });
+      }
+    }
+
     const wo = {
       id: uid('wo'),
       date: now,
       startTime: now,
       endTime: null,
-      name,
-      exercises: [],
-      sets: [],
+      split,
+      // Named by its split, never "Afternoon Workout".
+      name: name || null,
+      exercises: plan.map((p) => p.exercise.id),
+      sets,
+      skipped: [],
       notes: '',
       isActive: 1
     };
@@ -69,47 +93,140 @@ export function useWorkout() {
     return done;
   }, [active, refresh]);
 
+  // Cancelling is undoable, not a confirmation dialog. The session leaves the
+  // database immediately (so a reload cannot resurrect a half-cancelled state)
+  // and is held in memory for as long as the toast is on screen.
   const cancelWorkout = useCallback(async () => {
-    if (!active) return;
+    if (!active) return null;
+    cancelled.current = active;
     await deleteWorkout(active.id);
     setActive(null);
     await refresh();
+    return active;
   }, [active, refresh]);
 
-  // ---- Exercise editing inside the active workout ----
-  const addExerciseToActive = useCallback(async (exerciseId) => {
+  const restoreCancelled = useCallback(async () => {
+    const w = cancelled.current;
+    if (!w) return null;
+    cancelled.current = null;
+    await saveWorkout(w);
+    await refresh();
+    return w;
+  }, [refresh]);
+
+  // ---- Exercises inside the active workout ----
+
+  const addExerciseToActive = useCallback(async (exerciseId, seedSets = 0, target = null) => {
     if (!active) return;
     if (active.exercises.includes(exerciseId)) return;
-    await persistActive({ ...active, exercises: [...active.exercises, exerciseId] });
+    const now = Date.now();
+    const seeded = Array.from({ length: seedSets }, (_, i) => ({
+      id: uid('set'), exerciseId, type: 'working',
+      weightKg: target?.targetWeightKg || 0, reps: target?.targetRepsLow || 0,
+      order: i, timestamp: now, completedAt: null, completed: false
+    }));
+    await persistActive({
+      ...active,
+      exercises: [...active.exercises, exerciseId],
+      sets: [...active.sets, ...seeded]
+    });
   }, [active, persistActive]);
 
+  // REMOVE deletes the exercise and every set logged for it. Returns what it
+  // removed so the caller's undo toast can put it back exactly.
   const removeExerciseFromActive = useCallback(async (exerciseId) => {
-    if (!active) return;
+    if (!active) return null;
     const removedSets = active.sets.filter((s) => s.exerciseId === exerciseId);
-    setUndoStack((u) => [...u, { kind: 'removeExercise', exerciseId, sets: removedSets }].slice(-10));
+    const index = active.exercises.indexOf(exerciseId);
     await persistActive({
       ...active,
       exercises: active.exercises.filter((e) => e !== exerciseId),
-      sets: active.sets.filter((s) => s.exerciseId !== exerciseId)
+      sets: active.sets.filter((s) => s.exerciseId !== exerciseId),
+      skipped: (active.skipped || []).filter((e) => e !== exerciseId)
     });
+    return { exerciseId, index, sets: removedSets };
+  }, [active, persistActive]);
+
+  const restoreRemovedExercise = useCallback(async (snapshot) => {
+    if (!active || !snapshot) return;
+    const list = active.exercises.slice();
+    list.splice(Math.min(snapshot.index, list.length), 0, snapshot.exerciseId);
+    await persistActive({ ...active, exercises: list, sets: [...active.sets, ...snapshot.sets] });
+  }, [active, persistActive]);
+
+  // SKIP is not remove. The exercise stays in the session, its sets stay
+  // logged, and it is recorded in `skipped` so the session builder learns to
+  // stop suggesting a lift that keeps getting walked past. Nothing about a skip
+  // counts against the person: not the streak, not volume, not completion.
+  const skipExercise = useCallback(async (exerciseId) => {
+    if (!active) return;
+    if ((active.skipped || []).includes(exerciseId)) return;
+    await persistActive({ ...active, skipped: [...(active.skipped || []), exerciseId] });
+  }, [active, persistActive]);
+
+  const unskipExercise = useCallback(async (exerciseId) => {
+    if (!active) return;
+    await persistActive({ ...active, skipped: (active.skipped || []).filter((e) => e !== exerciseId) });
   }, [active, persistActive]);
 
   const reorderExercises = useCallback(async (fromIdx, toIdx) => {
     if (!active) return;
+    if (toIdx < 0 || toIdx >= active.exercises.length) return;
     const next = active.exercises.slice();
     const [m] = next.splice(fromIdx, 1);
     next.splice(toIdx, 0, m);
     await persistActive({ ...active, exercises: next });
   }, [active, persistActive]);
 
-  const replaceExercise = useCallback(async (oldId, newId) => {
-    if (!active) return;
-    if (active.exercises.includes(newId)) return;
-    const nextEx = active.exercises.map((e) => (e === oldId ? newId : e));
-    // Keep sets referencing the old exercise as history in this workout? No — they meant a different lift.
-    // We move any sets already logged to the replacement, so effort isn't lost.
-    const nextSets = active.sets.map((s) => (s.exerciseId === oldId ? { ...s, exerciseId: newId } : s));
-    await persistActive({ ...active, exercises: nextEx, sets: nextSets });
+  // REPLACING NEVER REASSIGNS LOGGED SETS.
+  //
+  // The old implementation moved every set from the old exercise to the new one
+  // "so effort isn't lost", which quietly rewrote history: three sets of lat
+  // pulldown at 60 kg became three sets of cable row at 60 kg, and the PR, the
+  // progression target and the published summary all followed the lie.
+  //
+  // If nothing has been logged yet, the swap is clean. If sets exist, they stay
+  // attributed to the lift that was actually performed and the replacement is
+  // inserted after it — you did both, so the session says you did both.
+  const replaceExercise = useCallback(async (oldId, newId, target = null) => {
+    if (!active) return { kept: false };
+    if (active.exercises.includes(newId)) return { kept: false, alreadyPresent: true };
+
+    const logged = active.sets.filter((s) => s.exerciseId === oldId);
+    const idx = active.exercises.indexOf(oldId);
+    const now = Date.now();
+    // The replacement arrives with the same three empty sets a fresh exercise
+    // gets, already loaded with its own progression target.
+    const seeded = Array.from({ length: 3 }, (_, i) => ({
+      id: uid('set'), exerciseId: newId, type: 'working',
+      weightKg: target?.targetWeightKg || 0, reps: target?.targetRepsLow || 0,
+      order: i, timestamp: now, completedAt: null, completed: false
+    }));
+
+    if (!logged.length) {
+      const next = active.exercises.slice();
+      next[idx] = newId;
+      await persistActive({
+        ...active,
+        exercises: next,
+        sets: [...active.sets, ...seeded],
+        skipped: (active.skipped || []).filter((e) => e !== oldId)
+      });
+      return { kept: false };
+    }
+
+    const next = active.exercises.slice();
+    next.splice(idx + 1, 0, newId);
+    await persistActive({
+      ...active,
+      exercises: next,
+      // The replaced lift is marked skipped: you stopped doing it mid-session,
+      // which is exactly what skip means, and it keeps the card collapsed
+      // instead of leaving two open cards competing for attention.
+      skipped: [...new Set([...(active.skipped || []), oldId])],
+      sets: [...active.sets, ...seeded]
+    });
+    return { kept: true, keptCount: logged.length };
   }, [active, persistActive]);
 
   // ---- Exercise preferences ----
@@ -121,16 +238,22 @@ export function useWorkout() {
     setExercises((list) => list.map((e) => (e.id === exerciseId ? next : e)));
   }, [exercises]);
 
-  // ---- Set editing ----
+  // ---- Sets ----
+
   const addSet = useCallback(async (exerciseId, patch) => {
     if (!active) return;
+    const now = Date.now();
     const set = {
       id: uid('set'),
       exerciseId,
       type: 'working',
       weightKg: 0,
       reps: 0,
-      timestamp: Date.now(),
+      // Monotonic per exercise: deleting set 2 of 3 and adding a new one gives
+      // it order 3, so no two sets in a session can ever share a position.
+      order: nextOrder(active.sets, exerciseId),
+      timestamp: now,
+      completedAt: null,
       completed: false,
       ...patch
     };
@@ -140,31 +263,39 @@ export function useWorkout() {
 
   const updateSet = useCallback(async (setId, patch) => {
     if (!active) return;
-    const nextSets = active.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s));
-    await persistActive({ ...active, sets: nextSets });
+    await persistActive({
+      ...active,
+      sets: active.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s))
+    });
+  }, [active, persistActive]);
+
+  // Ticking a set records WHEN, and touches nothing that decides WHERE the row
+  // sits. That separation is the whole fix for the duplicate set number.
+  const toggleSetComplete = useCallback(async (setId) => {
+    if (!active) return null;
+    const set = active.sets.find((s) => s.id === setId);
+    if (!set) return null;
+    const completed = !set.completed;
+    await persistActive({
+      ...active,
+      sets: active.sets.map((s) => (
+        s.id === setId ? { ...s, completed, completedAt: completed ? Date.now() : null } : s
+      ))
+    });
+    return { ...set, completed };
   }, [active, persistActive]);
 
   const deleteSet = useCallback(async (setId) => {
-    if (!active) return;
+    if (!active) return null;
     const removed = active.sets.find((s) => s.id === setId);
-    if (removed) setUndoStack((u) => [...u, { kind: 'removeSet', set: removed }].slice(-10));
     await persistActive({ ...active, sets: active.sets.filter((s) => s.id !== setId) });
+    return removed;
   }, [active, persistActive]);
 
-  const undo = useCallback(async () => {
-    if (!active || undoStack.length === 0) return;
-    const last = undoStack[undoStack.length - 1];
-    setUndoStack((u) => u.slice(0, -1));
-    if (last.kind === 'removeSet') {
-      await persistActive({ ...active, sets: [...active.sets, last.set] });
-    } else if (last.kind === 'removeExercise') {
-      await persistActive({
-        ...active,
-        exercises: [...active.exercises, last.exerciseId],
-        sets: [...active.sets, ...last.sets]
-      });
-    }
-  }, [active, undoStack, persistActive]);
+  const restoreSet = useCallback(async (set) => {
+    if (!active || !set) return;
+    await persistActive({ ...active, sets: [...active.sets, set] });
+  }, [active, persistActive]);
 
   const setNotes = useCallback(async (notes) => {
     if (!active) return;
@@ -176,40 +307,63 @@ export function useWorkout() {
     await persistActive({ ...active, name });
   }, [active, persistActive]);
 
-  // ---- Historical workout editing (used in History screen) ----
+  // ---- Historical workouts (History screen) ----
   const updateHistoricalWorkout = useCallback(async (w) => {
     await saveWorkout({ ...w, isActive: 0 });
     await refresh();
   }, [refresh]);
 
+  // Deleting history is undoable too: the record is handed back so the caller
+  // can hold it for the life of a toast and put it back on request.
   const deleteHistoricalWorkout = useCallback(async (id) => {
+    const all = await getAllWorkouts();
+    const snapshot = all.find((w) => w.id === id) || null;
     await deleteWorkout(id);
     await refresh();
+    return snapshot;
   }, [refresh]);
+
+  const restoreHistoricalWorkout = useCallback(async (w) => {
+    if (!w) return;
+    await saveWorkout(w);
+    await refresh();
+  }, [refresh]);
+
+  // Sets of one exercise in the active workout, in their permanent order.
+  const setsFor = useCallback(
+    (exerciseId) => (active ? orderedSets(active.sets, exerciseId) : []),
+    [active]
+  );
 
   return {
     loaded,
     exercises,
-    setExercises, // so ExerciseLibrary can refresh
+    setExercises,
     workouts,
     active,
+    setsFor,
     startWorkout,
     finishWorkout,
     cancelWorkout,
+    restoreCancelled,
     addExerciseToActive,
     removeExerciseFromActive,
+    restoreRemovedExercise,
+    skipExercise,
+    unskipExercise,
     reorderExercises,
     replaceExercise,
     updateExercise,
     addSet,
     updateSet,
+    toggleSetComplete,
     deleteSet,
-    undo,
-    canUndo: undoStack.length > 0,
+    restoreSet,
     setNotes,
     renameWorkout,
     updateHistoricalWorkout,
     deleteHistoricalWorkout,
+    restoreHistoricalWorkout,
     refresh
   };
 }
