@@ -18,79 +18,127 @@ export const SCHEMA_VERSION = 1;
 
 let _dbPromise = null;
 
+// The schema upgrade, as a plain function so it can be exercised against a
+// purpose-built old database in a test rather than only against whatever
+// happens to be on this device. openDB() below is its only production caller.
+//
+// `db` is the IDBDatabase mid-upgrade, `oldVersion` the version being upgraded
+// from, `transaction` the versionchange transaction.
+export function applyUpgrades(db, oldVersion, transaction) {
+    // Each block runs only for DBs upgrading across that version, so a device
+    // already on version N skips blocks <= N and only applies newer ones.
+    if (oldVersion < 1) {
+    if (!db.objectStoreNames.contains('exercises')) {
+        db.createObjectStore('exercises', { keyPath: 'id' });
+    }
+    if (!db.objectStoreNames.contains('workouts')) {
+        const s = db.createObjectStore('workouts', { keyPath: 'id' });
+        s.createIndex('date', 'date');
+        s.createIndex('isActive', 'isActive');
+    }
+    if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
+    if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+    }
+
+    // v2: social layer. Both stores are local-only scratch space — the outbox
+    // holds cloud writes waiting for a connection, socialCache holds the last
+    // successful read of each social screen so they render offline. Neither
+    // contains anything that isn't reconstructible, so no data migration is
+    // needed and a user upgrading loses nothing.
+    if (oldVersion < 2) {
+    if (!db.objectStoreNames.contains('outbox')) {
+        const s = db.createObjectStore('outbox', { keyPath: 'id' });
+        s.createIndex('kind', 'kind');
+        s.createIndex('createdAt', 'createdAt');
+    }
+    if (!db.objectStoreNames.contains('socialCache')) {
+        db.createObjectStore('socialCache', { keyPath: 'key' });
+    }
+    }
+
+    // v3: stable set ordering, skip tracking, and split names.
+    //
+    // The first DATA migration this app has had — v2 only added empty stores.
+    // Every existing workout is rewritten through normalizeWorkout(), which
+    // assigns each set a permanent `order` from its historical timestamp
+    // sequence, splits completion time out of `timestamp` into `completedAt`,
+    // and gives the workout an empty `skipped` list and a null `split`.
+    //
+    // It runs inside the upgrade transaction, so it either completes fully or
+    // the whole upgrade rolls back and the database stays on v2 — there is no
+    // state where half the history has been rewritten. normalizeWorkout() is
+    // additive and idempotent: no field is dropped, and a record that already
+    // has the new shape passes through unchanged.
+    if (oldVersion < 3) {
+      const cursorReq = transaction.objectStore('workouts').openCursor();
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (!cursor) return;
+        // update() rather than put(): keeps us on the cursor's own key and
+        // cannot accidentally insert under a changed id.
+        cursor.update(normalizeWorkout(cursor.value));
+        cursor.continue();
+      };
+    }
+
+    // Next schema change: bump DB_VERSION above and add `if (oldVersion < 4) { ... }`
+    // here (new stores/indexes, or data rewrites via transaction).
+
+}
+
 export function openDB() {
   if (_dbPromise) return _dbPromise;
+  let settled = false;
+  let blocked = false;
   _dbPromise = new Promise((resolve, reject) => {
+    const settle = (fn) => (v) => { if (settled) return; settled = true; fn(v); };
+    const _resolve = resolve; const _reject = reject;
+    resolve = settle(_resolve); reject = settle(_reject);
     if (!('indexedDB' in globalThis)) return reject(new Error('IndexedDB not supported in this browser.'));
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
+    req.onupgradeneeded = (e) => applyUpgrades(req.result, e.oldVersion, e.target.transaction);
+
+    req.onsuccess = () => {
       const db = req.result;
-      const oldVersion = e.oldVersion;
-
-      // Each block runs only for DBs upgrading across that version, so a device
-      // already on version N skips blocks <= N and only applies newer ones.
-      if (oldVersion < 1) {
-        if (!db.objectStoreNames.contains('exercises')) {
-          db.createObjectStore('exercises', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('workouts')) {
-          const s = db.createObjectStore('workouts', { keyPath: 'id' });
-          s.createIndex('date', 'date');
-          s.createIndex('isActive', 'isActive');
-        }
-        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
-      }
-
-      // v2: social layer. Both stores are local-only scratch space — the outbox
-      // holds cloud writes waiting for a connection, socialCache holds the last
-      // successful read of each social screen so they render offline. Neither
-      // contains anything that isn't reconstructible, so no data migration is
-      // needed and a user upgrading loses nothing.
-      if (oldVersion < 2) {
-        if (!db.objectStoreNames.contains('outbox')) {
-          const s = db.createObjectStore('outbox', { keyPath: 'id' });
-          s.createIndex('kind', 'kind');
-          s.createIndex('createdAt', 'createdAt');
-        }
-        if (!db.objectStoreNames.contains('socialCache')) {
-          db.createObjectStore('socialCache', { keyPath: 'key' });
-        }
-      }
-
-      // v3: stable set ordering, skip tracking, and split names.
+      // WHEN ANOTHER TAB NEEDS TO UPGRADE, GET OUT OF ITS WAY.
       //
-      // The first DATA migration this app has had — v2 only added empty stores.
-      // Every existing workout is rewritten through normalizeWorkout(), which
-      // assigns each set a permanent `order` from its historical timestamp
-      // sequence, splits completion time out of `timestamp` into `completedAt`,
-      // and gives the workout an empty `skipped` list and a null `split`.
-      //
-      // It runs inside the upgrade transaction, so it either completes fully or
-      // the whole upgrade rolls back and the database stays on v2 — there is no
-      // state where half the history has been rewritten. normalizeWorkout() is
-      // additive and idempotent: no field is dropped, and a record that already
-      // has the new shape passes through unchanged.
-      if (oldVersion < 3) {
-        const store = e.target.transaction.objectStore('workouts');
-        const cursorReq = store.openCursor();
-        cursorReq.onsuccess = () => {
-          const cursor = cursorReq.result;
-          if (!cursor) return;
-          const migrated = normalizeWorkout(cursor.value);
-          // update() rather than put(): keeps us on the cursor's own key and
-          // cannot accidentally insert under a changed id.
-          cursor.update(migrated);
-          cursor.continue();
-        };
-      }
-
-      // Next schema change: bump DB_VERSION above and add `if (oldVersion < 4) { ... }`
-      // here (new stores/indexes, or data rewrites via e.target.transaction).
+      // Without this, an older tab holding a connection blocks a newer tab's
+      // version upgrade indefinitely: the new tab's open request never fires
+      // success, never fires error, and the app sits on its loading spinner
+      // forever with nothing on screen to explain why. Closing here lets the
+      // upgrade proceed; this tab's own next database call reopens at the new
+      // version through the same memoised promise being reset below.
+      db.onversionchange = () => {
+        db.close();
+        _dbPromise = null;
+      };
+      resolve(db);
     };
-    req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
-    req.onblocked = () => reject(new Error('Database upgrade blocked by another tab.'));
+    // Fires when an upgrade cannot start because another connection is still
+    // open and has not yielded. With onversionchange above this should be
+    // momentary, so we wait rather than failing instantly — but we do not wait
+    // forever (see the timeout below).
+    req.onblocked = () => {
+      blocked = true;
+    };
+
+    // A last-resort guard so a wedged connection surfaces as a message the user
+    // can act on instead of an infinite spinner. Ten seconds is far longer than
+    // any real upgrade of a database this size.
+    setTimeout(() => {
+      if (settled) return;
+      reject(new Error(
+        blocked
+          ? 'Another tab is using an older version of Kun Workouts. Close it and reload.'
+          : 'The database did not open. Close any other tabs running this app and reload.'
+      ));
+    }, 10000);
+  }).catch((err) => {
+    // Never cache a failure: the next attempt (after the user closes the other
+    // tab and reloads, or simply retries) gets a fresh request.
+    _dbPromise = null;
+    throw err;
   });
   return _dbPromise;
 }

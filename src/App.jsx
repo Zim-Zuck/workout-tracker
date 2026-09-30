@@ -97,17 +97,26 @@ function Root() {
   });
 
   // Initialize IDB, seed defaults, optionally seed sample data in dev.
+  //
+  // useWorkout() starts its own first read the moment it mounts, which races
+  // this: on a genuinely first launch it can read an empty database, mark
+  // itself loaded, and then never look again — so the exercise library and any
+  // seeded history stay invisible until the next reload. Refreshing once after
+  // initialisation completes closes that window.
   useEffect(() => {
     (async () => {
       try {
         await ensureInitialized();
         if (import.meta.env.DEV) await maybeSeed();
+        await workout.refresh();
         setDbReady(true);
       } catch (err) {
         console.error(err);
         setDbError(err.message || String(err));
       }
     })();
+    // Intentionally once: this is app boot, not a subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshUnread = useCallback(async () => {

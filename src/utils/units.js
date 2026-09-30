@@ -20,3 +20,14 @@ export function formatWeight(kg, opts = {}) {
     : plain;
   return withUnit ? `${str} kg` : str;
 }
+
+// A session, weekly or lifetime VOLUME total.
+//
+// Always grouped and always whole kilograms: "6,808 kg" rather than
+// "6807.5 kg". Half a kilo on a total of several tonnes is noise, and the
+// separator is what makes the magnitude readable at a glance. Bar loads keep
+// using formatWeight(), where the half matters and the separator never does.
+export function formatVolume(kg) {
+  const v = Math.round(kg || 0);
+  return `${v.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`;
+}

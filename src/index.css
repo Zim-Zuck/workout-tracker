@@ -44,8 +44,8 @@ html {
   background-image: linear-gradient(
     180deg,
     var(--c-gradient-0) 0%,
-    var(--c-gradient-1) 30%,
-    var(--c-gradient-2) 66%
+    var(--c-gradient-1) 22%,
+    var(--c-gradient-2) 55%
   );
   background-repeat: no-repeat;
 }
@@ -62,7 +62,10 @@ body {
   overscroll-behavior-y: none;
   touch-action: manipulation;
 
-  background-color: var(--c-bg);
+  /* Deliberately transparent. <html> carries the ambient gradient, and body
+     covers the whole viewport — an opaque background here paints flat black
+     over the gradient and the app loses its ground. */
+  background: transparent;
 }
 
 input, button, select, textarea { font-family: inherit; font-size: inherit; letter-spacing: inherit; }

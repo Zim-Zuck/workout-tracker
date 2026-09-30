@@ -13,7 +13,7 @@ import { recommend } from '../services/progression.js';
 import { prTimeline } from '../services/prs.js';
 import { workingVolume, computeStreak } from '../services/calculations.js';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
-import { formatWeight } from '../utils/units.js';
+import { formatWeight, formatVolume } from '../utils/units.js';
 import { formatDuration, startOfWeek, formatDate } from '../utils/date.js';
 
 // TODAY — the home of the app.
@@ -205,11 +205,11 @@ export default function Today({
         <GlassCard className="mt-base p-base flex items-center gap-md">
           <div className="flex-1 min-w-0">
             <p className="text-micro font-semibold uppercase text-ink-tertiary">Last session</p>
-            <p className="text-label font-regular text-ink-secondary mt-xs tabular truncate">
+            <p className="text-label font-regular text-ink-secondary mt-xs tabular">
               {formatDate(lastSession.date)}
               {lastSession.endTime ? ` · ${formatDuration(lastSession.endTime - lastSession.startTime)}` : ''}
               {' · '}{lastSession.sets.filter((s) => s.completed && s.type !== 'warmup').length} sets
-              {' · '}{formatWeight(workingVolume(lastSession.sets))}
+              {' · '}{formatVolume(workingVolume(lastSession.sets))}
             </p>
           </div>
           <SecondaryButton
