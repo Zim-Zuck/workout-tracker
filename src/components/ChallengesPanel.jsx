@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Swords, Trophy, Clock, Check, X, CloudOff, Plus, Search } from 'lucide-react';
+import { Swords, Trophy, Clock, Check, X, CloudOff, Plus, Search , BellRing } from 'lucide-react';
 import { Avatar } from './AppHeader.jsx';
 import Modal from './Modal.jsx';
 import { useToast } from './Toast.jsx';
 import {
-  listChallenges, respondToChallenge, createChallenge, resolveFinishedChallenges
+  listChallenges, respondToChallenge, createChallenge, resolveFinishedChallenges,
+  withdrawChallenge, nudgeChallenge, ServerFeatureMissing
 } from '../services/challengesApi.js';
 import { listFriendships, searchUsers } from '../services/friendsApi.js';
 import { buildLiftsSummary } from '../services/socialSummary.js';
@@ -27,6 +28,7 @@ export default function ChallengesPanel({
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(null);
   const toast = useToast();
 
   const exNames = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
@@ -66,6 +68,36 @@ export default function ChallengesPanel({
       onChanged?.();
     } catch (err) {
       toast(err.message, { tone: 'error' });
+    }
+  };
+
+  // Withdrawing removes the challenge from the other person's inbox, so it is
+  // undoable the only way it can be: it isn't. It IS, however, the one
+  // destructive action here that costs somebody else nothing — the challenge
+  // was never accepted — so it needs no ceremony either.
+  const withdraw = async (id, who) => {
+    setBusy(id);
+    try {
+      await withdrawChallenge(id);
+      toast(`Challenge to ${who} withdrawn`);
+      await load();
+      onChanged?.();
+    } catch (err) {
+      toast(err.message, { tone: 'error', duration: err instanceof ServerFeatureMissing ? 5000 : 2200 });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendNudge = async (id) => {
+    setBusy(id);
+    try {
+      await nudgeChallenge(id);
+      toast('Nudged', { tone: 'success' });
+    } catch (err) {
+      toast(err.message, { tone: 'error', duration: err instanceof ServerFeatureMissing ? 5000 : 2200 });
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -125,7 +157,35 @@ export default function ChallengesPanel({
       ))}
 
       {active.map((c) => <Card key={c.id} c={c} exNames={exNames} myId={myId} />)}
-      {sent.map((c) => <Card key={c.id} c={c} exNames={exNames} />)}
+
+      {/* A challenge you sent that nobody has answered. Until now the only
+          thing you could do with one was look at it. */}
+      {sent.map((c) => (
+        <Card key={c.id} c={c} exNames={exNames}>
+          <div className="flex gap-sm mt-md">
+            <button
+              type="button"
+              disabled={busy === c.id}
+              onClick={() => sendNudge(c.id)}
+              className="flex-1 h-tap rounded-full border border-glass-border text-ink text-label
+                         font-semibold flex items-center justify-center gap-xs
+                         transition-colors duration-fast ease-out active:bg-glass-pressed disabled:opacity-40"
+            >
+              <BellRing size={15} strokeWidth={2.2} /> Nudge
+            </button>
+            <button
+              type="button"
+              disabled={busy === c.id}
+              onClick={() => withdraw(c.id, c.other_display_name)}
+              className="flex-1 h-tap rounded-full border border-danger-border bg-danger-soft text-danger
+                         text-label font-semibold flex items-center justify-center gap-xs
+                         transition-colors duration-fast ease-out disabled:opacity-40"
+            >
+              <X size={15} strokeWidth={2.2} /> Cancel
+            </button>
+          </div>
+        </Card>
+      ))}
       {done.map((c) => <Card key={c.id} c={c} exNames={exNames} myId={myId} />)}
 
       <NewChallengeModal

@@ -13,7 +13,15 @@ async function rpc(name, args) {
   const sb = await getSupabase();
   if (!sb) throw new Error('Cloud features are not configured.');
   const { data, error } = await sb.rpc(name, args);
-  if (error) throw new Error(friendlyError(error));
+  if (error) {
+    // friendlyError() rewrites the message for humans, which loses the Postgres
+    // code — and the code is the only reliable way to tell "this deployment has
+    // not run a migration" from "this failed". Carry it on the Error.
+    const e = new Error(friendlyError(error));
+    e.code = error.code;
+    e.serverMessage = error.message;
+    throw e;
+  }
   return data;
 }
 
@@ -23,6 +31,45 @@ export async function createChallenge(targetUserId, exerciseId, days) {
 
 export async function respondToChallenge(challengeId, accept) {
   return rpc('respond_to_challenge', { challenge: challengeId, accept });
+}
+
+// Withdrawing and nudging need migration 017, which may not be applied on a
+// given deployment. Postgres answers an unknown function with 42883, and that
+// is the ONE error worth translating: everything else is a real failure the
+// user should see verbatim, but "function does not exist" is a deployment fact
+// they can act on and an error string they cannot.
+const MISSING_FUNCTION = '42883';
+
+function serverFeatureMissing(err) {
+  const s = `${err?.code || ''} ${err?.message || err || ''}`;
+  return s.includes(MISSING_FUNCTION) || /does not exist|could not find the function/i.test(s);
+}
+
+export class ServerFeatureMissing extends Error {
+  constructor(what) {
+    super(`${what} needs migration 017 on the server.`);
+    this.name = 'ServerFeatureMissing';
+  }
+}
+
+// Take back a challenge nobody has answered yet.
+export async function withdrawChallenge(challengeId) {
+  try {
+    return await rpc('withdraw_challenge', { challenge: challengeId });
+  } catch (err) {
+    if (serverFeatureMissing(err)) throw new ServerFeatureMissing('Withdrawing a challenge');
+    throw err;
+  }
+}
+
+// One reminder, rate limited server-side to one per day per challenge.
+export async function nudgeChallenge(challengeId) {
+  try {
+    return await rpc('nudge_challenge', { challenge: challengeId });
+  } catch (err) {
+    if (serverFeatureMissing(err)) throw new ServerFeatureMissing('Nudging a challenge');
+    throw err;
+  }
 }
 
 export async function resolveChallenge(challengeId) {
