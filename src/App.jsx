@@ -9,7 +9,7 @@ import SocialScreen from './pages/Social.jsx';
 import AuthScreen from './pages/Auth.jsx';
 import ProfileScreen from './pages/Profile.jsx';
 import ProfileSetup from './pages/ProfileSetup.jsx';
-import FriendProfile from './pages/FriendProfile.jsx';
+import UserProfile from './pages/UserProfile.jsx';
 import SettingsScreen from './pages/Settings.jsx';
 import AppHeader from './components/AppHeader.jsx';
 import { useSettings } from './hooks/useSettings.js';
@@ -35,11 +35,13 @@ function Root() {
   // Auth is shown as an overlay rather than a tab: it is a detour, and you should
   // land back exactly where you were when you finish or back out.
   const [authOpen, setAuthOpen] = useState(null); // null | 'signin' | 'signup'
-  // The recap is the reason to come back, so it is what the Social tab opens on.
-  const [socialSection, setSocialSection] = useState('week');
+  // The feed is what the Community tab opens on. It is the answer to "what is
+  // happening on Kun?", and it is the one section that has something in it for
+  // somebody who joined five minutes ago and knows nobody.
+  const [socialSection, setSocialSection] = useState('feed');
   const [profileOpen, setProfileOpen] = useState(false);
-  const [viewingFriendId, setViewingFriendId] = useState(null);
-  // Set when 'Challenge' is tapped on a friend's profile, so the create sheet
+  const [viewingUserId, setViewingUserId] = useState(null);
+  // Set when 'Challenge' is tapped on someone's profile, so the create sheet
   // opens with them already chosen.
   const [presetOpponent, setPresetOpponent] = useState(null);
   const [unread, setUnread] = useState(0);
@@ -185,23 +187,23 @@ function Root() {
         profile={profileState.profile}
         cloudConfigured={auth.cloudConfigured}
         onAccountTap={() => {
-          setViewingFriendId(null);
+          setViewingUserId(null);
           auth.signedIn ? setProfileOpen(true) : setAuthOpen('signin');
         }}
       />
 
       <main className="max-w-lg w-full mx-auto flex-1 pb-nav">
-        {viewingFriendId ? (
-          <FriendProfile
-            targetId={viewingFriendId}
+        {viewingUserId ? (
+          <UserProfile
+            targetId={viewingUserId}
             myId={auth.userId}
-            onBack={() => setViewingFriendId(null)}
+            onBack={() => setViewingUserId(null)}
             workouts={workout.workouts}
             exercises={workout.exercises}
             onChanged={onSocialChanged}
             onChallenge={(p) => {
               setPresetOpponent(p);
-              setViewingFriendId(null);
+              setViewingUserId(null);
               setSocialSection('challenges');
               setTab('social');
             }}
@@ -232,7 +234,7 @@ function Root() {
             onSignIn={() => setAuthOpen('signin')}
             section={socialSection}
             onSectionChange={setSocialSection}
-            onOpenProfile={(id) => setViewingFriendId(id)}
+            onOpenProfile={(id) => setViewingUserId(id)}
             exercises={workout.exercises}
             workouts={workout.workouts}
             presetOpponent={presetOpponent}
@@ -240,6 +242,8 @@ function Root() {
             unread={unread}
             onUnreadChange={onSocialChanged}
             refreshToken={socialRefresh}
+            profile={profileState.profile}
+            onOpenSettings={() => { setViewingUserId(null); setProfileOpen(true); }}
           />
         )}
         {tab === 'settings' && <SettingsScreen settings={settings} updateSettings={updateSettings} workout={workout} auth={auth} onSignIn={() => setAuthOpen('signin')} />}
@@ -257,7 +261,7 @@ function Root() {
 
       <Navigation
         current={profileOpen ? null : tab}
-        onChange={(t) => { setProfileOpen(false); setViewingFriendId(null); setTab(t); }}
+        onChange={(t) => { setProfileOpen(false); setViewingUserId(null); setTab(t); }}
         workoutActive={!!workout.active}
         socialBadge={unread}
       />

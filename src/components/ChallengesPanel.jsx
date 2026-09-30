@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Swords, Trophy, Clock, Check, X, CloudOff, Plus } from 'lucide-react';
+import { Swords, Trophy, Clock, Check, X, CloudOff, Plus, Search } from 'lucide-react';
 import { Avatar } from './AppHeader.jsx';
 import Modal from './Modal.jsx';
 import { useToast } from './Toast.jsx';
 import {
   listChallenges, respondToChallenge, createChallenge, resolveFinishedChallenges
 } from '../services/challengesApi.js';
-import { listFriendships } from '../services/friendsApi.js';
+import { listFriendships, searchUsers } from '../services/friendsApi.js';
 import { buildLiftsSummary } from '../services/socialSummary.js';
 import { formatWeight } from '../utils/units.js';
 
@@ -15,6 +15,11 @@ import { formatWeight } from '../utils/units.js';
 // A challenge freezes the challenger's current best as a target, and both sides
 // then have N days to beat it. The target cannot move, and progress is stamped
 // server-side, so "I hit it before the clock started" is not available.
+//
+// Anyone on Kun can be challenged, friend or not (migration 014). The server
+// enforces the rest: you cannot challenge yourself, cannot start two live
+// challenges with the same person on the same lift, and cannot fire off more
+// than a handful a day.
 export default function ChallengesPanel({
   myId, exercises, workouts, refreshToken, onChanged, presetOpponent, onPresetUsed
 }) {
@@ -95,7 +100,7 @@ export default function ChallengesPanel({
           <Swords size={26} className="text-muted mx-auto mb-2" />
           <p className="text-sm font-medium">No challenges yet</p>
           <p className="text-xs text-muted mt-1 leading-relaxed">
-            Pick a lift, and a friend gets your current PR as a target to beat.
+            Pick a lift, pick anyone on Kun, and they get your current PR as a target to beat.
           </p>
         </div>
       )}
@@ -225,12 +230,20 @@ function timeLeft(endsAt) {
   return `${hours} hour${hours === 1 ? '' : 's'} left`;
 }
 
-// Creating a challenge: pick a friend, a lift you have actually logged, and a
+// Creating a challenge: pick anyone, pick a lift you have actually logged, and a
 // duration. Only lifts with a local PR are offered — the server refuses the rest
 // anyway, and offering them would be a trap.
+//
+// Opponents are found by username search rather than chosen from a friend list.
+// Friends still appear as one-tap chips when there are any, because challenging
+// someone you train with is common and should not require typing their name —
+// but they are a shortcut now, not the only way in.
 function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, presetOpponent }) {
   const [friends, setFriends] = useState([]);
   const [opponent, setOpponent] = useState(null);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [exerciseId, setExerciseId] = useState('');
   const [days, setDays] = useState(7);
   const [busy, setBusy] = useState(false);
@@ -243,11 +256,35 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setOpponent(presetOpponent ? { other_id: presetOpponent.id, display_name: presetOpponent.display_name, username: presetOpponent.username } : null);
+    setQuery('');
+    setResults([]);
+    setOpponent(presetOpponent ? toOpponent(presetOpponent) : null);
+    // Friends are a convenience here, never a requirement: a failure to load
+    // them must not stop anyone challenging a stranger.
     listFriendships()
-      .then((res) => setFriends(res.rows.filter((r) => r.direction === 'friend')))
+      .then((res) => setFriends(res.rows.filter((r) => r.direction === 'friend').map(toOpponent)))
       .catch(() => setFriends([]));
   }, [open, presetOpponent]);
+
+  // Debounced so typing a username is not one request per keystroke. Matches the
+  // server's own two-character minimum.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const rows = await searchUsers(q);
+        if (!cancelled) setResults(rows.filter((r) => r.relationship !== 'self').map(toOpponent));
+      } catch {
+        if (!cancelled) setResults([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query]);
 
   const target = myLifts.find((l) => l.exercise_id === exerciseId);
 
@@ -256,7 +293,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
     setBusy(true);
     setError(null);
     try {
-      await createChallenge(opponent.other_id, exerciseId, days);
+      await createChallenge(opponent.id, exerciseId, days);
       toast(`Challenge sent to ${opponent.display_name}`, { tone: 'success' });
       onCreated();
     } catch (err) {
@@ -265,6 +302,8 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
       setBusy(false);
     }
   };
+
+  const shown = query.trim().length >= 2 ? results : friends;
 
   return (
     <Modal
@@ -285,25 +324,78 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
       <div className="space-y-4">
         <div>
           <label className="text-xs text-muted mb-1.5 block">Who</label>
-          {friends.length === 0 ? (
-            <p className="text-sm text-muted py-2">Add a friend first.</p>
-          ) : (
-            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-              {friends.map((f) => (
-                <button
-                  key={f.other_id}
-                  onClick={() => setOpponent(f)}
-                  className={`shrink-0 px-3 h-10 rounded-xl border text-sm flex items-center gap-2 ${
-                    opponent?.other_id === f.other_id
-                      ? 'border-accent bg-accent/10 text-text'
-                      : 'border-border text-muted'
-                  }`}
-                >
-                  <Avatar profile={f} size={20} />
-                  {f.display_name.split(' ')[0]}
-                </button>
-              ))}
+
+          {opponent ? (
+            <div className="flex items-center gap-2.5 h-12 px-3 rounded-xl border border-accent bg-accent/10">
+              <Avatar profile={opponent} size={28} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{opponent.display_name}</div>
+                <div className="text-[11px] text-muted truncate">@{opponent.username}</div>
+              </div>
+              <button
+                onClick={() => setOpponent(null)}
+                aria-label="Choose someone else"
+                className="text-xs text-muted px-2 h-8 active:text-text shrink-0"
+              >
+                Change
+              </button>
             </div>
+          ) : (
+            <>
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search anyone by username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-label="Search for someone to challenge"
+                  className="w-full h-11 pl-9 pr-3 rounded-xl bg-card border border-border outline-none focus:border-accent text-sm"
+                />
+              </div>
+
+              {query.trim().length < 2 && friends.length > 0 && (
+                <p className="text-[11px] text-muted mt-2">Your friends</p>
+              )}
+
+              {searching && (
+                <p className="text-xs text-muted py-3 text-center">Searching…</p>
+              )}
+
+              {!searching && query.trim().length >= 2 && results.length === 0 && (
+                <p className="text-xs text-muted py-3 text-center">
+                  No one with that username.
+                </p>
+              )}
+
+              {shown.length > 0 && (
+                <ul className="mt-1.5 divide-y divide-border max-h-56 overflow-y-auto">
+                  {shown.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        onClick={() => setOpponent(p)}
+                        className="w-full py-2.5 flex items-center gap-2.5 text-left active:opacity-70"
+                      >
+                        <Avatar profile={p} size={30} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{p.display_name}</div>
+                          <div className="text-[11px] text-muted truncate">@{p.username}</div>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {query.trim().length < 2 && friends.length === 0 && (
+                <p className="text-xs text-muted py-3 leading-relaxed">
+                  Type at least 2 characters of someone's username. You do not have to be
+                  friends to challenge them.
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -362,4 +454,16 @@ function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, pres
       </div>
     </Modal>
   );
+}
+
+// Three sources of people reach this modal with three different shapes: a
+// friendship row keys the other person as `other_id`, a search hit and a profile
+// both use `id`. Normalised once here so everything below can stop caring.
+function toOpponent(p) {
+  return {
+    id: p.id || p.other_id,
+    username: p.username,
+    display_name: p.display_name,
+    avatar_url: p.avatar_url
+  };
 }

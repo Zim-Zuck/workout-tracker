@@ -129,7 +129,9 @@ export default function ProfileSetup({ userId, onDone, defaultDisplayName = '' }
 
         <p className="text-[11px] text-muted text-center px-4 leading-relaxed">
           Your username is how people find you, so it is visible to anyone signed in.
-          Your training numbers are only ever shown to friends you accept.
+          Kun shows the community your milestones — records, streaks and workout count.
+          Your detailed numbers stay with friends you accept, and your individual sets
+          never leave this device. Both switches are in your profile.
         </p>
       </form>
     </div>

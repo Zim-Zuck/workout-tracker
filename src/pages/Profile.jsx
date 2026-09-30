@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Flame, Dumbbell, Pencil, Eye, EyeOff, Check, CloudOff, RefreshCw, Camera, Trash2 } from 'lucide-react';
+import { Flame, Dumbbell, Pencil, Eye, EyeOff, Check, CloudOff, RefreshCw, Camera, Trash2, Users, Sparkles } from 'lucide-react';
 import { Avatar } from '../components/AppHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -37,6 +37,29 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
     } catch (err) {
       toast(err.message, { tone: 'error' });
     }
+  };
+
+  // The second, separate switch. Toggling it also clears the one-time notice:
+  // somebody who has just used the control has, by definition, seen it.
+  const toggleActivity = async () => {
+    const next = !profile.share_activity;
+    try {
+      const updated = await updateProfile(profile.id, {
+        share_activity: next,
+        community_notice_pending: false
+      });
+      setProfile(updated);
+      toast(next ? 'You are in the community' : 'Your activity is hidden from the community', { tone: 'success' });
+    } catch (err) {
+      toast(err.message, { tone: 'error' });
+    }
+  };
+
+  const dismissNotice = async () => {
+    try {
+      const updated = await updateProfile(profile.id, { community_notice_pending: false });
+      setProfile(updated);
+    } catch { /* the notice reappearing is not worth an error toast */ }
   };
 
   return (
@@ -113,8 +136,65 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
 
       <AchievementsRow stats={stats} lifts={buildLiftsSummary(workouts)} />
 
-      {/* Privacy — all-or-nothing, as designed */}
+      {/* The one-time explanation, for accounts that existed before the
+          community did. Raised by migration 009 and cleared the moment this
+          person has read it or touched either switch. */}
+      {profile.community_notice_pending && (
+        <section className="bg-accent/10 border border-accent/40 rounded-2xl p-3">
+          <h2 className="text-sm font-semibold flex items-center gap-1.5">
+            <Sparkles size={15} className="text-accent" /> Kun is now one community
+          </h2>
+          <p className="text-xs text-muted mt-1.5 leading-relaxed">
+            You no longer need friends to use the social features. Everyone shares a feed, a
+            leaderboard and a weekly recap.
+          </p>
+          <p className="text-xs text-muted mt-2 leading-relaxed">
+            Because you were already sharing stats with friends, your community sharing was
+            turned <strong className="text-text">{profile.share_activity ? 'on' : 'off'}</strong> to
+            match. It covers far less than your friends already see — milestones only, never
+            your detailed numbers. The two switches below are separate, and you can change
+            either one.
+          </p>
+          <button
+            onClick={dismissNotice}
+            className="mt-3 h-10 px-4 rounded-xl bg-accent text-white text-sm font-semibold active:opacity-80"
+          >
+            Got it
+          </button>
+        </section>
+      )}
+
+      {/* Privacy — two switches, two different promises.
+          
+          Kept visually as one section with a divider rather than two separate
+          cards, because the whole risk here is somebody reading one and assuming
+          it governs the other. They are adjacent, and each says exactly who it
+          is about. */}
       <section className="bg-surface border border-border rounded-2xl p-3">
+        <h2 className="text-sm font-semibold mb-1">Who can see what</h2>
+
+        <button
+          onClick={toggleActivity}
+          className="w-full flex items-center justify-between gap-3 min-h-[44px] text-left pt-1"
+        >
+          <span className="flex items-center gap-2.5">
+            {profile.share_activity
+              ? <Users size={18} className="text-success shrink-0" />
+              : <EyeOff size={18} className="text-muted shrink-0" />}
+            <span>
+              <span className="text-sm block">Appear in the community</span>
+              <span className="text-[11px] text-muted block leading-snug">
+                {profile.share_activity
+                  ? 'Everyone on Kun sees your records, streaks and workout count.'
+                  : 'You are hidden from the feed, the global board and the weekly recap.'}
+              </span>
+            </span>
+          </span>
+          <Toggle on={profile.share_activity} />
+        </button>
+
+        <div className="h-px bg-border my-2" />
+
         <button
           onClick={toggleSharing}
           className="w-full flex items-center justify-between gap-3 min-h-[44px] text-left"
@@ -124,18 +204,21 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
               ? <Eye size={18} className="text-success shrink-0" />
               : <EyeOff size={18} className="text-muted shrink-0" />}
             <span>
-              <span className="text-sm block">Share stats with friends</span>
+              <span className="text-sm block">Share detailed stats with friends</span>
               <span className="text-[11px] text-muted block leading-snug">
                 {profile.share_stats
-                  ? 'Friends see your streak, totals and top lifts.'
-                  : 'Friends see only your name and username.'}
+                  ? 'Accepted friends also see your volume, every top lift and your full week.'
+                  : 'Friends see only what the community sees.'}
               </span>
             </span>
           </span>
           <Toggle on={profile.share_stats} />
         </button>
+
         <p className="text-[11px] text-muted mt-2 pt-2 border-t border-border leading-relaxed">
-          Nobody ever sees your individual sets, reps or notes — those never leave this device.
+          The community sees milestones — a new record, a streak, a workout count. Friends see
+          the detail behind them. Nobody, in either case, ever sees your individual sets, reps
+          or notes — those never leave this device.
         </p>
       </section>
 

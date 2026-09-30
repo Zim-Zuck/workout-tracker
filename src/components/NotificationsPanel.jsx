@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, UserPlus, UserCheck, Swords, Trophy, Flag, CloudOff } from 'lucide-react';
+import { Bell, UserPlus, UserCheck, Swords, Trophy, Flag, CloudOff, Heart } from 'lucide-react';
 import { Avatar } from './AppHeader.jsx';
 import { listNotifications, markNotificationsRead } from '../services/friendsApi.js';
 import { relativeDay } from '../utils/date.js';
@@ -15,7 +15,15 @@ const META = {
   challenge_accepted: { icon: Swords,    tone: 'text-accent',  text: (n) => `${name(n)} accepted your challenge` },
   challenge_declined: { icon: Flag,      tone: 'text-muted',   text: (n) => `${name(n)} declined your challenge` },
   challenge_beaten:   { icon: Trophy,    tone: 'text-warn',    text: (n) => `${name(n)} beat your ${n.payload?.exercise_label || 'PR'}` },
-  challenge_ended:    { icon: Trophy,    tone: 'text-warn',    text: (n) => n.payload?.won ? 'You won your challenge' : 'A challenge you were in has ended' }
+  challenge_ended:    { icon: Trophy,    tone: 'text-warn',    text: (n) => n.payload?.won ? 'You won your challenge' : 'A challenge you were in has ended' },
+  // Collapsed server-side: one row per event, with a running count, rather than
+  // one row per reaction (migration 011). The copy has to carry that count or
+  // the collapsing is invisible and the row looks stale.
+  event_reaction:     { icon: Heart,     tone: 'text-accent',  text: (n) => {
+    const count = Number(n.payload?.count) || 1;
+    if (count <= 1) return `${name(n)} reacted to your activity`;
+    return `${name(n)} and ${count - 1} other${count - 1 === 1 ? '' : 's'} reacted to your activity`;
+  } }
 };
 
 function name(n) {
@@ -62,7 +70,7 @@ export default function NotificationsPanel({ onOpenProfile, onRead, refreshToken
         <Bell size={28} className="text-muted mx-auto mb-3" />
         <p className="text-sm font-medium">Nothing yet</p>
         <p className="text-xs text-muted mt-1">
-          Friend requests and challenge results show up here.
+          Challenges, reactions to your activity and friend requests show up here.
         </p>
       </div>
     );

@@ -1,21 +1,33 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Flame, EyeOff, UserMinus, Swords, Lock } from 'lucide-react';
+import { ArrowLeft, Flame, EyeOff, UserMinus, UserPlus, Swords, Lock, Clock, Check } from 'lucide-react';
 import { Avatar } from '../components/AppHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
-import { getFriendProfile, removeFriend, sendFriendRequest } from '../services/friendsApi.js';
+import { getFriendProfile, removeFriend, sendFriendRequest, respondToRequest } from '../services/friendsApi.js';
+import { fetchUserActivity } from '../services/communityApi.js';
+import { describeEvent } from '../services/communityEvents.js';
 import { buildStatsSummary, buildLiftsSummary } from '../services/socialSummary.js';
 import AchievementsRow from '../components/AchievementsRow.jsx';
 import { formatWeight } from '../utils/units.js';
 import { relativeDay } from '../utils/date.js';
 
-// A friend's profile, with head-to-head built in rather than on a separate
-// screen. Seeing your number next to theirs is the whole point of opening this,
-// so it is the default view, not something you navigate to.
-export default function FriendProfile({
+// Anyone's profile.
+//
+// This was the friend profile, and it asked one question of a stranger: do you
+// want to add them? It now leads with Challenge, for everyone, because that is
+// the thing you can actually do with someone you just found in the feed.
+// Friending is still here, as a secondary action — it is what unlocks the
+// detailed comparison below, which is a reason to do it rather than a toll gate
+// in front of the whole screen.
+//
+// The privacy model underneath is completely unchanged: the head-to-head still
+// appears only when can_view_stats() says so, which still means an accepted
+// friendship plus their share_stats switch.
+export default function UserProfile({
   targetId, myId, onBack, workouts, exercises, onChanged, onChallenge
 }) {
   const [data, setData] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -33,7 +45,15 @@ export default function FriendProfile({
     setLoading(true);
     setError(null);
     try {
-      setData(await getFriendProfile(targetId));
+      // Two calls, but only the profile can fail the screen. fetchUserActivity
+      // swallows its own errors and returns [] — a profile that loads without
+      // its activity strip is still a useful profile.
+      const [profileData, events] = await Promise.all([
+        getFriendProfile(targetId),
+        fetchUserActivity(targetId, 8)
+      ]);
+      setData(profileData);
+      setActivity(events);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -64,8 +84,13 @@ export default function FriendProfile({
     );
   }
 
-  const { profile, stats, lifts, can_view_stats: canView, relationship } = data;
-  const isFriend = relationship === 'friends';
+  const { profile, stats, lifts, can_view_stats: canView } = data;
+  // Defended rather than trusted. Before migration 015 this came back NULL for
+  // anyone you had no friendship row with — every stranger, which is now most of
+  // the people you open — and a null here would render a profile with no way to
+  // add that person. The migration fixes the source; this keeps the screen
+  // correct against a database that has not run it yet.
+  const relationship = data.relationship || 'none';
 
   // Lifts both people have logged, heaviest first — the head-to-head rows.
   const shared = (lifts || [])
@@ -96,7 +121,11 @@ export default function FriendProfile({
           </div>
         )}
 
-        {isFriend && (
+        {/* Challenge leads, whoever this is. It is the one thing you can do
+            with a person you have never met, and it needs no permission from
+            them — the server stopped requiring a friendship in migration 014.
+            Friending is the smaller button beside it. */}
+        {relationship !== 'self' && (
           <div className="flex gap-2 mt-4">
             <button
               onClick={() => onChallenge?.(profile)}
@@ -104,52 +133,83 @@ export default function FriendProfile({
             >
               <Swords size={16} /> Challenge
             </button>
-            <button
-              onClick={() => setConfirmRemove(true)}
-              aria-label="Remove friend"
-              className="w-11 h-11 rounded-xl border border-border text-muted flex items-center justify-center active:bg-card"
-            >
-              <UserMinus size={16} />
-            </button>
-          </div>
-        )}
 
-        {relationship === 'none' && (
-          <button
-            onClick={async () => {
-              try {
-                await sendFriendRequest(profile.id);
-                toast('Request sent', { tone: 'success' });
-                await load();
-                onChanged?.();
-              } catch (err) { toast(err.message, { tone: 'error' }); }
-            }}
-            className="w-full mt-4 h-11 rounded-xl bg-accent text-white font-semibold active:opacity-80"
-          >
-            Add friend
-          </button>
-        )}
-        {relationship === 'requested' && (
-          <p className="mt-4 text-sm text-muted text-center">Friend request sent.</p>
+            {relationship === 'none' && (
+              <button
+                onClick={async () => {
+                  try {
+                    await sendFriendRequest(profile.id);
+                    toast('Request sent', { tone: 'success' });
+                    await load();
+                    onChanged?.();
+                  } catch (err) { toast(err.message, { tone: 'error' }); }
+                }}
+                aria-label="Add friend"
+                className="h-11 px-3 rounded-xl border border-border text-muted flex items-center justify-center gap-1.5 active:bg-card"
+              >
+                <UserPlus size={16} /> <span className="text-sm">Add</span>
+              </button>
+            )}
+
+            {relationship === 'incoming' && (
+              <button
+                onClick={async () => {
+                  try {
+                    await respondToRequest(profile.id, true);
+                    toast(`You and ${profile.display_name} are now friends`, { tone: 'success' });
+                    await load();
+                    onChanged?.();
+                  } catch (err) { toast(err.message, { tone: 'error' }); }
+                }}
+                aria-label="Accept friend request"
+                className="h-11 px-3 rounded-xl border border-success/40 text-success flex items-center justify-center gap-1.5 active:bg-card"
+              >
+                <Check size={16} /> <span className="text-sm">Accept</span>
+              </button>
+            )}
+
+            {relationship === 'requested' && (
+              <span className="h-11 px-3 rounded-xl border border-border text-muted flex items-center justify-center gap-1.5 text-sm">
+                <Clock size={15} /> Sent
+              </span>
+            )}
+
+            {relationship === 'friends' && (
+              <button
+                onClick={() => setConfirmRemove(true)}
+                aria-label="Remove friend"
+                className="w-11 h-11 rounded-xl border border-border text-muted flex items-center justify-center active:bg-card"
+              >
+                <UserMinus size={16} />
+              </button>
+            )}
+          </div>
         )}
       </section>
 
       {/* Not friends, or they turned sharing off. Both end here, with different
           wording — "they hid it" and "you can't see it yet" are not the same
-          thing and pretending otherwise is confusing. */}
+          thing and pretending otherwise is confusing.
+          
+          The non-friend case is phrased as what friending would GET you, not as
+          what you are being refused. It is the one place in the app where adding
+          someone still has a concrete payoff, now that nothing else requires it. */}
       {!canView && (
         <section className="bg-surface border border-border rounded-2xl p-6 text-center">
           {relationship === 'friends' ? (
             <>
               <EyeOff size={24} className="text-muted mx-auto mb-2" />
-              <p className="text-sm font-medium">{profile.display_name} keeps their stats private</p>
+              <p className="text-sm font-medium">{profile.display_name} keeps their detailed stats private</p>
               <p className="text-xs text-muted mt-1">They have turned off stat sharing.</p>
             </>
           ) : (
             <>
               <Lock size={24} className="text-muted mx-auto mb-2" />
-              <p className="text-sm font-medium">Stats are for friends only</p>
-              <p className="text-xs text-muted mt-1">Add {profile.display_name} as a friend to compare lifts.</p>
+              <p className="text-sm font-medium">Add {profile.display_name.split(' ')[0]} to compare lifts</p>
+              <p className="text-xs text-muted mt-1 leading-relaxed">
+                Friends see each other's totals and top lifts side by side. You can still
+                challenge them without it.
+              </p>
             </>
           )}
         </section>
@@ -235,6 +295,34 @@ export default function FriendProfile({
                 </span>
               </li>
             ))}
+          </ul>
+        </section>
+      )}
+
+      {activity.length > 0 && (
+        <section className="bg-surface border border-border rounded-2xl p-3">
+          <h2 className="text-sm font-semibold mb-1">Recent activity</h2>
+          <ul className="divide-y divide-border">
+            {activity.map((ev) => {
+              const d = describeEvent(ev, exNames);
+              // An event type this build does not know about is skipped rather
+              // than rendered blank.
+              if (!d) return null;
+              return (
+                <li key={ev.id} className="py-2.5 flex items-start gap-2.5">
+                  <span aria-hidden="true" className="text-base leading-none mt-0.5">{d.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm leading-snug">{d.headline}</p>
+                    {d.detail && (
+                      <p className="text-sm font-bold tabular-nums mt-0.5">{d.detail}</p>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted shrink-0">
+                    {relativeDay(new Date(ev.created_at).getTime())}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

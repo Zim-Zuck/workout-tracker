@@ -4,7 +4,7 @@ const TABS = [
   { id: 'workout', label: 'Workout', icon: Dumbbell },
   { id: 'history', label: 'History', icon: History },
   { id: 'progress', label: 'Progress', icon: BarChart3 },
-  { id: 'social', label: 'Social', icon: Users },
+  { id: 'social', label: 'Community', icon: Users },
   { id: 'settings', label: 'Settings', icon: SettingsIcon }
 ];
 
@@ -19,7 +19,7 @@ export default function Navigation({ current, onChange, workoutActive, socialBad
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = current === id;
           const showDot = id === 'workout' && workoutActive;
-          // Unread social activity (friend requests, challenge events) gets a
+          // Unread activity (challenges, reactions, friend requests) gets a
           // count rather than a bare dot — "3 waiting" is worth opening, "something
           // happened" is not.
           const badge = id === 'social' ? socialBadge : 0;
