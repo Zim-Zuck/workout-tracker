@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX } from 'lucide-react';
+import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX, History } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { SCHEMA_VERSION } from '../db/database.js';
-import { downloadBackup, importReplaceAll, wipeAllData, validateBackup } from '../services/dataManager.js';
+import {
+  downloadBackup, importReplaceAll, wipeAllData, validateBackup,
+  getAutomaticBackupStatus, restoreFromAutomaticBackup, downloadAutomaticBackup, getLastExportAt
+} from '../services/dataManager.js';
+import { storageEstimate } from '../db/database.js';
 import { maybeSeed } from '../db/seedData.js';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { backupNow, fetchBackup, restoreBackup, getBackupInfo } from '../services/backupApi.js';
@@ -20,6 +24,18 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   const [backupBusy, setBackupBusy] = useState(false);
   const [pendingRestore, setPendingRestore] = useState(null);
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  // The automatic pre-upgrade snapshot: null while unknown, null forever on a
+  // device that never had data to protect.
+  const [autoBackup, setAutoBackup] = useState(null);
+  const [confirmAutoRestore, setConfirmAutoRestore] = useState(false);
+  const [lastExport, setLastExport] = useState(undefined); // undefined = loading
+  const [storage, setStorage] = useState(null);
+
+  useEffect(() => {
+    getAutomaticBackupStatus().then(setAutoBackup).catch(() => setAutoBackup(null));
+    getLastExportAt().then(setLastExport).catch(() => setLastExport(null));
+    storageEstimate().then(setStorage).catch(() => {});
+  }, []);
 
   // Backup metadata is a listing, not a download — cheap enough to fetch on
   // mount and it keeps the row from saying "never" when a backup exists.
@@ -115,8 +131,21 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         <p className="text-label font-regular text-ink-tertiary py-sm">
           Your workouts are stored locally on this device. Export a backup regularly, or sign in to back them up to the cloud.
         </p>
+        {/* A REMINDER, NOT A GATE.
+            It states a fact and stops. No badge, no modal, no interstitial on
+            launch, nothing that stands between somebody and logging a set —
+            an app that nags about backups is an app people close. */}
+        <Row label="Last export from this device">
+          <span className={`text-label font-regular ${lastExport ? 'text-ink-tertiary' : 'text-ink-secondary'}`}>
+            {lastExport === undefined ? '—' : lastExport ? relativeDay(lastExport) : 'Never'}
+          </span>
+        </Row>
         <div className="flex flex-col divide-y divide-hairline">
-          <ActionButton icon={Download} label="Export JSON backup" onClick={async () => { await downloadBackup(); toast('Backup downloaded'); }} />
+          <ActionButton icon={Download} label="Export JSON backup" onClick={async () => {
+            await downloadBackup();
+            setLastExport(await getLastExportAt());
+            toast('Backup downloaded');
+          }} />
           <ActionButton icon={Upload} label="Import JSON backup" onClick={() => fileRef.current?.click()} />
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
           <ActionButton icon={Trash2} label="Clear all data" danger onClick={() => setConfirmWipe(true)} />
@@ -129,6 +158,34 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
           )}
         </div>
       </Section>
+
+      {/* THE AUTOMATIC SAFETY NET.
+          Only rendered when a snapshot actually exists, so it appears for the
+          users who were upgraded and quietly disappears once it has aged out —
+          no dead row promising a restore of nothing. */}
+      {autoBackup && (
+        <Section title="Automatic backup">
+          <p className="text-label font-regular text-ink-tertiary py-sm">
+            Before this version changed anything, it copied your data as it was. Nothing since has
+            touched that copy. It is kept for 30 days and then removed on its own.
+          </p>
+          <Row label="Taken">
+            <span className="text-label font-regular text-ink-tertiary">{relativeDay(autoBackup.createdAt)}</span>
+          </Row>
+          <Row label="Contains">
+            <span className="text-label font-regular text-ink-tertiary">
+              {plural(autoBackup.counts.workouts, 'workout')} · {plural(autoBackup.counts.exercises, 'exercise')}
+            </span>
+          </Row>
+          <div className="flex flex-col divide-y divide-hairline">
+            <ActionButton icon={Download} label="Download it as a file" onClick={async () => {
+              try { await downloadAutomaticBackup(); toast('Pre-upgrade backup downloaded'); }
+              catch (err) { toast(err.message, { tone: 'error' }); }
+            }} />
+            <ActionButton icon={History} label="Restore from automatic backup" danger onClick={() => setConfirmAutoRestore(true)} />
+          </div>
+        </Section>
+      )}
 
       {auth?.signedIn && (
         <Section title="Cloud backup">
@@ -189,6 +246,13 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         <Row label="App"><span className="text-label text-ink font-semibold">Kun Workouts</span></Row>
         <Row label="App version"><span className="text-label font-regular text-ink-tertiary">1.0.0</span></Row>
         <Row label="Data schema"><span className="text-label font-regular text-ink-tertiary">v{SCHEMA_VERSION}</span></Row>
+        {storage?.usage != null && (
+          <Row label="Data on this device">
+            <span className="text-label font-regular text-ink-tertiary">
+              {(storage.usage / 1048576).toFixed(1)} MB used
+            </span>
+          </Row>
+        )}
         <Row label="Connection">
           <span className={`inline-flex items-center gap-1 text-label ${online ? 'text-done' : 'text-ink-secondary'}`}>
             {online ? <Wifi size={14} /> : <WifiOff size={14} />} {online ? 'Online' : 'Offline'}
@@ -264,9 +328,13 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
             <button
               onClick={async () => {
                 try {
-                  await importReplaceAll(pendingImport);
+                  const r = await importReplaceAll(pendingImport);
                   await workout.refresh();
-                  toast('Data restored', { tone: 'success' });
+                  const repaired = r.problems.repairedWorkouts + r.problems.duplicateWorkouts;
+                  toast(
+                    `Restored ${r.workouts} workouts${repaired ? ` · ${repaired} repaired` : ''}`,
+                    { tone: 'success', duration: 4000 }
+                  );
                 } catch (err) {
                   toast(`Import failed: ${err.message}`, { tone: 'error' });
                 } finally {
@@ -286,6 +354,39 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
             {pendingImport.exercises?.length ?? 0} exercises · {pendingImport.workouts?.length ?? 0} workouts · schema v{pendingImport.schemaVersion} · exported {pendingImport.exportedAt?.slice(0,19).replace('T',' ')}
           </p>
         )}
+      </Modal>
+
+      <Modal open={confirmAutoRestore} onClose={() => setConfirmAutoRestore(false)} title="Restore the automatic backup?"
+        footer={
+          <div className="flex gap-2">
+            <button onClick={() => setConfirmAutoRestore(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
+            <button
+              onClick={async () => {
+                try {
+                  const r = await restoreFromAutomaticBackup();
+                  await workout.refresh();
+                  const repaired = r.problems.repairedWorkouts + r.problems.duplicateWorkouts;
+                  toast(
+                    `Restored ${r.workouts} workouts${repaired ? ` · ${repaired} repaired` : ''}`,
+                    { tone: 'success', duration: 4000 }
+                  );
+                } catch (err) {
+                  toast(`Restore failed: ${err.message}`, { tone: 'error', duration: 4500 });
+                } finally { setConfirmAutoRestore(false); }
+              }}
+              className="flex-1 h-tap rounded-full bg-danger-soft border border-danger-border text-danger font-semibold"
+            >Restore</button>
+          </div>
+        }
+      >
+        <p className="text-label">
+          This will <span className="text-danger font-semibold">replace everything on this device</span> with
+          your data as it was before this version.
+        </p>
+        <p className="text-label text-ink-tertiary mt-2">
+          Anything logged since then will be gone — export a backup first if you want to keep it.
+          The automatic copy itself is not consumed, so this can be done again.
+        </p>
       </Modal>
 
       <Modal open={confirmWipe} onClose={() => setConfirmWipe(false)} title="Clear all data?"
@@ -310,6 +411,11 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       </Modal>
     </div>
   );
+}
+
+// "1 exercises" is the kind of thing that makes an app feel unfinished.
+function plural(n, word) {
+  return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 }
 
 // The section heading sits OUTSIDE the card, on the page. A heading inside a

@@ -384,3 +384,97 @@ Recorded here rather than raised as questions, per the brief:
     is yours and nothing moves it again.
 21. **The session header is sticky and owns the rest timer.** The floating rest
     bar it replaced overlapped the set rows it was timing.
+
+### Decisions from Phase 4 — data safety
+
+22. **The upgrade takes a backup before it takes a step.** The v4 block of
+    `applyUpgrades()` copies every workout, exercise and setting into
+    `*_backup_v2` stores *before* the v3 normalisation rewrites a single record.
+    It is placed above the v3 block in the file even though it is a higher
+    version number, because ordering there is execution order, and a snapshot
+    taken after the rewrite is a copy of the result rather than a safety net.
+    The copy is not normalised: it is the pre-migration truth, byte for byte.
+23. **The safety net is kept for 30 days *and* five clean launches**, not one or
+    the other. Time alone fails the person who opens the app twice a month; launch
+    count alone fails the problem that only shows up in week three. Both
+    thresholds must pass before `noteLaunchAndMaybeCleanBackup()` retires it, and
+    it does so silently — housekeeping is not news.
+24. **A boot failure is a screen, not a spinner.** `Recovery.jsx` replaces both
+    the old one-paragraph error state and the white screen a render crash used to
+    produce (there is now an error boundary outside every provider). It says the
+    data is untouched *first*, then offers **Export my data**, which reads the raw
+    stores through `rawDump()` — opening the database at whatever version is on
+    disk, triggering no upgrade, and going nowhere near `openDB()`. A recovery
+    path that depends on the thing that failed is not a recovery path, which is
+    also why it is statically imported rather than lazily loaded.
+25. **The importer repairs rather than refuses.** It used to throw on the first
+    record with a null date, which meant one bad row rejected a file holding five
+    years of training. `repairWorkout()` salvages instead: a missing date falls
+    back through `startTime`/`endTime`, null weights become zero, a set with no
+    exercise is parked under `ex_unknown` rather than deleted, and duplicate ids
+    are re-keyed — the more complete session keeps the original id, the other
+    keeps its data under a new one with `duplicateOf` recording where it came
+    from. Nothing a person actually did is dropped to satisfy a schema.
+26. **The database open watchdog waits out a running upgrade.** The ten-second
+    timeout exists for a connection that never started. Cutting off a migration
+    that is mid-flight — 5,000 workouts being copied and rewritten on a cold
+    phone — would put the recovery screen in front of somebody whose upgrade was
+    about to succeed. A blocked upgrade, by contrast, is reported after two
+    seconds rather than ten: a tab that is going to yield has already yielded.
+27. **The service worker cache name is generated, not typed.**
+    `scripts/inject-sw-assets.mjs` rewrites `VERSION` with a hash of the build's
+    own asset filenames and precaches every one of them, so the cache name changes
+    exactly when the output changes and a build is only ever in the cache
+    complete. A hand-bumped constant is a step that gets forgotten, and a
+    forgotten bump is the precise mechanism that leaves somebody on a stale
+    `index.html` naming a chunk that has been deleted. The page also reloads on
+    `controllerchange`, so a document and its assets always come from one build.
+28. **The backup reminder is a row of text and nothing else.** "Last export from
+    this device — Never". No badge, no launch interstitial, no blocking. An app
+    that nags about backups between somebody and their next set is an app people
+    close, and the automatic snapshot plus cloud backup already cover the case
+    the nagging would be for.
+
+---
+
+## 12. Storage durability
+
+The entire training history lives in this origin's IndexedDB. That is a
+deliberate offline-first choice, and it comes with one real risk: **eviction**.
+
+`requestPersistentStorage()` is called once at boot, before the first write.
+A denial is not an error — it is the ordinary answer on a first visit, and it is
+logged at `info` and otherwise ignored.
+
+**Chrome / Edge / Android.** `navigator.storage.persist()` is granted on
+engagement signals (installed as a PWA, bookmarked, high site engagement) and
+usually denied on a first visit. Un-persisted origins are evicted only under
+genuine storage pressure, worst-origin-first.
+
+**Firefox.** Prompts, or grants silently for installed sites. Denial is durable
+for the session.
+
+**iOS Safari — the case that actually matters.**
+
+- An **installed** PWA (added to the Home Screen) has durable storage. The 7-day
+  cap does not apply to it, and this is the configuration to recommend to anyone
+  whose history they care about. The Settings → About copy already says so.
+- A PWA opened **in a Safari tab** is subject to the 7-day cap on script-writable
+  storage: seven days of *no interaction with the site as a first party* and
+  IndexedDB is cleared. Opening the app resets the clock, so an active user is
+  not at risk — someone who trains, then does not open the app for eight days,
+  is. `persist()` on iOS typically resolves `false` and does not exempt a tab.
+- Neither case survives "Clear History and Website Data".
+
+This is why the export reminder exists at all, and why it names the device: the
+only copy that survives an eviction is one that left the origin.
+
+### A future improvement, deliberately not built
+
+**Cloud backup of full workout history.** Today's cloud backup stores a summary
+against the account; a complete history sync would need a new server table (a
+`workout_backups` row per user holding the full JSON, with RLS matching the
+existing `profiles` policy, and a size cap). That is a schema change and a
+migration, so it is out of scope here and recorded rather than improvised. It is
+the right next step: it is the only safeguard on this list that survives losing
+the device itself, rather than losing the data on it.

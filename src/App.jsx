@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useState } from 'react';
 import { ToastProvider, useToast } from './components/Toast.jsx';
 import { TabBar, ResumePill, UndoToastProvider } from './ui/index.js';
 import TodayScreen from './pages/Today.jsx';
@@ -21,17 +21,39 @@ import { useWorkout } from './hooks/useWorkout.js';
 import { useRestTimer } from './hooks/useRestTimer.js';
 import { useFeed } from './hooks/useFeed.js';
 import { splitLabel } from './services/splits.js';
-import { ensureInitialized } from './db/database.js';
+import { ensureInitialized, requestPersistentStorage, noteLaunchAndMaybeCleanBackup } from './db/database.js';
 import { maybeSeed } from './db/seedData.js';
+import RecoveryScreen from './pages/Recovery.jsx';
 
 export default function App() {
   return (
-    <ToastProvider>
-      <UndoToastProvider>
-        <Root />
-      </UndoToastProvider>
-    </ToastProvider>
+    <BootErrorBoundary>
+      <ToastProvider>
+        <UndoToastProvider>
+          <Root />
+        </UndoToastProvider>
+      </ToastProvider>
+    </BootErrorBoundary>
   );
+}
+
+// A render that throws used to unmount the whole tree and leave a white screen,
+// which is the worst possible outcome for somebody whose only copy of four years
+// of training lives in this origin's IndexedDB. The boundary turns that into the
+// recovery screen, which can still read and export the raw stores.
+//
+// It wraps OUTSIDE the providers on purpose: a provider is as capable of throwing
+// as a screen is.
+class BootErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) { console.error('App crashed:', error, info); }
+  render() {
+    if (this.state.error) {
+      return <RecoveryScreen error={this.state.error.message || String(this.state.error)} />;
+    }
+    return this.props.children;
+  }
 }
 
 function Root() {
@@ -105,10 +127,22 @@ function Root() {
   useEffect(() => {
     (async () => {
       try {
+        // Asked before the first write, so the browser's answer is in place
+        // before there is anything to evict. Never awaited for correctness and
+        // never allowed to fail boot — a denial is the normal answer on a first
+        // visit, not an error. See DESIGN.md §12.
+        requestPersistentStorage().then((r) => {
+          if (!r.persisted) console.info('Storage is best-effort on this device, not persisted.');
+        });
         await ensureInitialized();
         if (import.meta.env.DEV) await maybeSeed();
         await workout.refresh();
         setDbReady(true);
+        // Housekeeping AFTER the app is up, so a clean launch is what counts as
+        // a clean launch, and so nothing here can delay first paint. The
+        // pre-upgrade snapshot is retired inside here once it has aged out and
+        // the new build has proven itself on this device.
+        noteLaunchAndMaybeCleanBackup().catch(() => {});
       } catch (err) {
         console.error(err);
         setDbError(err.message || String(err));
@@ -153,15 +187,11 @@ function Root() {
     }
   }, [toast, auth.signedIn, auth.userId, profileState, onSocialChanged]);
 
+  // A boot failure is a recovery screen, not a dead end: it names what happened,
+  // says the data is untouched, and hands over an export that reads the raw
+  // stores without going through anything that might be what failed.
   if (dbError) {
-    return (
-      <div className="min-h-screen p-6 flex flex-col items-center justify-center text-center">
-        <h1 className="text-body font-semibold text-danger mb-2">Storage unavailable</h1>
-        <p className="text-label text-ink-tertiary max-w-sm">
-          {dbError}. Private-browsing mode disables IndexedDB on some browsers. Try a normal browser window.
-        </p>
-      </div>
-    );
+    return <RecoveryScreen error={dbError} blocked={/another tab|another window/i.test(dbError)} />;
   }
 
   if (!dbReady || !settingsLoaded || !workout.loaded || !auth.authReady) {

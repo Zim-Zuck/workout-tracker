@@ -112,3 +112,90 @@ export function setLabels(orderedList) {
     return { set: s, number: null, tag: s.type === 'warmup' ? 'W' : s.type === 'drop' ? 'D' : 'F' };
   });
 }
+
+// REPAIRING A RECORD RATHER THAN REFUSING IT.
+//
+// normalizeWorkout() above brings a well-formed old record up to date. This is
+// the layer below that: what to do with a record that is not well-formed at all
+// — no sets array, a null date, a missing id, two records sharing an id. These
+// exist. A workout saved while the tab was killed mid-write, a hand-edited
+// export, a row from a build with a bug in it.
+//
+// The rule is SALVAGE, NEVER DISCARD. A workout with a broken date is still a
+// workout somebody did, and a restore that throws on record 4,001 of 5,000 has
+// lost 999 workouts to protect nothing. Anything unrepairable is reported to the
+// caller so it can be counted and shown, not silently dropped.
+
+// A date we can sort by. Falls back through the fields that carry the same
+// meaning, and finally to the epoch — which sorts to the bottom of History,
+// visibly wrong, rather than crashing a chart.
+function salvageDate(w) {
+  for (const v of [w.date, w.startTime, w.endTime, w.completedAt]) {
+    const n = typeof v === 'string' ? Date.parse(v) : v;
+    if (typeof n === 'number' && Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
+// Repair one workout. `makeId` supplies an id when the record has none.
+export function repairWorkout(w, makeId) {
+  if (!w || typeof w !== 'object') return null;
+  const out = { ...w };
+  if (typeof out.id !== 'string' || !out.id) out.id = makeId();
+  out.date = salvageDate(out);
+  if (!Array.isArray(out.sets)) out.sets = [];
+  out.sets = out.sets
+    .filter((s) => s && typeof s === 'object')
+    .map((s, i) => {
+      const set = { ...s };
+      if (typeof set.id !== 'string' || !set.id) set.id = `${out.id}_s${i}`;
+      // A set with no exercise cannot be grouped, charted or ordered. Parking it
+      // under a sentinel id keeps the row and its weight rather than deleting it;
+      // the UI renders an unknown exercise as "Unknown", which it already had to
+      // handle for an exercise the user deleted from the library.
+      if (typeof set.exerciseId !== 'string' || !set.exerciseId) set.exerciseId = 'ex_unknown';
+      if (typeof set.weightKg !== 'number' || !Number.isFinite(set.weightKg)) set.weightKg = 0;
+      if (typeof set.reps !== 'number' || !Number.isFinite(set.reps)) set.reps = 0;
+      if (typeof set.timestamp !== 'number' || !Number.isFinite(set.timestamp)) set.timestamp = out.date + i;
+      set.completed = !!set.completed;
+      return set;
+    });
+  if (!Array.isArray(out.exercises)) {
+    // Reconstruct the exercise list from the sets, in order of first appearance,
+    // for a record that lost it.
+    out.exercises = [...new Set(out.sets.map((s) => s.exerciseId))];
+  }
+  out.isActive = out.isActive ? 1 : 0;
+  return normalizeWorkout(out);
+}
+
+export function repairExercise(ex, makeId) {
+  if (!ex || typeof ex !== 'object') return null;
+  const out = { ...ex };
+  if (typeof out.id !== 'string' || !out.id) out.id = makeId();
+  if (typeof out.name !== 'string' || !out.name) out.name = 'Unnamed exercise';
+  if (!Array.isArray(out.muscleGroups)) out.muscleGroups = [];
+  return out;
+}
+
+// Repair a whole list and collapse duplicate ids.
+//
+// A duplicate id is not a choice between two records, it is two records that
+// cannot both be stored — bulkPut() would silently overwrite one. Keeping the
+// one with more logged sets keeps the more complete session, and the loser is
+// re-keyed rather than thrown away, so nothing a person did disappears because
+// of a key collision.
+export function dedupeById(list, { weigh = () => 0 } = {}) {
+  const byId = new Map();
+  const rekeyed = [];
+  for (const item of list) {
+    const existing = byId.get(item.id);
+    if (!existing) { byId.set(item.id, item); continue; }
+    const [keep, move] = weigh(item) > weigh(existing) ? [item, existing] : [existing, item];
+    byId.set(keep.id, keep);
+    const moved = { ...move, id: `${move.id}_dup${rekeyed.length + 1}`, duplicateOf: move.id };
+    rekeyed.push(moved);
+    byId.set(moved.id, moved);
+  }
+  return { items: [...byId.values()], duplicates: rekeyed.length };
+}

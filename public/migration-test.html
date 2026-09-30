@@ -5,14 +5,17 @@
   body{font:14px ui-monospace,monospace;background:#0A0507;color:#F6EEF0;padding:16px;margin:0}
   .p{color:#4ADE80}.f{color:#FF8A8A}h1{font-size:16px}
 </style>
-<h1>v2 → v3 migration, against realistic old data</h1>
+<h1>v2 → current migration, in a real browser, against realistic old data</h1>
+<p style="color:#A89298">The Node suite (<code>npm test</code>) is the authority and covers far more cases.
+This page exists because it runs against the browser's OWN IndexedDB — the thing users actually have —
+rather than against fake-indexeddb.</p>
 <pre id="out">running…</pre>
 <script type="module">
 // Exercises the REAL applyUpgrades() from src/db/database.js against a database
 // built to look exactly like one written by the pre-redesign app: v2 stores, no
 // order, no completedAt, no skipped, and completion timestamps rewritten out of
 // logging sequence — the shape that produced the duplicate set number.
-import { applyUpgrades } from '/src/db/database.js';
+import { applyUpgrades, CURRENT_DB_VERSION, BACKUP_STORES, BACKUP_META_KEY } from '/src/db/database.js';
 import { orderedSets, setLabels } from '/src/db/normalize.js';
 
 const out = document.getElementById('out');
@@ -79,7 +82,7 @@ async function buildV2() {
 
 async function upgrade() {
   return new Promise((res, rej) => {
-    const q = indexedDB.open(NAME, 3);
+    const q = indexedDB.open(NAME, CURRENT_DB_VERSION);
     q.onupgradeneeded = (e) => applyUpgrades(q.result, e.oldVersion, e.target.transaction);
     q.onsuccess = () => res(q.result);
     q.onerror = () => rej(q.error);
@@ -93,12 +96,28 @@ try {
   line(true, 'built a v2 database with 25 old-format workouts');
 
   const db = await upgrade();
-  line(db.version === 3, 'upgraded to v3');
-  line([...db.objectStoreNames].sort().join() === 'exercises,meta,outbox,settings,socialCache,workouts',
-       'every store survived: ' + [...db.objectStoreNames].sort().join(', '));
+  line(db.version === CURRENT_DB_VERSION, `upgraded to v${CURRENT_DB_VERSION}`);
+  const names = [...db.objectStoreNames].sort();
+  line(['exercises','meta','outbox','settings','socialCache','workouts'].every(n => names.includes(n)),
+       'every original store survived: ' + names.join(', '));
+
+  // THE SAFETY NET, in a real browser.
+  const bw = await req(db.transaction(BACKUP_STORES.workouts).objectStore(BACKUP_STORES.workouts).getAll());
+  line(bw.length === 25, `the pre-upgrade backup holds all 25 workouts (got ${bw.length})`);
+  line(bw.every(w => w.sets.every(s => s.order === undefined)),
+       'the backup is the OLD shape — not a copy of the migrated result');
+  const man = await req(db.transaction('meta').objectStore('meta').get(BACKUP_META_KEY));
+  line(man?.value?.fromVersion === 2 && man.value.counts.workouts === 25,
+       'the backup manifest records 25 workouts taken from v2');
+  const vol = (list) => list.reduce((a, w) => a + w.sets.filter(s => s.completed && s.type !== 'warmup')
+    .reduce((n, s) => n + s.weightKg * s.reps, 0), 0);
 
   const rows = await req(db.transaction('workouts').objectStore('workouts').getAll());
   line(rows.length === 25, `all 25 workouts survived (got ${rows.length})`);
+  line(Math.round(vol(rows)) === Math.round(vol(OLD)),
+       `total volume is unchanged: ${Math.round(vol(OLD)).toLocaleString()} kg before, ${Math.round(vol(rows)).toLocaleString()} kg after`);
+  line(rows.reduce((n,w)=>n+w.sets.length,0) === OLD.reduce((n,w)=>n+w.sets.length,0),
+       `set count is unchanged: ${OLD.reduce((n,w)=>n+w.sets.length,0)}`);
 
   const ex = await req(db.transaction('exercises').objectStore('exercises').getAll());
   line(ex.length === 1 && ex[0].name === 'My Lift', 'the custom exercise survived untouched');
@@ -138,9 +157,9 @@ try {
   // Re-running the upgrade must be a no-op.
   const before = JSON.stringify(rows);
   db.close();
-  const db2 = await new Promise((res, rej) => { const q = indexedDB.open(NAME, 3); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+  const db2 = await new Promise((res, rej) => { const q = indexedDB.open(NAME, CURRENT_DB_VERSION); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
   const again = await req(db2.transaction('workouts').objectStore('workouts').getAll());
-  line(JSON.stringify(again) === before, 're-opening at v3 changes nothing');
+  line(JSON.stringify(again) === before, `re-opening at v${CURRENT_DB_VERSION} changes nothing`);
   db2.close();
   await new Promise((res) => { const d = indexedDB.deleteDatabase(NAME); d.onsuccess = d.onerror = d.onblocked = res; });
 
