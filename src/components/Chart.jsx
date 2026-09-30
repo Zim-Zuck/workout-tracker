@@ -93,7 +93,11 @@ export function LineChart({
   if (data.length < 2) return <Empty message={emptyMessage} height={height} />;
 
   const values = data.map((d) => d.value);
-  const max = niceCeiling(Math.max(...values));
+  // A line chart needs a ceiling CLOSE to the data, not a coarse round number:
+  // niceCeiling(107.5) is 200, which draws a steadily climbing squat as a
+  // flatline pinned to the bottom of the box. 10% of headroom, rounded to a
+  // readable step, keeps the trend legible.
+  const max = niceHeadroom(Math.max(...values));
   // A floor below the lowest point, so a steady lift is not drawn as a flatline
   // pinned to the bottom of the box.
   const min = Math.max(0, Math.floor(Math.min(...values) * 0.9));
@@ -179,6 +183,20 @@ function Empty({ message, height }) {
       {message}
     </div>
   );
+}
+
+// A ceiling just above the data, rounded to a step a human would write. Used
+// where the SHAPE of the line matters more than comparing against zero.
+const NICE = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+
+function niceHeadroom(v) {
+  if (v <= 0) return 1;
+  const target = v * 1.1;
+  const mag = 10 ** Math.floor(Math.log10(target));
+  for (const n of NICE) {
+    if (n * mag >= target) return n * mag;
+  }
+  return 10 * mag;
 }
 
 // Round a maximum up to something a human would write on an axis.
