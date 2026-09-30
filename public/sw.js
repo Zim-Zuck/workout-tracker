@@ -1,7 +1,15 @@
 // Service worker: cache app shell for offline use.
 // Uses network-first for HTML (so updates propagate), cache-first for assets.
-const VERSION = 'lift-v1';
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
+// Bumped whenever the shell list changes, so an existing install discards the
+// old cache on activate rather than serving a shell that is missing new files.
+const VERSION = 'lift-v2';
+const APP_SHELL = [
+  './', './index.html', './manifest.webmanifest',
+  './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
+  // Precached rather than cached-on-first-use: a typeface fetched lazily is a
+  // typeface the first offline launch does not have.
+  './fonts/inter-tight-latin.woff2', './fonts/inter-tight-latin-ext.woff2'
+];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(APP_SHELL)).then(() => self.skipWaiting()));

@@ -12,12 +12,12 @@
     <meta name="apple-mobile-web-app-title" content="Kun Workouts" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <!-- Inter Tight, the one typeface in the design system. Not an npm
-         dependency: two <link>s and a full system fallback stack, so the app
-         renders correctly (in -apple-system) if the font never arrives. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600&display=swap" rel="stylesheet" />
+    <!-- Inter Tight is preloaded, not fetched from a CDN: this is an
+         offline-first PWA and a typeface that only arrives with a network is a
+         typeface the app does not have at the gym. The @font-face rules live in
+         index.css; the latin subset is preloaded because it is what renders
+         first. -->
+    <link rel="preload" href="./fonts/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin />
     <title>Kun Workouts</title>
   </head>
   <body>
