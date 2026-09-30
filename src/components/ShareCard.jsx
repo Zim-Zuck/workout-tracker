@@ -6,7 +6,7 @@ import { formatDate, formatDuration } from '../utils/date.js';
 
 // Renders a polished portrait share image of a completed workout.
 // Painted with the 2D canvas API at 2x DPR for crisp text; no external deps.
-export default function ShareCard({ open, workout, workouts, exercises, unit, onClose }) {
+export default function ShareCard({ open, workout, workouts, exercises, onClose }) {
   const canvasRef = useRef(null);
   const [pngUrl, setPngUrl] = useState(null);
   const [canShareFile, setCanShareFile] = useState(false);
@@ -23,10 +23,10 @@ export default function ShareCard({ open, workout, workouts, exercises, unit, on
 
     const cv = canvasRef.current;
     if (!cv) return;
-    const url = drawCard(cv, summary, unit);
+    const url = drawCard(cv, summary);
     setPngUrl(url);
     return () => { if (url) URL.revokeObjectURL(url); };
-  }, [open, summary, unit]);
+  }, [open, summary]);
 
   if (!open || !summary) return null;
 
@@ -90,7 +90,7 @@ export default function ShareCard({ open, workout, workouts, exercises, unit, on
 
 // ---------- Canvas rendering ----------
 
-function drawCard(canvas, s, unit) {
+function drawCard(canvas, s) {
   const W = 1080;
   const H = 1350;
   const dpr = Math.min(3, window.devicePixelRatio || 2);
@@ -146,7 +146,7 @@ function drawCard(canvas, s, unit) {
   const colW = (W - M * 2) / 3;
   const prCount = s.prs.length;
   drawStat(ctx, M + 0 * colW, statsY, colW, 'DURATION', formatDuration(s.durationMs), TEXT, MUTED);
-  drawStat(ctx, M + 1 * colW, statsY, colW, 'VOLUME', formatWeight(s.totalVolumeKg, unit), TEXT, MUTED);
+  drawStat(ctx, M + 1 * colW, statsY, colW, 'VOLUME', formatWeight(s.totalVolumeKg), TEXT, MUTED);
   drawStat(ctx, M + 2 * colW, statsY, colW, 'PRs', prCount ? String(prCount) : '—', prCount ? ACCENT : TEXT, MUTED);
 
   drawHairline(ctx, M, statsY + 120, COL_R, statsY + 120, FAINT);
@@ -194,7 +194,7 @@ function drawCard(canvas, s, unit) {
     ctx.textAlign = 'right';
     ctx.fillStyle = MUTED;
     ctx.font = `500 26px -apple-system, "SF Pro Text", Inter, system-ui, sans-serif`;
-    const top = r.topWeightKg > 0 ? `${formatWeight(r.topWeightKg, unit)} · ` : '';
+    const top = r.topWeightKg > 0 ? `${formatWeight(r.topWeightKg)} · ` : '';
     ctx.fillText(`${top}${r.sets} × ${summariseReps(r.reps)}`, COL_R, y);
     ctx.textAlign = 'left';
     y += 42;

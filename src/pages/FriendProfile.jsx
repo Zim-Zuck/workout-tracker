@@ -13,14 +13,13 @@ import { relativeDay } from '../utils/date.js';
 // screen. Seeing your number next to theirs is the whole point of opening this,
 // so it is the default view, not something you navigate to.
 export default function FriendProfile({
-  targetId, myId, onBack, workouts, exercises, settings, onChanged, onChallenge
+  targetId, myId, onBack, workouts, exercises, onChanged, onChallenge
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const toast = useToast();
-  const unit = settings.unit;
 
   const exNames = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
   const myStats = useMemo(() => buildStatsSummary(workouts), [workouts]);
@@ -181,7 +180,7 @@ export default function FriendProfile({
             label="Volume"
             mine={myStats.lifetime_volume_kg}
             theirs={Number(stats.lifetime_volume_kg)}
-            format={(v) => formatWeight(v, unit)}
+            format={(v) => formatWeight(v)}
           />
 
           {shared.length > 0 && <div className="h-px bg-border my-2" />}
@@ -195,7 +194,7 @@ export default function FriendProfile({
                 label={exNames.get(l.exercise_id) || 'Exercise'}
                 mine={bodyweight ? mine.top_weight_reps : mine.top_weight_kg}
                 theirs={bodyweight ? l.top_weight_reps : Number(l.top_weight_kg)}
-                format={(v) => (bodyweight ? `${v} reps` : formatWeight(v, unit))}
+                format={(v) => (bodyweight ? `${v} reps` : formatWeight(v))}
               />
             );
           })}
@@ -218,7 +217,6 @@ export default function FriendProfile({
         <AchievementsRow
           stats={stats}
           lifts={lifts}
-          unit={unit}
           title={`${profile.display_name.split(' ')[0]}'s achievements`}
         />
       )}
@@ -232,7 +230,7 @@ export default function FriendProfile({
                 <span className="text-sm truncate">{exNames.get(l.exercise_id) || l.exercise_id}</span>
                 <span className="text-sm font-bold tabular-nums shrink-0">
                   {Number(l.top_weight_kg) > 0
-                    ? `${formatWeight(Number(l.top_weight_kg), unit)} × ${l.top_weight_reps}`
+                    ? `${formatWeight(Number(l.top_weight_kg))} × ${l.top_weight_reps}`
                     : `${l.top_weight_reps} reps`}
                 </span>
               </li>

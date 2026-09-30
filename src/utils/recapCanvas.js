@@ -84,7 +84,6 @@ function exportPng(canvas) {
 // ---------------------------------------------------------------------------
 export function drawWrapped(canvas, recap) {
   const ctx = prepare(canvas);
-  const { unit } = recap;
   paintBackground(ctx, CARD_W, CARD_H, CARD_W * 0.78, CARD_H * 0.12);
   header(ctx, recap.rangeLabel, 'CHAPTER ONE');
 
@@ -97,7 +96,7 @@ export function drawWrapped(canvas, recap) {
   const hero = recap.hero;
   const top = hero.groups[0];
   const winners = top.members;
-  const value = hero.category.format(top.value, unit);
+  const value = hero.category.format(top.value);
 
   // Category name, small and calm, above the number.
   ctx.fillStyle = PALETTE.muted;
@@ -129,7 +128,7 @@ export function drawWrapped(canvas, recap) {
     ctx.fillStyle = PALETTE.faint;
     ctx.font = `500 26px ${FONT_TEXT}`;
     ctx.fillText(
-      truncate(ctx, `${namesOf(next.members, 1)} second, ${hero.category.format(next.value, unit)}`, CARD_W - M * 2),
+      truncate(ctx, `${namesOf(next.members, 1)} second, ${hero.category.format(next.value)}`, CARD_W - M * 2),
       M,
       y
     );
@@ -151,11 +150,11 @@ export function drawWrapped(canvas, recap) {
     ctx.fillText(truncate(ctx, s.category.label.toUpperCase(), colW - 20), x, y);
 
     ctx.fillStyle = PALETTE.text;
-    const vSize = fitFontSize(ctx, s.category.format(g.value, unit), colW - 24, {
+    const vSize = fitFontSize(ctx, s.category.format(g.value), colW - 24, {
       weight: 700, max: 56, min: 28, step: 2
     });
     ctx.font = `700 ${vSize}px ${FONT_DISPLAY}`;
-    ctx.fillText(s.category.format(g.value, unit), x, y + 58);
+    ctx.fillText(s.category.format(g.value), x, y + 58);
 
     ctx.fillStyle = PALETTE.accent;
     ctx.font = `500 24px ${FONT_TEXT}`;
@@ -171,7 +170,7 @@ export function drawWrapped(canvas, recap) {
   ctx.textAlign = 'left';
   const people = `${t.people} of ${t.members} training`;
   ctx.fillText(
-    truncate(ctx, `${people}  ·  ${t.workouts} sessions  ·  ${formatWeight(t.volume, unit, { group: true })} moved`, CARD_W - M * 2),
+    truncate(ctx, `${people}  ·  ${t.workouts} sessions  ·  ${formatWeight(t.volume, { group: true })} moved`, CARD_W - M * 2),
     M,
     CARD_H - 246
   );
@@ -189,7 +188,6 @@ export function drawWrapped(canvas, recap) {
 // ---------------------------------------------------------------------------
 export function drawLeaderboard(canvas, recap) {
   const ctx = prepare(canvas);
-  const { unit } = recap;
   paintBackground(ctx, CARD_W, CARD_H, CARD_W * 0.2, CARD_H * 0.1);
   header(ctx, recap.rangeLabel, 'CHAPTER TWO');
 
@@ -229,7 +227,7 @@ export function drawLeaderboard(canvas, recap) {
     const leader = c.groups[0].value || 1;
     for (const g of rows) {
       const label = namesOf(g.members, 2);
-      const val = c.category.format(g.value, unit);
+      const val = c.category.format(g.value);
 
       ctx.fillStyle = g.place === 1 ? PALETTE.text : PALETTE.muted;
       ctx.font = `${g.place === 1 ? 600 : 500} 30px ${FONT_TEXT}`;

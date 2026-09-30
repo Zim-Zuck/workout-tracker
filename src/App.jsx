@@ -198,7 +198,6 @@ function Root() {
             onBack={() => setViewingFriendId(null)}
             workouts={workout.workouts}
             exercises={workout.exercises}
-            settings={settings}
             onChanged={onSocialChanged}
             onChallenge={(p) => {
               setPresetOpponent(p);
@@ -212,7 +211,6 @@ function Root() {
             profileState={profileState}
             workouts={workout.workouts}
             exercises={workout.exercises}
-            settings={settings}
             auth={auth}
           />
         ) : (
@@ -225,8 +223,8 @@ function Root() {
             onFinishToast={onFinishToast}
           />
         )}
-        {tab === 'history' && <HistoryScreen workout={workout} settings={settings} />}
-        {tab === 'progress' && <ProgressScreen workout={workout} settings={settings} />}
+        {tab === 'history' && <HistoryScreen workout={workout} />}
+        {tab === 'progress' && <ProgressScreen workout={workout} />}
         {tab === 'social' && (
           <SocialScreen
             auth={auth}
@@ -237,7 +235,6 @@ function Root() {
             onOpenProfile={(id) => setViewingFriendId(id)}
             exercises={workout.exercises}
             workouts={workout.workouts}
-            settings={settings}
             presetOpponent={presetOpponent}
             onPresetUsed={() => setPresetOpponent(null)}
             unread={unread}

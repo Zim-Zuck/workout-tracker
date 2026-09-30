@@ -7,8 +7,8 @@ import { formatDate, formatDuration, formatDateTime } from '../utils/date.js';
 import { formatWeight } from '../utils/units.js';
 import { workingVolume, isWorking } from '../services/calculations.js';
 
-export default function HistoryScreen({ workout, settings }) {
-  const { workouts, exercises, updateHistoricalWorkout, deleteHistoricalWorkout } = workout;
+export default function HistoryScreen({ workout }) {
+  const { workouts, exercises, updateHistoricalWorkout, deleteHistoricalWorkout, updateExercise } = workout;
   const [q, setQ] = useState('');
   const [exerciseFilter, setExerciseFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -18,7 +18,7 @@ export default function HistoryScreen({ workout, settings }) {
   const [shareFor, setShareFor] = useState(null);
 
   const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
-  const fmt = (kg) => formatWeight(kg, settings.unit);
+  const fmt = (kg) => formatWeight(kg);
 
   const filtered = useMemo(() => {
     return workouts.filter((w) => {
@@ -134,7 +134,7 @@ export default function HistoryScreen({ workout, settings }) {
           key={opened.id}
           workout={opened}
           exMap={exMap}
-          unit={settings.unit}
+          onUpdateExercise={updateExercise}
           onClose={() => setOpenId(null)}
           onSave={async (w) => { await updateHistoricalWorkout(w); }}
           onDelete={async () => { await deleteHistoricalWorkout(opened.id); setOpenId(null); }}
@@ -147,7 +147,6 @@ export default function HistoryScreen({ workout, settings }) {
         workout={shareFor}
         workouts={workouts}
         exercises={exercises}
-        unit={settings.unit}
         onClose={() => setShareFor(null)}
       />
     </div>
@@ -163,10 +162,10 @@ function Stat({ label, value }) {
   );
 }
 
-function WorkoutDetail({ workout, exMap, unit, onClose, onSave, onDelete, onShare }) {
+function WorkoutDetail({ workout, exMap, onUpdateExercise, onClose, onSave, onDelete, onShare }) {
   const [w, setW] = useState(workout);
   const [confirmDel, setConfirmDel] = useState(false);
-  const fmt = (kg) => formatWeight(kg, unit);
+  const fmt = (kg) => formatWeight(kg);
   const dur = w.endTime ? w.endTime - w.startTime : 0;
   const groupedIds = w.exercises.length ? w.exercises : [...new Set(w.sets.map(s => s.exerciseId))];
 
@@ -219,7 +218,8 @@ function WorkoutDetail({ workout, exMap, unit, onClose, onSave, onDelete, onShar
                     key={s.id}
                     index={i}
                     set={s}
-                    unit={unit}
+                    weightIncrement={ex?.weightIncrement || 2.5}
+                    onChangeIncrement={ex ? (inc) => onUpdateExercise(ex.id, { weightIncrement: inc }) : undefined}
                     onChange={(patch) => updateSet(s.id, patch)}
                     onComplete={() => updateSet(s.id, { completed: !s.completed })}
                     onDelete={() => removeSet(s.id)}

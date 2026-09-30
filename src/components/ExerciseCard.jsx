@@ -9,7 +9,6 @@ export default function ExerciseCard({
   exercise,
   activeSets,
   history,
-  unit,
   index,
   totalCount,
   onAddSet,
@@ -19,14 +18,15 @@ export default function ExerciseCard({
   onRemoveExercise,
   onMoveUp,
   onMoveDown,
-  onReplace
+  onReplace,
+  onChangeIncrement
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const prev = useMemo(() => previousPerformance(exercise.id, history), [exercise.id, history]);
-  const rec = useMemo(() => recommend({ exercise, workoutHistory: history, unit }), [exercise, history, unit]);
+  const rec = useMemo(() => recommend({ exercise, workoutHistory: history }), [exercise, history]);
 
-  const fmt = (kg) => formatWeight(kg, unit);
+  const fmt = (kg) => formatWeight(kg);
   const prevSummary = prev
     ? summarizeSets(prev.sets, fmt)
     : 'No previous data';
@@ -102,7 +102,8 @@ export default function ExerciseCard({
               key={s.id}
               index={i}
               set={s}
-              unit={unit}
+              weightIncrement={exercise.weightIncrement || 2.5}
+              onChangeIncrement={onChangeIncrement}
               prevSet={prev?.sets?.[i] || null}
               onChange={(patch) => onUpdateSet(s.id, patch)}
               onComplete={() => onCompleteSet(s)}

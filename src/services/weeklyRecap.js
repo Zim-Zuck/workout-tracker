@@ -47,7 +47,7 @@ const CATEGORIES = [
     value: (m) => (m.week?.volume_kg > 0 ? m.week.volume_kg : null),
     // Grouped: a week's volume runs to five or six digits, and this number is
     // set large enough on card one that "48200 kg" is hard to read at a glance.
-    format: (v, unit) => formatWeight(v, unit, { group: true }),
+    format: (v) => formatWeight(v, { group: true }),
     // Typical hard week for one person, used to normalise "is this big".
     reference: 20000
   },
@@ -209,7 +209,7 @@ function scoreCategory(cat, groups, memberCount, recent) {
 // ---------------------------------------------------------------------------
 const BATTLE_PRIORITY = ['ex_squat', 'ex_deadlift', 'ex_bench_press', 'ex_ohp', 'ex_barbell_row', 'ex_pullup'];
 
-export function buildBattles(members, exerciseRows, unit, limit = 2) {
+export function buildBattles(members, exerciseRows, limit = 2) {
   const byMember = new Map(members.map((m) => [m.id, m]));
   const byExercise = new Map();
   for (const r of exerciseRows || []) {
@@ -265,7 +265,7 @@ export function buildBattles(members, exerciseRows, unit, limit = 2) {
       places: groups.map((g) => ({
         place: g.place,
         value: g.value,
-        display: allBodyweight ? `${g.value} reps` : formatWeight(g.value, unit),
+        display: allBodyweight ? `${g.value} reps` : formatWeight(g.value),
         members: g.members.map((x) => byMember.get(x.id)).filter(Boolean)
       })),
       rows,
@@ -408,7 +408,7 @@ const AWARDS = [
       if (ctx.battleWinnerIds.has(m.id)) return null;
       return {
         members: [m],
-        stat: formatWeight(m.vol, ctx.unit, { group: true }),
+        stat: formatWeight(m.vol, { group: true }),
         line: `Moved more weight than anyone else and set ${m.prs === 0 ? 'no' : 'one'} personal record doing it. Tonnage is its own reward.`
       };
     }
@@ -652,7 +652,7 @@ export function weekRangeLabel(weekKey) {
 //
 // `recentIds` is the list of statistic ids used in the previous weeks, newest
 // first. Purely a variety mechanism — see freshness().
-export function buildWeeklyRecap({ payload, unit = 'kg', recentIds = [] }) {
+export function buildWeeklyRecap({ payload, recentIds = [] }) {
   const weekKey = payload?.week_start;
   const rawMembers = payload?.members || [];
   const exerciseRows = payload?.exercises || [];
@@ -674,8 +674,7 @@ export function buildWeeklyRecap({ payload, unit = 'kg', recentIds = [] }) {
     weekKey,
     rangeLabel: weekKey ? weekRangeLabel(weekKey) : '',
     members: derived,
-    totals,
-    unit
+    totals
   };
 
   // Nobody in the circle trained. There is no story, and inventing one from
@@ -688,7 +687,7 @@ export function buildWeeklyRecap({ payload, unit = 'kg', recentIds = [] }) {
     .map((cat) => scoreCategory(cat, rankBy(derived, cat.value), derived.length, recentIds))
     .filter(Boolean);
 
-  const battles = buildBattles(derived, exerciseRows, unit);
+  const battles = buildBattles(derived, exerciseRows);
   const battleWinnerIds = new Set();
   for (const b of battles) for (const m of b.places[0]?.members || []) battleWinnerIds.add(m.id);
 
@@ -718,7 +717,7 @@ export function buildWeeklyRecap({ payload, unit = 'kg', recentIds = [] }) {
   }
 
   // ---- Card 3: awards that the data actually supports.
-  const ctx = { derived, scored, battles, battleWinnerIds, unit };
+  const ctx = { derived, scored, battles, battleWinnerIds };
   const fired = [];
   for (const rule of AWARDS) {
     let result = null;
@@ -767,7 +766,7 @@ export function buildWeeklyRecap({ payload, unit = 'kg', recentIds = [] }) {
         title: s.category.label.toUpperCase(),
         family: `fallback_${FAMILY[s.id]}`,
         members: top.members,
-        stat: s.category.format(top.value, unit),
+        stat: s.category.format(top.value),
         line: null
       });
     }

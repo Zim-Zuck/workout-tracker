@@ -3,7 +3,7 @@ import { evaluateAchievements } from '../services/achievements.js';
 // Compact achievement strip for a profile. Unearned ones stay visible but
 // dimmed, with progress — "17/50 workouts" is motivating in a way that hiding
 // the badge entirely is not.
-export default function AchievementsRow({ stats, lifts, unit, title = 'Achievements' }) {
+export default function AchievementsRow({ stats, lifts, title = 'Achievements' }) {
   const items = evaluateAchievements(stats, lifts);
   const earnedCount = items.filter((a) => a.earned).length;
 
@@ -16,7 +16,7 @@ export default function AchievementsRow({ stats, lifts, unit, title = 'Achieveme
       <ul className="grid grid-cols-3 gap-2">
         {items.map((a) => {
           const pct = a.target ? Math.min(100, (a.current / a.target) * 100) : 0;
-          const fmt = a.format ? (v) => a.format(v, unit) : (v) => String(Math.round(v));
+          const fmt = a.format ? (v) => a.format(v) : (v) => String(Math.round(v));
           return (
             <li
               key={a.id}

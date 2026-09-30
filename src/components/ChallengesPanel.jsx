@@ -16,14 +16,13 @@ import { formatWeight } from '../utils/units.js';
 // then have N days to beat it. The target cannot move, and progress is stamped
 // server-side, so "I hit it before the clock started" is not available.
 export default function ChallengesPanel({
-  myId, exercises, workouts, settings, refreshToken, onChanged, presetOpponent, onPresetUsed
+  myId, exercises, workouts, refreshToken, onChanged, presetOpponent, onPresetUsed
 }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stale, setStale] = useState(false);
   const [creating, setCreating] = useState(false);
   const toast = useToast();
-  const unit = settings.unit;
 
   const exNames = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
 
@@ -102,7 +101,7 @@ export default function ChallengesPanel({
       )}
 
       {incoming.map((c) => (
-        <Card key={c.id} c={c} exNames={exNames} unit={unit} accent>
+        <Card key={c.id} c={c} exNames={exNames} accent>
           <div className="flex gap-2 mt-3">
             <button
               onClick={() => respond(c.id, true)}
@@ -120,16 +119,15 @@ export default function ChallengesPanel({
         </Card>
       ))}
 
-      {active.map((c) => <Card key={c.id} c={c} exNames={exNames} unit={unit} myId={myId} />)}
-      {sent.map((c) => <Card key={c.id} c={c} exNames={exNames} unit={unit} />)}
-      {done.map((c) => <Card key={c.id} c={c} exNames={exNames} unit={unit} myId={myId} />)}
+      {active.map((c) => <Card key={c.id} c={c} exNames={exNames} myId={myId} />)}
+      {sent.map((c) => <Card key={c.id} c={c} exNames={exNames} />)}
+      {done.map((c) => <Card key={c.id} c={c} exNames={exNames} myId={myId} />)}
 
       <NewChallengeModal
         open={creating}
         onClose={() => { setCreating(false); onPresetUsed?.(); }}
         workouts={workouts}
         exercises={exercises}
-        unit={unit}
         presetOpponent={presetOpponent}
         onCreated={async () => {
           setCreating(false);
@@ -142,10 +140,10 @@ export default function ChallengesPanel({
   );
 }
 
-function Card({ c, exNames, unit, myId, accent, children }) {
+function Card({ c, exNames, myId, accent, children }) {
   const name = exNames.get(c.exercise_id) || c.exercise_id;
   const bodyweight = Number(c.target_weight_kg) === 0;
-  const fmt = (w, r) => (bodyweight ? `${r} reps` : `${formatWeight(Number(w), unit)} × ${r}`);
+  const fmt = (w, r) => (bodyweight ? `${r} reps` : `${formatWeight(Number(w))} × ${r}`);
 
   const mine = fmt(c.my_best_weight_kg, c.my_best_reps);
   const theirs = fmt(c.their_best_weight_kg, c.their_best_reps);
@@ -230,7 +228,7 @@ function timeLeft(endsAt) {
 // Creating a challenge: pick a friend, a lift you have actually logged, and a
 // duration. Only lifts with a local PR are offered — the server refuses the rest
 // anyway, and offering them would be a trap.
-function NewChallengeModal({ open, onClose, workouts, exercises, unit, onCreated, presetOpponent }) {
+function NewChallengeModal({ open, onClose, workouts, exercises, onCreated, presetOpponent }) {
   const [friends, setFriends] = useState([]);
   const [opponent, setOpponent] = useState(null);
   const [exerciseId, setExerciseId] = useState('');
@@ -336,7 +334,7 @@ function NewChallengeModal({ open, onClose, workouts, exercises, unit, onCreated
             <p className="text-[10px] tracking-wider text-muted font-semibold">THEY HAVE TO BEAT</p>
             <p className="text-xl font-bold tabular-nums mt-1">
               {Number(target.top_weight_kg) > 0
-                ? `${formatWeight(target.top_weight_kg, unit)} × ${target.top_weight_reps}`
+                ? `${formatWeight(target.top_weight_kg)} × ${target.top_weight_reps}`
                 : `${target.top_weight_reps} reps`}
             </p>
             <p className="text-[11px] text-muted mt-1">Your current best. It is locked in when you send this.</p>

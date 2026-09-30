@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { getSettings, setSetting } from '../db/database.js';
 
 export const DEFAULT_SETTINGS = {
-  unit: 'kg',
   defaultRestSec: 120,
   defaultRepsLow: 8,
   defaultRepsHigh: 10,

@@ -11,7 +11,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   const {
     exercises, active, workouts,
     startWorkout, finishWorkout, cancelWorkout,
-    addExerciseToActive, removeExerciseFromActive, reorderExercises, replaceExercise,
+    addExerciseToActive, removeExerciseFromActive, reorderExercises, replaceExercise, updateExercise,
     addSet, updateSet, deleteSet, undo, canUndo, renameWorkout, setNotes
   } = workout;
 
@@ -54,7 +54,6 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
       workout={shareFor}
       workouts={workouts}
       exercises={exercises}
-      unit={settings.unit}
       onClose={() => setShareFor(null)}
     />
   );
@@ -122,7 +121,6 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
             exercise={ex}
             activeSets={sets}
             history={workouts}
-            unit={settings.unit}
             index={idx}
             totalCount={active.exercises.length}
             onAddSet={(seed) => addSet(exId, seed)}
@@ -142,6 +140,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
             onMoveUp={() => reorderExercises(idx, idx - 1)}
             onMoveDown={() => reorderExercises(idx, idx + 1)}
             onReplace={() => setReplaceFor(exId)}
+            onChangeIncrement={(inc) => updateExercise(exId, { weightIncrement: inc })}
           />
         );
       })}

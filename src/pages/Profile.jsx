@@ -16,12 +16,11 @@ import AchievementsRow from '../components/AchievementsRow.jsx';
 // ones the rest of the app computes, so the profile is instant, correct and
 // works offline. What the cloud holds is a copy for friends to read, and the
 // sync row below says whether that copy is current.
-export default function ProfileScreen({ profileState, workouts, exercises, settings, auth }) {
+export default function ProfileScreen({ profileState, workouts, exercises, auth }) {
   const { profile, setProfile, publish, pendingSync, lastSyncAt } = profileState;
   const toast = useToast();
   const [editing, setEditing] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const unit = settings.unit;
 
   const exNames = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
   const stats = useMemo(() => buildStatsSummary(workouts), [workouts]);
@@ -76,8 +75,8 @@ export default function ProfileScreen({ profileState, workouts, exercises, setti
         <Stat label="This week" value={stats.workouts_this_week} />
         <Stat
           label="Volume"
-          value={formatWeight(stats.lifetime_volume_kg, unit, { withUnit: false })}
-          suffix={unit}
+          value={formatWeight(stats.lifetime_volume_kg, { withUnit: false })}
+          suffix="kg"
         />
       </section>
 
@@ -99,7 +98,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, setti
                 <div className="text-right shrink-0">
                   <div className="text-base font-bold tabular-nums">
                     {l.top_weight_kg > 0
-                      ? formatWeight(l.top_weight_kg, unit)
+                      ? formatWeight(l.top_weight_kg)
                       : `${l.top_weight_reps} reps`}
                   </div>
                   {l.top_weight_kg > 0 && (
@@ -112,7 +111,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, setti
         )}
       </section>
 
-      <AchievementsRow stats={stats} lifts={buildLiftsSummary(workouts)} unit={unit} />
+      <AchievementsRow stats={stats} lifts={buildLiftsSummary(workouts)} />
 
       {/* Privacy — all-or-nothing, as designed */}
       <section className="bg-surface border border-border rounded-2xl p-3">

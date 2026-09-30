@@ -3,15 +3,14 @@ import { Download, Share2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 import { estimate1RM, workingVolume, isWorking, buildPrTimeline, e1rmSeries, computeStreak } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
-import { formatWeight, toDisplay, roundDisplay } from '../utils/units.js';
+import { formatWeight, roundDisplay } from '../utils/units.js';
 import { startOfWeek, startOfDay, formatDate } from '../utils/date.js';
 import { useToast } from '../components/Toast.jsx';
 import ProgressShareCard from '../components/ProgressShareCard.jsx';
 
-export default function ProgressScreen({ workout, settings }) {
+export default function ProgressScreen({ workout }) {
   const { workouts, exercises } = workout;
-  const unit = settings.unit;
-  const fmt = (kg) => formatWeight(kg, unit);
+  const fmt = (kg) => formatWeight(kg);
   const toast = useToast();
   const exName = useMemo(() => new Map(exercises.map((e) => [e.id, e.name])), [exercises]);
   const [shareOpen, setShareOpen] = useState(false);
@@ -36,9 +35,9 @@ export default function ProgressScreen({ workout, settings }) {
       .slice(-12)
       .map(([t, v]) => ({
         label: new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        volume: roundDisplay(toDisplay(v, unit), unit)
+        volume: roundDisplay(v)
       }));
-  }, [workouts, unit]);
+  }, [workouts]);
 
   // Volume by muscle group (last 4 weeks).
   const muscleData = useMemo(() => {
@@ -59,9 +58,9 @@ export default function ProgressScreen({ workout, settings }) {
       }
     }
     return Object.entries(totals)
-      .map(([label, kg]) => ({ label, volume: roundDisplay(toDisplay(kg, unit), unit) }))
+      .map(([label, kg]) => ({ label, volume: roundDisplay(kg) }))
       .sort((a, b) => b.volume - a.volume);
-  }, [workouts, exercises, unit, now]);
+  }, [workouts, exercises, now]);
 
   // Per-exercise 1RM progression.
   const [selectedEx, setSelectedEx] = useState(() => {
@@ -79,12 +78,12 @@ export default function ProgressScreen({ workout, settings }) {
       const top = sets.reduce((m, s) => Math.max(m, s.weightKg), 0);
       rows.push({
         label: new Date(w.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        e1rm: roundDisplay(toDisplay(best, unit), unit),
-        top: roundDisplay(toDisplay(top, unit), unit)
+        e1rm: roundDisplay(best),
+        top: roundDisplay(top)
       });
     }
     return rows;
-  }, [workouts, selectedEx, unit]);
+  }, [workouts, selectedEx]);
 
   // Week-over-week deltas — clearly say "not enough data" when only one week.
   const trend = useMemo(() => {
@@ -152,19 +151,19 @@ export default function ProgressScreen({ workout, settings }) {
 
   const compareData = useMemo(() => {
     if (!activeCompareA || !activeCompareB) return [];
-    const a = new Map(e1rmSeries(workouts, activeCompareA).map((r) => [r.date, roundDisplay(toDisplay(r.e1rmKg, unit), unit)]));
-    const b = new Map(e1rmSeries(workouts, activeCompareB).map((r) => [r.date, roundDisplay(toDisplay(r.e1rmKg, unit), unit)]));
+    const a = new Map(e1rmSeries(workouts, activeCompareA).map((r) => [r.date, roundDisplay(r.e1rmKg)]));
+    const b = new Map(e1rmSeries(workouts, activeCompareB).map((r) => [r.date, roundDisplay(r.e1rmKg)]));
     const dates = Array.from(new Set([...a.keys(), ...b.keys()])).sort((x, y) => x - y);
     return dates.map((d) => ({
       label: new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
       a: a.get(d),
       b: b.get(d)
     }));
-  }, [workouts, activeCompareA, activeCompareB, unit]);
+  }, [workouts, activeCompareA, activeCompareB]);
 
   // ---- Export / share ----
   const handleExportCSV = async () => {
-    await downloadSetsCSV(unit);
+    await downloadSetsCSV();
     toast('CSV exported');
   };
 
@@ -211,13 +210,13 @@ export default function ProgressScreen({ workout, settings }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
                 <XAxis dataKey="label" stroke="#8a8a92" fontSize={11} />
                 <YAxis stroke="#8a8a92" fontSize={11} width={40} />
-                <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v) => [`${v} ${unit}`, 'Volume']} />
+                <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v) => [`${v} kg`, 'Volume']} />
                 <Bar dataKey="volume" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         )}
-        <TrendLine trend={trend} unit={unit} />
+        <TrendLine trend={trend} />
       </Section>
 
       <Section title="Training consistency" right={<span className="text-xs text-muted">Last 18 weeks</span>}>
@@ -306,7 +305,7 @@ export default function ProgressScreen({ workout, settings }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
                 <XAxis dataKey="label" stroke="#8a8a92" fontSize={11} />
                 <YAxis stroke="#8a8a92" fontSize={11} width={40} />
-                <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v, name) => [`${v} ${unit}`, name === 'e1rm' ? 'Est. 1RM' : 'Top weight']} />
+                <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v, name) => [`${v} kg`, name === 'e1rm' ? 'Est. 1RM' : 'Top weight']} />
                 <Line type="monotone" dataKey="e1rm" stroke="#3b82f6" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="top" stroke="#f59e0b" strokeWidth={2} dot={false} />
               </LineChart>
@@ -345,7 +344,7 @@ export default function ProgressScreen({ workout, settings }) {
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2e" />
                     <XAxis dataKey="label" stroke="#8a8a92" fontSize={11} />
                     <YAxis stroke="#8a8a92" fontSize={11} width={40} />
-                    <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v) => [`${v} ${unit}`, 'Est. 1RM']} />
+                    <Tooltip contentStyle={{ background: '#1c1c1f', border: '1px solid #2a2a2e', borderRadius: 8 }} labelStyle={{ color: '#8a8a92' }} formatter={(v) => [`${v} kg`, 'Est. 1RM']} />
                     <Legend
                       formatter={(key) => key === 'a' ? (exName.get(activeCompareA) || 'A') : (exName.get(activeCompareB) || 'B')}
                       wrapperStyle={{ fontSize: 11 }}
@@ -381,7 +380,6 @@ export default function ProgressScreen({ workout, settings }) {
         open={shareOpen}
         workouts={workouts}
         exercises={exercises}
-        unit={unit}
         onClose={() => setShareOpen(false)}
       />
     </div>
@@ -419,13 +417,13 @@ function EmptyChart({ msg }) {
   return <div className="h-32 flex items-center justify-center text-xs text-muted">{msg}</div>;
 }
 
-function TrendLine({ trend, unit }) {
+function TrendLine({ trend }) {
   if (!trend) return <div className="mt-2 text-xs text-muted">Trend: not enough data</div>;
   const cls = trend.delta > 0 ? 'text-success' : trend.delta < 0 ? 'text-danger' : 'text-muted';
   const sign = trend.delta > 0 ? '+' : '';
   return (
     <div className={`mt-2 text-xs ${cls}`}>
-      Week over week: {sign}{trend.delta.toFixed(0)} {unit}{trend.pct != null ? ` (${sign}${trend.pct}%)` : ''}
+      Week over week: {sign}{trend.delta.toFixed(0)} kg{trend.pct != null ? ` (${sign}${trend.pct}%)` : ''}
     </div>
   );
 }

@@ -66,9 +66,9 @@ function pickExercises(selectedIds, style, exerciseOptions) {
 // "New" when there's no real baseline to compare to, "Steady" when selected but flat/negative
 // in the period, otherwise the actual improvement — so a hand-picked exercise that isn't a
 // fresh PR still reads sensibly instead of implying a record that didn't happen.
-function exerciseDeltaLabel(ex, unit) {
+function exerciseDeltaLabel(ex) {
   if (ex.isNew) return 'New';
-  if (ex.improved) return `+${formatWeight(ex.deltaKg, unit)}`;
+  if (ex.improved) return `+${formatWeight(ex.deltaKg)}`;
   return 'Steady';
 }
 
@@ -144,7 +144,7 @@ function pickRendered(selectedIds, style, summary, exerciseCount, strengthSeries
   return { rendered, trimmed };
 }
 
-export default function ProgressShareCard({ open, workouts, exercises, unit, onClose }) {
+export default function ProgressShareCard({ open, workouts, exercises, onClose }) {
   const canvasRef = useRef(null);
   const [pngUrl, setPngUrl] = useState(null);
   const [canShareFile, setCanShareFile] = useState(false);
@@ -251,11 +251,11 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
     const cv = canvasRef.current;
     if (!cv) return;
     const renderedSet = new Set(renderedKey ? renderedKey.split(',') : []);
-    const url = drawProgressCard(cv, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExercise?.exerciseName, volumeMode, unit);
+    const url = drawProgressCard(cv, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExercise?.exerciseName, volumeMode);
     setPngUrl(url);
     return () => { if (url) URL.revokeObjectURL(url); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, summary, style, renderedKey, renderedExercisesKey, strengthSeries, volumeMode, unit]);
+  }, [open, summary, style, renderedKey, renderedExercisesKey, strengthSeries, volumeMode]);
 
   if (!open) return null;
 
@@ -463,7 +463,7 @@ export default function ProgressShareCard({ open, workouts, exercises, unit, onC
                           {isChecked && isTrimmed && <span className="text-[10px] text-warn ml-1.5 shrink-0">not shown</span>}
                         </button>
                         <span className="text-[11px] text-muted tabular-nums shrink-0">
-                          {formatWeight(ex.valueKg, unit)} · {exerciseDeltaLabel(ex, unit)}
+                          {formatWeight(ex.valueKg)} · {exerciseDeltaLabel(ex)}
                         </span>
                         <button
                           onClick={() => featureExercise(ex.exerciseId)}
@@ -541,7 +541,7 @@ function StyleOption({ active, title, desc, onClick }) {
 
 // ---------- Canvas rendering ----------
 
-function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit) {
+function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode) {
   const W = 1080;
   const H = CARD_H[style];
   const dpr = Math.min(3, window.devicePixelRatio || 2);
@@ -551,8 +551,8 @@ function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode, unit);
-  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit);
+  if (style === 'minimal') drawMinimal(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode);
+  else drawDetailed(ctx, W, H, CARD_M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode);
 
   try {
     return canvas.toDataURL('image/png');
@@ -563,40 +563,40 @@ function drawProgressCard(canvas, summary, style, renderedSet, renderedExercises
 
 // Thousands-separated weight for big totals (e.g. "57,999.5 kg") — formatWeight() alone
 // doesn't group digits, which reads poorly at hero card sizes.
-function formatBigWeight(kg, unit) {
-  const str = formatWeight(kg, unit);
+function formatBigWeight(kg) {
+  const str = formatWeight(kg);
   const [num, ...rest] = str.split(' ');
   const [intPart, decPart] = num.split('.');
   const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return [grouped + (decPart ? `.${decPart}` : ''), ...rest].join(' ');
 }
 
-function volumeTile(summary, unit, volumeMode) {
+function volumeTile(summary, volumeMode) {
   const { volumeKg, volumePct, workoutCount } = summary.training;
   if (volumeKg <= 0) return null;
   if (volumeMode === 'avg') {
     const avg = workoutCount > 0 ? volumeKg / workoutCount : 0;
-    return { value: formatBigWeight(avg, unit), label: 'AVG / WORKOUT' };
+    return { value: formatBigWeight(avg), label: 'AVG / WORKOUT' };
   }
   if (volumePct != null) {
     const sign = volumePct > 0 ? '+' : '';
     return { value: `${sign}${volumePct}%`, label: 'VOLUME' };
   }
-  return { value: formatBigWeight(volumeKg, unit), label: 'VOLUME' };
+  return { value: formatBigWeight(volumeKg), label: 'VOLUME' };
 }
 
-function buildTiles(summary, renderedSet, renderedExercises, volumeMode, unit) {
+function buildTiles(summary, renderedSet, renderedExercises, volumeMode) {
   const tiles = [];
   if (renderedSet.has('prs')) {
     for (const pr of renderedExercises) {
-      tiles.push({ value: formatWeight(pr.valueKg, unit), label: `${pr.exerciseName.toUpperCase()} PR` });
+      tiles.push({ value: formatWeight(pr.valueKg), label: `${pr.exerciseName.toUpperCase()} PR` });
     }
   }
   if (renderedSet.has('workouts') && summary.training.workoutCount > 0) {
     tiles.push({ value: String(summary.training.workoutCount), label: 'WORKOUTS' });
   }
   if (renderedSet.has('volume')) {
-    const v = volumeTile(summary, unit, volumeMode);
+    const v = volumeTile(summary, volumeMode);
     if (v) tiles.push(v);
   }
   if (renderedSet.has('streak') && summary.streakWeeks > 0) {
@@ -605,7 +605,7 @@ function buildTiles(summary, renderedSet, renderedExercises, volumeMode, unit) {
   return tiles;
 }
 
-function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode, unit) {
+function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, volumeMode) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -627,7 +627,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, stre
   drawHairline(ctx, M, y, W - M, y);
   y += 58;
 
-  const tiles = buildTiles(summary, renderedSet, renderedExercises, volumeMode, unit).slice(0, 4);
+  const tiles = buildTiles(summary, renderedSet, renderedExercises, volumeMode).slice(0, 4);
 
   if (tiles.length === 0) {
     ctx.fillStyle = PALETTE.muted;
@@ -658,7 +658,7 @@ function drawMinimal(ctx, W, H, M, summary, renderedSet, renderedExercises, stre
   drawWordmark(ctx, W, H);
 }
 
-function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode, unit) {
+function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, strengthSeries, headlineExerciseName, volumeMode) {
   paintBackground(ctx, W, H);
   drawTopBar(ctx, W, M, 'KUN  WORKOUTS', summary.label);
 
@@ -710,7 +710,7 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
       ctx.textAlign = 'right';
       ctx.fillStyle = PALETTE.accent;
       ctx.font = `600 28px ${FONT_DISPLAY}`;
-      ctx.fillText(`${formatWeight(pr.valueKg, unit)}  ${exerciseDeltaLabel(pr, unit)}`, W - M, y);
+      ctx.fillText(`${formatWeight(pr.valueKg)}  ${exerciseDeltaLabel(pr)}`, W - M, y);
       ctx.textAlign = 'left';
       y += 48;
     }
@@ -724,7 +724,7 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
     trainingTiles.push({ value: String(summary.training.workoutCount), label: 'WORKOUTS' });
   }
   if (renderedSet.has('volume')) {
-    const v = volumeTile(summary, unit, volumeMode);
+    const v = volumeTile(summary, volumeMode);
     if (v) trainingTiles.push(v);
   }
   if (renderedSet.has('streak') && summary.streakWeeks > 0) {

@@ -2,8 +2,8 @@
 //
 // Rules (in order):
 //   1. No prior data → suggest the exercise's default rep range at a placeholder weight (last used, or 0).
-//   2. Every working set hit the top of the rep range → increase weight by one loadIncrement,
-//      target reps = lower bound of the rep range at the new weight.
+//   2. Every working set hit the top of the rep range → increase weight by the exercise's
+//      configured increment, target reps = lower bound of the rep range at the new weight.
 //   3. Every working set is within the rep range but not all at top → repeat weight, target = range.
 //   4. Any working set failed to reach the bottom of the rep range → repeat weight, target = range
 //      with a message not to advance until you hit the range across all sets.
@@ -13,9 +13,8 @@
 // Returns { targetWeightKg, targetRepsLow, targetRepsHigh, action, reason }
 //   action ∈ 'increase' | 'repeat' | 'first-session'
 import { isWorking, previousPerformance } from './calculations.js';
-import { loadIncrement } from '../utils/units.js';
 
-export function recommend({ exercise, workoutHistory, unit }) {
+export function recommend({ exercise, workoutHistory }) {
   const [low, high] = exercise.defaultReps || [8, 10];
   const prev = previousPerformance(exercise.id, workoutHistory);
   if (!prev) {
@@ -38,7 +37,7 @@ export function recommend({ exercise, workoutHistory, unit }) {
 
   // Rule 2: progress the load.
   if (allAtTop) {
-    const step = loadIncrement(unit);
+    const step = exercise.weightIncrement || 2.5;
     const nextWeight = roundToIncrement(weight + step, step);
     return {
       targetWeightKg: nextWeight,

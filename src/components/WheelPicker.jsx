@@ -18,7 +18,7 @@ const SNAP_DAMP = 0.68;    // velocity damping per frame
 const RUBBER = 0.55;       // how much drag past edges resists
 
 export default function WheelPicker({
-  open, title, value, min, max, step, unit, onCancel, onConfirm,
+  open, title, value, min, max, step, unit, onCancel, onConfirm, stepOptions, onStepChange,
 }) {
   const items = useMemo(() => {
     const arr = [];
@@ -300,6 +300,26 @@ export default function WheelPicker({
             Done
           </button>
         </div>
+
+        {stepOptions && stepOptions.length > 0 && (
+          <div className="flex justify-center pb-2">
+            <div className="inline-flex rounded-lg bg-white/[.05] p-0.5">
+              {stepOptions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => onStepChange?.(s)}
+                  aria-pressed={s === step}
+                  className={`h-7 px-3 rounded-md text-[12px] font-medium tabular-nums transition-colors ${
+                    s === step ? 'bg-accent text-white' : 'text-muted active:bg-white/[.06]'
+                  }`}
+                >
+                  {formatVal(s)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="relative px-4 pb-4">
           <div

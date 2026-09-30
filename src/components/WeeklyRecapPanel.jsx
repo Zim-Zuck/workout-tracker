@@ -16,7 +16,7 @@ import { formatWeight } from '../utils/units.js';
 // The in-app screen and the exported cards read from ONE engine
 // (buildWeeklyRecap), so what a person sees here and what they share are never
 // two different versions of the week.
-export default function WeeklyRecapPanel({ onOpenProfile, refreshToken, unit = 'kg' }) {
+export default function WeeklyRecapPanel({ onOpenProfile, refreshToken }) {
   const [payload, setPayload] = useState(null);
   const [recentIds, setRecentIds] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,8 +46,8 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken, unit = '
   useEffect(() => { load(); }, [load, refreshToken]);
 
   const recap = useMemo(
-    () => (payload ? buildWeeklyRecap({ payload, unit, recentIds }) : null),
-    [payload, unit, recentIds]
+    () => (payload ? buildWeeklyRecap({ payload, recentIds }) : null),
+    [payload, recentIds]
   );
 
   // Recorded when the recap is actually looked at or sent. Damping a statistic
@@ -189,7 +189,7 @@ export default function WeeklyRecapPanel({ onOpenProfile, refreshToken, unit = '
                     </div>
                   </div>
                   <span className="text-sm font-semibold tabular-nums shrink-0 text-muted">
-                    {m.trained ? formatWeight(m.vol, unit, { group: true }) : '—'}
+                    {m.trained ? formatWeight(m.vol, { group: true }) : '—'}
                   </span>
                 </button>
               </li>

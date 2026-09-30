@@ -15,7 +15,7 @@ import WeeklyRecapPanel from '../components/WeeklyRecapPanel.jsx';
 export default function SocialScreen({
   auth, onSignIn, onSignUp, section, onSectionChange,
   onOpenProfile, unread, onUnreadChange, refreshToken,
-  exercises, workouts, settings, presetOpponent, onPresetUsed
+  exercises, workouts, presetOpponent, onPresetUsed
 }) {
   if (!auth.cloudConfigured) {
     return (
@@ -114,7 +114,6 @@ export default function SocialScreen({
         <WeeklyRecapPanel
           onOpenProfile={onOpenProfile}
           refreshToken={refreshToken}
-          unit={settings.unit}
         />
       )}
 
@@ -132,7 +131,6 @@ export default function SocialScreen({
           myId={auth.userId}
           exercises={exercises}
           workouts={workouts}
-          settings={settings}
           refreshToken={refreshToken}
           onChanged={onUnreadChange}
           presetOpponent={presetOpponent}

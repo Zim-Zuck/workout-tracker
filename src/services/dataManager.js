@@ -92,10 +92,10 @@ function csvField(v) {
 }
 
 // Flat CSV of every completed set across finished workouts, for spreadsheet analysis.
-export async function downloadSetsCSV(unit) {
+export async function downloadSetsCSV() {
   const [exercises, workouts] = await Promise.all([getAllExercises(), getAllWorkouts()]);
   const exNames = new Map(exercises.map((e) => [e.id, e.name]));
-  const rows = [['Date', 'Time', 'Workout', 'Exercise', 'Type', `Weight (${unit})`, 'Reps', `Est. 1RM (${unit})`, `Volume (${unit})`]];
+  const rows = [['Date', 'Time', 'Workout', 'Exercise', 'Type', 'Weight (kg)', 'Reps', 'Est. 1RM (kg)', 'Volume (kg)']];
   const sorted = [...workouts].filter((w) => !w.isActive).sort((a, b) => a.date - b.date);
   for (const w of sorted) {
     for (const s of [...w.sets].sort((a, b) => a.timestamp - b.timestamp)) {
@@ -108,10 +108,10 @@ export async function downloadSetsCSV(unit) {
         w.name || 'Workout',
         exNames.get(s.exerciseId) || 'Unknown',
         s.type,
-        formatWeight(s.weightKg, unit, { withUnit: false }),
+        formatWeight(s.weightKg, { withUnit: false }),
         s.reps,
-        isWorking(s) ? formatWeight(estimate1RM(s.weightKg, s.reps), unit, { withUnit: false }) : '',
-        isWorking(s) ? formatWeight(setVolume(s), unit, { withUnit: false }) : ''
+        isWorking(s) ? formatWeight(estimate1RM(s.weightKg, s.reps), { withUnit: false }) : '',
+        isWorking(s) ? formatWeight(setVolume(s), { withUnit: false }) : ''
       ]);
     }
   }

@@ -70,13 +70,6 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
       )}
 
       <Section title="Preferences">
-        <Row label="Weight unit">
-          <Segmented
-            value={settings.unit}
-            onChange={(v) => updateSettings({ unit: v })}
-            options={[{ value: 'kg', label: 'kg' }, { value: 'lbs', label: 'lbs' }]}
-          />
-        </Row>
         <Row label="Default rest timer">
           <select
             value={settings.defaultRestSec}

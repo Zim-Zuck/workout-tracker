@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  getActiveWorkout, saveWorkout, deleteWorkout, getAllWorkouts, getAllExercises
+  getActiveWorkout, saveWorkout, deleteWorkout, getAllWorkouts, getAllExercises, saveExercise
 } from '../db/database.js';
 import { uid } from '../utils/id.js';
 
@@ -112,6 +112,15 @@ export function useWorkout() {
     await persistActive({ ...active, exercises: nextEx, sets: nextSets });
   }, [active, persistActive]);
 
+  // ---- Exercise preferences ----
+  const updateExercise = useCallback(async (exerciseId, patch) => {
+    const ex = exercises.find((e) => e.id === exerciseId);
+    if (!ex) return;
+    const next = { ...ex, ...patch };
+    await saveExercise(next);
+    setExercises((list) => list.map((e) => (e.id === exerciseId ? next : e)));
+  }, [exercises]);
+
   // ---- Set editing ----
   const addSet = useCallback(async (exerciseId, patch) => {
     if (!active) return;
@@ -191,6 +200,7 @@ export function useWorkout() {
     removeExerciseFromActive,
     reorderExercises,
     replaceExercise,
+    updateExercise,
     addSet,
     updateSet,
     deleteSet,

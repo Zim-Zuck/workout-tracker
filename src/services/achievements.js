@@ -26,10 +26,7 @@ export const ACHIEVEMENTS = [
     icon: '💯',
     earned: ({ lifts }) => benchKg(lifts) >= 100,
     progress: ({ lifts }) => ({ current: Math.min(benchKg(lifts), 100), target: 100 }),
-    // Shown in whichever unit the user reads in, while the threshold itself
-    // stays 100 kg — a "Century" that triggered at 100 lbs would be a different,
-    // much easier achievement wearing the same name.
-    format: (v, unit) => formatWeight(v, unit)
+    format: (v) => formatWeight(v)
   },
   {
     id: 'workhorse',

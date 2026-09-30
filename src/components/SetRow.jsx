@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
 import WheelPicker from './WheelPicker.jsx';
-import { fromDisplay, toDisplay, roundDisplay, loadIncrement } from '../utils/units.js';
+import { roundDisplay } from '../utils/units.js';
 
 const TYPE_LABELS = { warmup: 'W', working: '', drop: 'D', failure: 'F' };
 const TYPE_ORDER = ['working', 'warmup', 'drop', 'failure'];
+const INCREMENT_OPTIONS = [1, 2.5, 5];
 
-export default function SetRow({ index, set, unit, prevSet, onChange, onComplete, onDelete }) {
-  const wDisplay = roundDisplay(toDisplay(set.weightKg, unit), unit);
-  const step = loadIncrement(unit);
+export default function SetRow({ index, set, weightIncrement = 2.5, onChangeIncrement, prevSet, onChange, onComplete, onDelete }) {
+  const wDisplay = roundDisplay(set.weightKg);
+  const step = weightIncrement;
   const [picker, setPicker] = useState(null); // 'weight' | 'reps'
   const [dx, setDx] = useState(0);
   const startX = useRef(0);
@@ -16,7 +17,7 @@ export default function SetRow({ index, set, unit, prevSet, onChange, onComplete
   const swiping = useRef(false);
   const baseDx = useRef(0);
 
-  const prevW = prevSet ? roundDisplay(toDisplay(prevSet.weightKg, unit), unit) : null;
+  const prevW = prevSet ? roundDisplay(prevSet.weightKg) : null;
   const prevR = prevSet?.reps ?? null;
   const hasW = set.weightKg > 0;
   const hasR = (set.reps || 0) > 0;
@@ -105,7 +106,7 @@ export default function SetRow({ index, set, unit, prevSet, onChange, onComplete
             <button
               type="button"
               onClick={() => setPicker('weight')}
-              aria-label={`Weight ${hasW ? wDisplay + ' ' + unit : 'not set'}. Tap to change.`}
+              aria-label={`Weight ${hasW ? wDisplay + ' kg' : 'not set'}. Tap to change.`}
               className="h-10 rounded-lg flex items-baseline justify-center gap-1 active:bg-white/[.03]"
             >
               <span
@@ -114,7 +115,7 @@ export default function SetRow({ index, set, unit, prevSet, onChange, onComplete
               >
                 {hasW ? formatNum(wDisplay) : (prevW != null ? formatNum(prevW) : '0')}
               </span>
-              <span className="text-[13px] font-medium text-muted">{unit}</span>
+              <span className="text-[13px] font-medium text-muted">kg</span>
             </button>
 
             <button
@@ -153,11 +154,13 @@ export default function SetRow({ index, set, unit, prevSet, onChange, onComplete
         title={`Set ${index + 1} · Weight`}
         value={hasW ? wDisplay : (prevW ?? 0)}
         min={0}
-        max={unit === 'lbs' ? 1100 : 500}
+        max={500}
         step={step}
-        unit={unit}
+        unit="kg"
+        stepOptions={INCREMENT_OPTIONS}
+        onStepChange={onChangeIncrement}
         onCancel={() => setPicker(null)}
-        onConfirm={(v) => { onChange({ weightKg: fromDisplay(v, unit) }); setPicker(null); }}
+        onConfirm={(v) => { onChange({ weightKg: v }); setPicker(null); }}
       />
       <WheelPicker
         open={picker === 'reps'}
