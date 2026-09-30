@@ -933,7 +933,10 @@ begin
     not (res->'profile' ? 'share_stats')
       and not (res->'profile' ? 'share_activity')
       and not (res->'profile' ? 'community_notice_pending'),
-    res->'profile'::text);
+    -- Parenthesised. Without them this reads as res -> ('profile'::text), which
+    -- yields jsonb, and pg_temp.ok takes text — so the call fails to resolve and
+    -- the assertion raises instead of reporting.
+    (res->'profile')::text);
 exception when others then
   reset role;
   perform set_config('request.jwt.claims', '', true);
