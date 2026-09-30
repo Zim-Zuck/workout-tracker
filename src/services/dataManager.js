@@ -2,6 +2,7 @@
 import {
   getAllExercises, getAllWorkouts, getSettings, clearAll, bulkPut, setMeta, SCHEMA_VERSION
 } from '../db/database.js';
+import { normalizeWorkout } from '../db/normalize.js';
 import { isWorking, estimate1RM, setVolume } from './calculations.js';
 import { formatWeight } from '../utils/units.js';
 import { ymd } from '../utils/date.js';
@@ -59,8 +60,12 @@ export async function importReplaceAll(obj) {
   validateBackup(obj);
   await clearAll();
   await bulkPut('exercises', obj.exercises);
-  // Normalize isActive to 0/1 for IDB index compatibility.
-  const workouts = obj.workouts.map((w) => ({ ...w, isActive: w.isActive ? 1 : 0 }));
+  // A backup can predate the v3 fields (order, completedAt, skipped) — schema
+  // version 1 backups are still valid and still importable. Every restored
+  // workout goes through the same normaliser the database upgrade uses, so a
+  // two-year-old export lands in exactly the shape a fresh session would.
+  // isActive is coerced to 0/1 for IDB index compatibility.
+  const workouts = obj.workouts.map((w) => normalizeWorkout({ ...w, isActive: w.isActive ? 1 : 0 }));
   await bulkPut('workouts', workouts);
   if (obj.settings && typeof obj.settings === 'object') {
     await bulkPut('settings', Object.entries(obj.settings).map(([key, value]) => ({ key, value })));
@@ -76,7 +81,9 @@ export async function importMerge(obj) {
   const exIds = new Set(existingEx.map((e) => e.id));
   const woIds = new Set(existingW.map((w) => w.id));
   const newEx = obj.exercises.filter((e) => !exIds.has(e.id));
-  const newW = obj.workouts.filter((w) => !woIds.has(w.id)).map((w) => ({ ...w, isActive: 0 }));
+  const newW = obj.workouts
+    .filter((w) => !woIds.has(w.id))
+    .map((w) => normalizeWorkout({ ...w, isActive: 0 }));
   await bulkPut('exercises', newEx);
   await bulkPut('workouts', newW);
   return { newExercises: newEx.length, newWorkouts: newW.length };

@@ -7,9 +7,10 @@
 //   outbox         key: id, idx: kind  (pending cloud writes; survives app kill)
 //   socialCache    key: key         (last-known profiles/friends/challenges, for offline render)
 import { DEFAULT_EXERCISES } from '../data/defaultExercises.js';
+import { normalizeWorkout } from './normalize.js';
 
 const DB_NAME = 'lift-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 // Backup/export format version. Deliberately still 1: v2 added only local-only
 // stores (outbox, socialCache) which are never exported, so v1 backups remain
 // valid and older app builds can still read files written by this one.
@@ -57,7 +58,34 @@ export function openDB() {
         }
       }
 
-      // Next schema change: bump DB_VERSION above and add `if (oldVersion < 3) { ... }`
+      // v3: stable set ordering, skip tracking, and split names.
+      //
+      // The first DATA migration this app has had — v2 only added empty stores.
+      // Every existing workout is rewritten through normalizeWorkout(), which
+      // assigns each set a permanent `order` from its historical timestamp
+      // sequence, splits completion time out of `timestamp` into `completedAt`,
+      // and gives the workout an empty `skipped` list and a null `split`.
+      //
+      // It runs inside the upgrade transaction, so it either completes fully or
+      // the whole upgrade rolls back and the database stays on v2 — there is no
+      // state where half the history has been rewritten. normalizeWorkout() is
+      // additive and idempotent: no field is dropped, and a record that already
+      // has the new shape passes through unchanged.
+      if (oldVersion < 3) {
+        const store = e.target.transaction.objectStore('workouts');
+        const cursorReq = store.openCursor();
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (!cursor) return;
+          const migrated = normalizeWorkout(cursor.value);
+          // update() rather than put(): keeps us on the cursor's own key and
+          // cannot accidentally insert under a changed id.
+          cursor.update(migrated);
+          cursor.continue();
+        };
+      }
+
+      // Next schema change: bump DB_VERSION above and add `if (oldVersion < 4) { ... }`
       // here (new stores/indexes, or data rewrites via e.target.transaction).
     };
     req.onsuccess = () => resolve(req.result);
@@ -101,10 +129,15 @@ export async function getExercise(id) {
 }
 
 // ---- Workouts ----
+// Every read normalises. The v3 upgrade already rewrote what was on disk, but a
+// record can still arrive from a backup restore, a second tab on an older build,
+// or a future field this build does not write — and a half-shaped workout
+// reaching the UI is how you get a crash in a list render. Normalising is pure
+// and idempotent, so this costs a map over already-correct data.
 export async function getAllWorkouts() {
   const db = await openDB();
   const list = await reqPromise(tx(db, 'workouts').objectStore('workouts').getAll());
-  return (list || []).sort((a, b) => b.date - a.date);
+  return (list || []).map(normalizeWorkout).sort((a, b) => b.date - a.date);
 }
 export async function saveWorkout(w) {
   const db = await openDB();
@@ -122,11 +155,12 @@ export async function getActiveWorkout() {
   // isActive stored as 1/0 (booleans aren't valid IDB index keys on iOS).
   const idx = tx(db, 'workouts').objectStore('workouts').index('isActive');
   const list = await reqPromise(idx.getAll(1));
-  return (list && list[0]) || null;
+  return list && list[0] ? normalizeWorkout(list[0]) : null;
 }
 export async function getWorkout(id) {
   const db = await openDB();
-  return reqPromise(tx(db, 'workouts').objectStore('workouts').get(id));
+  const w = await reqPromise(tx(db, 'workouts').objectStore('workouts').get(id));
+  return w ? normalizeWorkout(w) : w;
 }
 
 // ---- Settings & meta ----
