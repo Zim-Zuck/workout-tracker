@@ -126,7 +126,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           the two things you need while your thumb is somewhere down the list of
           exercises. This replaced a separate floating rest bar that overlapped
           the set rows it was timing. */}
-      <GlassCard className="sticky top-sm z-20 mt-md p-base glass-blur">
+      <GlassCard className="sticky top-sm z-20 mt-base p-base glass-blur">
         <div className="flex items-center gap-md">
           <div className="flex-1 min-w-0">
             <h1 className="text-title font-semibold text-ink truncate">{title}</h1>
@@ -168,7 +168,8 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
       </GlassCard>
 
       {/* Exercises --------------------------------------------------------- */}
-      <div className="mt-base flex flex-col gap-sm">
+      {/* 12px between cards, matching every other list of sibling cards. */}
+      <div className="mt-base flex flex-col gap-md">
         {active.exercises.map((exId, idx) => {
           const ex = exerciseMap.get(exId);
           if (!ex) {
@@ -239,11 +240,11 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
         })}
       </div>
 
-      <SecondaryButton full icon={Plus} className="mt-md" onClick={() => setPickerOpen(true)}>
+      <SecondaryButton full icon={Plus} className="mt-base" onClick={() => setPickerOpen(true)}>
         Add exercise
       </SecondaryButton>
 
-      <div className="mt-md flex items-center justify-between gap-sm">
+      <div className="mt-base flex items-center justify-between gap-md">
         <button
           type="button"
           onClick={() => setNotesOpen(true)}

@@ -29,7 +29,7 @@ export default function ExerciseCard({
       <GlassCard className="p-base">
         <span className="skeleton block h-5 w-1/2 rounded-control" />
         <span className="skeleton block h-3 w-2/3 rounded-control mt-sm" />
-        <div className="mt-base flex flex-col gap-sm">
+        <div className="mt-base flex flex-col gap-md">
           <SetRow loading /><SetRow loading />
         </div>
       </GlassCard>
@@ -144,7 +144,9 @@ export default function ExerciseCard({
 
           <div className="mt-base">
             <SetRowHeader />
-            <div className="flex flex-col">
+            {/* 12px between rows. Each row carries its own 16px of vertical
+                padding, so this is the gap BETWEEN rows, not inside them. */}
+            <div className="flex flex-col gap-md">
               {sets.map((s, i) => <SetRow key={s.id} {...renderSet(s, i)} />)}
             </div>
           </div>
@@ -152,7 +154,7 @@ export default function ExerciseCard({
           <button
             type="button"
             onClick={onAddSet}
-            className="mt-sm w-full h-tap rounded-row flex items-center justify-center gap-xs
+            className="mt-base w-full h-tap rounded-row flex items-center justify-center gap-xs
                        text-label font-semibold text-ink-secondary
                        transition-colors duration-fast ease-out active:bg-glass-pressed active:text-ink"
           >

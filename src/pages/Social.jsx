@@ -90,7 +90,7 @@ export default function SocialScreen({
 
   return (
     <div className="px-base pb-nav">
-      <div className="flex items-center gap-sm pt-md">
+      <div className="flex items-center gap-md pt-base">
         <div className="flex-1 min-w-0">
           <SegmentedPills
             ariaLabel="Community section"

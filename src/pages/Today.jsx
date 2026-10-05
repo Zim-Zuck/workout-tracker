@@ -119,8 +119,10 @@ export default function Today({
   return (
     <div className="px-base pb-nav">
       {/* 1. Split pills ------------------------------------------------- */}
+      {/* 16px between the header and the first thing on the page, on every
+          tab. 12px read as the content touching the chrome. */}
       <SegmentedPills
-        className="pt-md"
+        className="pt-base"
         ariaLabel="Training split"
         value={split}
         onChange={setSplit}

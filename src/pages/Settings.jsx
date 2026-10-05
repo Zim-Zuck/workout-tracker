@@ -62,7 +62,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
   };
 
   return (
-    <div className="px-base pb-nav">
+    <div className="px-base pb-nav pt-base">
       {auth?.cloudConfigured && (
         <Section title="Account">
           {auth.signedIn ? (

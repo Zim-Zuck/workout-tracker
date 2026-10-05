@@ -138,7 +138,7 @@ export default function ProgressScreen({ workout }) {
 
   return (
     <div className="px-base pb-nav">
-      <div className="flex items-center justify-between pt-md">
+      <div className="flex items-center justify-between pt-base">
         <StatBlock value={totals.thisWeek} label="This week" />
         <StatBlock value={totals.thisMonth} label="This month" align="center" />
         <StatBlock value={`${totals.streakWeeks}w`} label="Streak" align="center" />

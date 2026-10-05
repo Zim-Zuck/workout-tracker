@@ -102,8 +102,16 @@ body[data-resume="1"] .pb-nav {
 /* The set row's five columns, defined once so the header and the rows can never
    drift apart. The last two are 44pt because they hold controls, not text: the
    "⋯" column was 32px, which silently capped its button below the minimum
-   target size no matter what the button itself asked for. */
-:root { --set-grid: 28px 1fr 1fr 44px 44px; }
+   target size no matter what the button itself asked for.
+
+   minmax(0, 1fr) — NOT a bare 1fr — for the two value columns. A bare `1fr` is
+   minmax(AUTO, 1fr), so a track never shrinks below its content's min-content
+   width: "81.5 kg" at 32px is wider than "6 reps", so the weight column took
+   83px and left reps 48px. The rows were lopsided, and the WEIGHT and REPS
+   labels in the header (whose cells are empty, so they split evenly at 64px
+   each) did not sit over the columns they name. With a zero minimum the two
+   columns are genuinely equal and the header lines up with every row. */
+:root { --set-grid: 28px minmax(0, 1fr) minmax(0, 1fr) 44px 44px; }
 
 /* ---------------------------------------------------------------------------
    Blur, rationed.

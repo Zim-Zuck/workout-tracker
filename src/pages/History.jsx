@@ -61,7 +61,7 @@ export default function HistoryScreen({ workout }) {
 
   return (
     <div className="px-base pb-nav">
-      <div className="flex items-center gap-sm pt-md">
+      <div className="flex items-center gap-md pt-base">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-base top-1/2 -translate-y-1/2 text-ink-tertiary" />
           <input

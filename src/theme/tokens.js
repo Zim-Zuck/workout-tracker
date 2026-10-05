@@ -106,8 +106,24 @@ export const text = {
 };
 
 // ---------------------------------------------------------------------------
-// Spacing — 8pt grid. `xxs`/`xs` are the two sub-grid steps allowed, and only
-// for optical adjustments inside a component (icon gaps, hairline offsets).
+// Spacing — 8pt grid.
+//
+// THE LADDER. Six steps do the structural work, and a component should reach
+// for one of these before anything else:
+//
+//   xs    4   hairline offsets, the gap between an icon and its label
+//   sm    8   inside a tight control; between two things that are one thing
+//   md   12   BETWEEN REPEATED ROWS and between sibling cards in a list
+//   base 16   PADDING INSIDE a card or a row; the page gutter; below a label
+//   xl   24   between unrelated groups on a page
+//   xxl  32   between major sections, and above a page's first heading
+//
+// `xxs` (2) and `lg` (20) are optical steps, used only for adjustments inside a
+// component — never to separate two things from each other. The 3xl..6xl steps
+// are for empty states and hero whitespace.
+//
+// Nothing in this app should contain a literal pixel gap. If a value you need
+// is missing, it belongs here first.
 // ---------------------------------------------------------------------------
 export const space = {
   xxs: 2, xs: 4, sm: 8, md: 12, base: 16, lg: 20, xl: 24,

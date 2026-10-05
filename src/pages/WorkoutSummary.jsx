@@ -57,7 +57,7 @@ export default function WorkoutSummary({ workout, workouts, exercises, onDone })
           </span>
           <h1 className="text-title font-semibold text-ink mt-base">{summary.title} saved</h1>
           <p className="text-label font-regular text-ink-secondary mt-sm tabular">
-            {summary.exerciseCount} exercises · {summary.setCount} sets ·{' '}
+            {plural(summary.exerciseCount, 'exercise')} · {plural(summary.setCount, 'set')} ·{' '}
             {formatDuration(summary.durationMs)}
           </p>
         </div>
@@ -134,6 +134,12 @@ export default function WorkoutSummary({ workout, workouts, exercises, onDone })
       />
     </div>
   );
+}
+
+// "1 exercises" is the kind of thing that makes a finished-workout screen feel
+// like a form response rather than a sentence about what you just did.
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
 function Stat({ value, label }) {
