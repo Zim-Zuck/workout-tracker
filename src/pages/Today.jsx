@@ -7,6 +7,7 @@ import {
 } from '../ui/index.js';
 import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
 import ActivityFeed from '../components/ActivityFeed.jsx';
+import MergeSuggestionCard from '../components/MergeSuggestionCard.jsx';
 import { SPLITS, splitLabel } from '../services/splits.js';
 import { buildSession, recomputePlan, nextSplitInRotation } from '../services/sessionBuilder.js';
 import { recommend } from '../services/progression.js';
@@ -24,7 +25,8 @@ import { formatDuration, startOfWeek, formatDate } from '../utils/date.js';
 // session is already built from what you actually train, and the weights are
 // already the ones your progression says come next. One tap starts it.
 export default function Today({
-  workout, settings, auth, profile, onResume, onOpenCommunity, onOpenProfile, feed
+  workout, settings, auth, profile, onResume, onOpenCommunity, onOpenProfile, feed,
+  mergeSuggestions = [], onMergeSuggestion, onKeepSeparate
 }) {
   const { exercises, workouts, active, startWorkout, createCustomExercise } = workout;
   const undo = useUndoToast();
@@ -209,7 +211,18 @@ export default function Today({
         )}
       </GlassCard>
 
-      {/* 3. Last session -------------------------------------------------- */}
+      {/* 3. Merge suggestions ---------------------------------------------
+          A Tier-2 reconciliation question: close enough to probably be the same
+          lift, not close enough for the app to decide on its own. One at a
+          time, answered once, never asked again. */}
+      <MergeSuggestionCard
+        className="mt-base"
+        suggestions={mergeSuggestions}
+        onMerge={onMergeSuggestion}
+        onKeepSeparate={onKeepSeparate}
+      />
+
+      {/* 4. Last session -------------------------------------------------- */}
       {lastSession && (
         <GlassCard className="mt-base p-base flex items-center gap-md">
           <div className="flex-1 min-w-0">
@@ -246,7 +259,7 @@ export default function Today({
         </GlassCard>
       )}
 
-      {/* 4. Week + totals -------------------------------------------------- */}
+      {/* 5. Week + totals -------------------------------------------------- */}
       <div className="mt-base">
         <WeekStrip days={week} />
         <div className="mt-md flex items-center justify-between">
@@ -256,7 +269,7 @@ export default function Today({
         </div>
       </div>
 
-      {/* 5. Most recent PR ------------------------------------------------- */}
+      {/* 6. Most recent PR ------------------------------------------------- */}
       {latestPR && (
         <PRHighlight className="mt-base">
           {latestPR.label} · {exerciseMap.get(latestPR.exerciseId)?.name || 'Exercise'} ·{' '}
@@ -265,7 +278,7 @@ export default function Today({
         </PRHighlight>
       )}
 
-      {/* 6. Start empty ----------------------------------------------------- */}
+      {/* 7. Start empty ----------------------------------------------------- */}
       <div className="mt-base flex justify-center">
         <TextLink
           disabled={!!active}
@@ -278,7 +291,7 @@ export default function Today({
         </TextLink>
       </div>
 
-      {/* 7. Activity -------------------------------------------------------- */}
+      {/* 8. Activity -------------------------------------------------------- */}
       <ActivityFeed
         variant="preview"
         feed={feed}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Upload, Trash2, Info, Wifi, WifiOff, ListChecks, LogIn, LogOut, CloudUpload, CloudDownload, UserX, History } from 'lucide-react';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
@@ -13,8 +13,9 @@ import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { backupNow, fetchBackup, restoreBackup, getBackupInfo } from '../services/backupApi.js';
 import { deleteMyAccount } from '../services/profileApi.js';
 import { relativeDay } from '../utils/date.js';
+import { MERGE_UNDO_DAYS } from '../services/exerciseReconcile.js';
 
-export default function SettingsScreen({ settings, updateSettings, workout, auth, onSignIn }) {
+export default function SettingsScreen({ settings, updateSettings, workout, auth, onSignIn, reconciliation }) {
   const toast = useToast();
   const fileRef = useRef(null);
   const [pendingImport, setPendingImport] = useState(null); // parsed data
@@ -126,6 +127,20 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         <p className="text-label font-regular text-ink-tertiary py-sm">Add your own lifts, or edit the built-in ones. Also reachable while adding an exercise mid-workout.</p>
         <ActionButton icon={ListChecks} label="Exercise library" onClick={() => setLibraryOpen(true)} />
       </Section>
+
+      {/* REVERSING A MERGE.
+          The toast's Undo is there for the thirty seconds after a merge; this is
+          there for the thirty days after it, which is when somebody actually
+          notices their Bayesian curl chart looks different. The custom record
+          and every set logged against it were never deleted, so reversing is
+          just dropping the redirect. */}
+      <MergedExercisesSection
+        exercises={workout.allExercises}
+        onUndo={async (customId, name) => {
+          await reconciliation?.undoMerge(customId);
+          toast(`“${name}” is a separate exercise again`);
+        }}
+      />
 
       <Section title="Data">
         <p className="text-label font-regular text-ink-tertiary py-sm">
@@ -416,6 +431,71 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
 // "1 exercises" is the kind of thing that makes an app feel unfinished.
 function plural(n, word) {
   return `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// The list of merges still inside the undo window.
+//
+// Renders nothing at all when there are none, which is the normal case — a
+// settings screen should not carry a permanently empty section explaining a
+// feature most people never touch.
+function MergedExercisesSection({ exercises = [], onUndo }) {
+  const [busy, setBusy] = useState(null);
+  const merges = useMemo(() => listReversibleMergesSync(exercises), [exercises]);
+  if (!merges.length) return null;
+
+  return (
+    <Section title="Merged exercises">
+      <p className="text-label font-regular text-ink-tertiary py-sm">
+        A merged custom exercise behaves as the library one everywhere — its sets,
+        PRs and charts are all counted under it. Nothing was deleted, so a merge
+        can be reversed for {MERGE_UNDO_DAYS} days.
+      </p>
+      {merges.map((m) => (
+        <div key={m.customId} className="flex items-center justify-between gap-md min-h-tap py-sm">
+          <span className="min-w-0">
+            <span className="block text-body font-regular text-ink truncate">
+              {m.customName} → {m.intoName}
+            </span>
+            <span className="block text-label font-regular text-ink-tertiary">
+              {m.daysLeft} {m.daysLeft === 1 ? 'day' : 'days'} left to reverse
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={busy === m.customId}
+            onClick={async () => {
+              setBusy(m.customId);
+              try { await onUndo?.(m.customId, m.customName); }
+              finally { setBusy(null); }
+            }}
+            className="shrink-0 h-9 px-md rounded-full bg-glass border border-glass-border
+                       text-label font-semibold text-ink disabled:opacity-40 active:bg-glass-pressed"
+          >
+            Reverse
+          </button>
+        </div>
+      ))}
+    </Section>
+  );
+}
+
+// The same computation as listReversibleMerges(), but over the exercise list
+// the app is already holding rather than a fresh database read — so the section
+// updates the moment a merge is reversed, with no second source of truth.
+function listReversibleMergesSync(exercises) {
+  const now = Date.now();
+  const byId = new Map(exercises.map((e) => [e.id, e]));
+  const dayMs = 86400000;
+  return exercises
+    .filter((e) => e.mergedInto && (now - (e.mergedAt || 0)) <= MERGE_UNDO_DAYS * dayMs)
+    .map((e) => ({
+      customId: e.id,
+      customName: e.name,
+      intoName: byId.get(e.mergedInto)?.name || 'Unknown exercise',
+      mergedAt: e.mergedAt || 0,
+      daysLeft: Math.max(0, Math.ceil(MERGE_UNDO_DAYS - (now - (e.mergedAt || 0)) / dayMs))
+    }))
+    .sort((a, b) => b.mergedAt - a.mergedAt);
 }
 
 // The section heading sits OUTSIDE the card, on the page. A heading inside a

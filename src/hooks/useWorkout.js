@@ -3,6 +3,10 @@ import {
   getActiveWorkout, saveWorkout, deleteWorkout, getAllWorkouts, getAllExercises, saveExercise
 } from '../db/database.js';
 import { nextOrder, orderedSets } from '../db/normalize.js';
+import {
+  buildMergeIndex, resolveExerciseId, visibleExercises,
+  projectWorkout, projectWorkouts, unprojectWorkout
+} from '../services/exerciseIdentity.js';
 import { finishActiveWorkout, queueWorkoutUpload } from '../services/workoutCompletion.js';
 import { uid } from '../utils/id.js';
 
@@ -11,20 +15,43 @@ import { uid } from '../utils/id.js';
 // unexpected close never loses progress.
 export function useWorkout() {
   const [exercises, setExercises] = useState([]);
+  // Every exercise on disk, merged-away ones included. The picker must not show
+  // them, but a lookup for a set logged before a merge still has to find
+  // something, so both lists exist.
+  const [allExercises, setAllExercises] = useState([]);
   const [workouts, setWorkouts] = useState([]);
   const [active, setActive] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  // oldId -> canonicalId, rebuilt on every refresh.
+  const [mergeIndex, setMergeIndex] = useState(() => new Map());
 
   // A cancelled session, held in memory only, so Undo can put it back. It is
   // already out of IndexedDB by the time it lands here: the toast is the last
   // moment it exists, which is the honest way to offer an undo we can keep.
   const cancelled = useRef(null);
 
+  // THE ONE PLACE MERGES ARE RESOLVED.
+  //
+  // A merged custom exercise has to behave AS the library exercise everywhere:
+  // history, PR calculations, charts, previous-set suggestions, templates, the
+  // picker, statistics, search. Rather than auditing twenty call sites for
+  // `exerciseId` and teaching each of them about redirects, the redirect is
+  // applied HERE, at the single boundary where data enters the app — so no
+  // consumer downstream knows merges exist.
+  //
+  // Nothing on disk is rewritten. projectWorkout() records what it redirected
+  // in `_mergeOrigin`, and persistActive()/updateHistoricalWorkout() put the
+  // original ids back before any write, which is what keeps a merge reversible
+  // and keeps history honest about what was actually logged.
   const refresh = useCallback(async () => {
     const [ex, wos, a] = await Promise.all([getAllExercises(), getAllWorkouts(), getActiveWorkout()]);
-    setExercises(ex);
-    setWorkouts(wos.filter((w) => !w.isActive)); // History = non-active workouts.
-    setActive(a);
+    const index = buildMergeIndex(ex);
+    setMergeIndex(index);
+    setAllExercises(ex);
+    setExercises(visibleExercises(ex));
+    // History = non-active workouts.
+    setWorkouts(projectWorkouts(wos.filter((w) => !w.isActive), index));
+    setActive(a ? projectWorkout(a, index) : null);
   }, []);
 
   useEffect(() => {
@@ -33,7 +60,9 @@ export function useWorkout() {
 
   const persistActive = useCallback(async (next) => {
     setActive(next);
-    if (next) await saveWorkout(next);
+    // Un-projected before it hits disk: the record keeps the exercise ids the
+    // sets were actually logged against.
+    if (next) await saveWorkout(unprojectWorkout(next));
     return next;
   }, []);
 
@@ -105,7 +134,7 @@ export function useWorkout() {
   // user on the workout screen and shows what happened. A workout we cannot
   // confirm is saved must never be reported as saved.
   const finishWorkout = useCallback(async () => {
-    const done = await finishActiveWorkout({ fallback: active });
+    const done = await finishActiveWorkout({ fallback: active ? unprojectWorkout(active) : null });
     if (!done) return null;
     setActive(null);
     await refresh();
@@ -120,7 +149,7 @@ export function useWorkout() {
   // and is held in memory for as long as the toast is on screen.
   const cancelWorkout = useCallback(async () => {
     if (!active) return null;
-    cancelled.current = active;
+    cancelled.current = unprojectWorkout(active);
     await deleteWorkout(active.id);
     setActive(null);
     await refresh();
@@ -138,8 +167,11 @@ export function useWorkout() {
 
   // ---- Exercises inside the active workout ----
 
-  const addExerciseToActive = useCallback(async (exerciseId, seedSets = 0, target = null) => {
+  const addExerciseToActive = useCallback(async (rawExerciseId, seedSets = 0, target = null) => {
     if (!active) return;
+    // Resolved at the point of use, so adding a merged custom exercise (from a
+    // stale template or a deep link) adds the canonical one instead.
+    const exerciseId = resolveExerciseId(mergeIndex, rawExerciseId);
     if (active.exercises.includes(exerciseId)) return;
     const now = Date.now();
     const seeded = Array.from({ length: seedSets }, (_, i) => ({
@@ -152,7 +184,7 @@ export function useWorkout() {
       exercises: [...active.exercises, exerciseId],
       sets: [...active.sets, ...seeded]
     });
-  }, [active, persistActive]);
+  }, [active, persistActive, mergeIndex]);
 
   // REMOVE deletes the exercise and every set logged for it. Returns what it
   // removed so the caller's undo toast can put it back exactly.
@@ -210,8 +242,11 @@ export function useWorkout() {
   // If nothing has been logged yet, the swap is clean. If sets exist, they stay
   // attributed to the lift that was actually performed and the replacement is
   // inserted after it — you did both, so the session says you did both.
-  const replaceExercise = useCallback(async (oldId, newId, target = null) => {
+  const replaceExercise = useCallback(async (rawOldId, rawNewId, target = null) => {
     if (!active) return { kept: false };
+    const oldId = resolveExerciseId(mergeIndex, rawOldId);
+    const newId = resolveExerciseId(mergeIndex, rawNewId);
+    if (oldId === newId) return { kept: false, alreadyPresent: true };
     if (active.exercises.includes(newId)) return { kept: false, alreadyPresent: true };
 
     const logged = active.sets.filter((s) => s.exerciseId === oldId);
@@ -249,7 +284,7 @@ export function useWorkout() {
       sets: [...active.sets, ...seeded]
     });
     return { kept: true, keptCount: logged.length };
-  }, [active, persistActive]);
+  }, [active, persistActive, mergeIndex]);
 
   // Create a custom exercise and hand it straight back, so the caller (the
   // picker's empty state) can add it to the session in the same tap.
@@ -277,12 +312,15 @@ export function useWorkout() {
 
   // ---- Exercise preferences ----
   const updateExercise = useCallback(async (exerciseId, patch) => {
-    const ex = exercises.find((e) => e.id === exerciseId);
+    // Looked up in the full list: a merged-away record is still a real record
+    // and still editable from History, even though the picker hides it.
+    const ex = allExercises.find((e) => e.id === exerciseId);
     if (!ex) return;
     const next = { ...ex, ...patch };
     await saveExercise(next);
+    setAllExercises((list) => list.map((e) => (e.id === exerciseId ? next : e)));
     setExercises((list) => list.map((e) => (e.id === exerciseId ? next : e)));
-  }, [exercises]);
+  }, [allExercises]);
 
   // ---- Sets ----
 
@@ -358,8 +396,9 @@ export function useWorkout() {
     // Edited history is history the server's copy no longer matches, so the
     // record goes back into the unsynced state and the sync engine re-uploads
     // it onto the same row (same clientId, so still one workout).
+    const original = unprojectWorkout(w);
     await saveWorkout({
-      ...w, isActive: 0, status: 'finished', synced: false, clientId: w.clientId || w.id
+      ...original, isActive: 0, status: 'finished', synced: false, clientId: original.clientId || original.id
     });
     await refresh();
   }, [refresh]);
@@ -386,9 +425,20 @@ export function useWorkout() {
     [active]
   );
 
+  // Resolve one exercise id through the merge redirects. Exposed for the few
+  // places that hold a bare id from outside this hook (a challenge's target
+  // lift, a shared link).
+  const resolveExercise = useCallback(
+    (id) => resolveExerciseId(mergeIndex, id),
+    [mergeIndex]
+  );
+
   return {
     loaded,
     exercises,
+    allExercises,
+    mergeIndex,
+    resolveExercise,
     setExercises,
     workouts,
     active,

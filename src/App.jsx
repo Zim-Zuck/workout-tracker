@@ -1,6 +1,6 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastProvider, useToast } from './components/Toast.jsx';
-import { TabBar, ResumePill, UndoToastProvider } from './ui/index.js';
+import { TabBar, ResumePill, UndoToastProvider, useUndoToast } from './ui/index.js';
 import TodayScreen from './pages/Today.jsx';
 import WorkoutScreen from './pages/WorkoutScreen.jsx';
 import WorkoutSummary from './pages/WorkoutSummary.jsx';
@@ -22,6 +22,7 @@ import { startSyncEngine, stopSyncEngine } from './services/workoutSync.js';
 import { useWorkout } from './hooks/useWorkout.js';
 import { useRestTimer } from './hooks/useRestTimer.js';
 import { useFeed } from './hooks/useFeed.js';
+import { useReconciliation } from './hooks/useReconciliation.js';
 import { splitLabel } from './services/splits.js';
 import { ensureInitialized, requestPersistentStorage, noteLaunchAndMaybeCleanBackup } from './db/database.js';
 import { maybeSeed } from './db/seedData.js';
@@ -101,6 +102,26 @@ function Root() {
   // tab read the same rows, share one poll, and can never disagree about what
   // happened.
   const feed = useFeed('global', { enabled: auth.signedIn && auth.cloudConfigured });
+
+  // Exercise reconciliation. Runs once per library version, entirely offline.
+  // Tier-1 merges happen silently and are reported with an undo toast; Tier-2
+  // becomes a card on Today.
+  const undoToast = useUndoToast();
+  const reconciliation = useReconciliation({
+    ready: dbReady,
+    onRefresh: workout.refresh,
+    onMerged: (merged, { undoMerge }) => {
+      const first = merged[0];
+      const label = merged.length === 1
+        ? `“${first.customName}” merged into ${first.intoName}`
+        : `${merged.length} custom exercises merged into the library`;
+      undoToast(label, {
+        // Undo reverses the merge AND records the pair as "keep separate", so
+        // the next launch does not simply merge it again.
+        onUndo: async () => { for (const m of merged) await undoMerge(m.customId); }
+      });
+    }
+  });
 
   // The lift the resume pill names: the last one you touched, which is what
   // "where was I?" actually means.
@@ -332,6 +353,9 @@ function Root() {
             onResume={() => setInSession(true)}
             onOpenCommunity={() => { setSocialSection('feed'); setTab('social'); }}
             onOpenProfile={(id) => setViewingUserId(id)}
+            mergeSuggestions={reconciliation.suggestions}
+            onMergeSuggestion={reconciliation.acceptSuggestion}
+            onKeepSeparate={reconciliation.keepSeparate}
           />
         )}
         {tab === 'history' && <HistoryScreen workout={workout} />}
@@ -356,7 +380,7 @@ function Root() {
             onOpenSettings={() => { setViewingUserId(null); setProfileOpen(true); }}
           />
         )}
-        {tab === 'settings' && <SettingsScreen settings={settings} updateSettings={updateSettings} workout={workout} auth={auth} onSignIn={() => setAuthOpen('signin')} />}
+        {tab === 'settings' && <SettingsScreen settings={settings} updateSettings={updateSettings} workout={workout} auth={auth} onSignIn={() => setAuthOpen('signin')} reconciliation={reconciliation} />}
         </>
         )}
         </>

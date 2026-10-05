@@ -1,5 +1,20 @@
 // Seed library of common lifts. Users can add/edit/delete custom exercises.
 // `id` values are stable and namespaced so backups/imports are portable.
+
+// THE LIBRARY VERSION. Bump it whenever exercises are added, renamed, merged or
+// given aliases.
+//
+// Reconciliation is gated on it: on launch, if LIBRARY_VERSION is greater than
+// the `lastReconciledVersion` stored for this device, the user's custom
+// exercises are compared against the library once and the version is recorded.
+// Without the gate, every launch would re-walk every custom exercise and
+// re-offer suggestions the user has already answered.
+//
+//   1  the original seed library
+//   2  ~40 exercises added (the batch that made duplicate customs likely),
+//      plus the `aliases` field and the reconciliation pass itself
+export const LIBRARY_VERSION = 2;
+
 export const DEFAULT_EXERCISES = [
   // Chest
   { id: 'ex_bench_press', name: 'Bench Press', muscleGroups: ['Chest', 'Triceps', 'Shoulders'], equipment: 'Barbell', defaultReps: [6, 10], defaultRestSec: 180, builtin: true },
