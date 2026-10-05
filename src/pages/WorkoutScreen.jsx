@@ -393,11 +393,14 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           value={picker.field === 'weight' ? roundDisplay(picker.set.weightKg) : picker.set.reps}
           min={0}
           max={picker.field === 'weight' ? 500 : 50}
-          step={picker.field === 'weight' ? (picker.exercise.weightIncrement || 2.5) : 1}
+          step={picker.field === 'weight' ? (picker.exercise.weightIncrement || 1) : 1}
           unit={picker.field === 'weight' ? 'kg' : ''}
-          stepOptions={picker.field === 'weight' ? [1, 2.5, 5] : undefined}
+          stepOptions={picker.field === 'weight' ? [1, 2.5] : undefined}
           onStepChange={picker.field === 'weight'
-            ? (inc) => updateExercise(picker.exercise.id, { weightIncrement: inc })
+            ? (inc) => {
+                updateExercise(picker.exercise.id, { weightIncrement: inc });
+                setPicker((p) => p ? { ...p, exercise: { ...p.exercise, weightIncrement: inc } } : p);
+              }
             : undefined}
           onCancel={() => setPicker(null)}
           onConfirm={(v) => {
