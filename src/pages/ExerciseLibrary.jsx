@@ -5,6 +5,10 @@ import { MUSCLE_GROUPS, EQUIPMENT } from '../data/defaultExercises.js';
 import { saveExercise, deleteExercise as dbDeleteExercise, getAllExercises } from '../db/database.js';
 import { uid } from '../utils/id.js';
 import { useToast } from '../components/Toast.jsx';
+import { searchExercises } from '../services/exerciseSearch.js';
+import {
+  visibleExercises, bestMatch, similarity, DID_YOU_MEAN_THRESHOLD
+} from '../services/exerciseIdentity.js';
 
 export default function ExerciseLibrary({ workout }) {
   const { exercises, setExercises, workouts } = workout;
@@ -19,11 +23,14 @@ export default function ExerciseLibrary({ workout }) {
     return s;
   }, [workouts]);
 
+  // The same normalized matcher the picker uses, so searching here and
+  // searching there can never disagree. Merged custom exercises are hidden:
+  // they behave as the library exercise they point at, and listing both would
+  // show the same lift twice.
   const list = useMemo(() => {
-    return exercises
-      .filter((e) => (!q || e.name.toLowerCase().includes(q.toLowerCase())))
-      .filter((e) => (!filterMuscle || (e.muscleGroups || []).includes(filterMuscle)))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const pool = visibleExercises(exercises)
+      .filter((e) => (!filterMuscle || (e.muscleGroups || []).includes(filterMuscle)));
+    return searchExercises(pool, q);
   }, [exercises, q, filterMuscle]);
 
   const refresh = async () => setExercises(await getAllExercises());
@@ -46,7 +53,7 @@ export default function ExerciseLibrary({ workout }) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search exercises"
+            placeholder="Search name, equipment or muscle"
             className="w-full h-tap pl-9 pr-3 rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
           />
         </div>
@@ -85,13 +92,29 @@ export default function ExerciseLibrary({ workout }) {
             )}
           </li>
         ))}
-        {list.length === 0 && <li className="text-center text-ink-tertiary text-label py-8">No exercises match.</li>}
+        {list.length === 0 && (
+          <li className="text-center py-8">
+            <p className="text-label text-ink">
+              {q.trim() ? `No exercise matches “${q.trim()}”` : 'No exercises match.'}
+            </p>
+            <button
+              onClick={() => setEditing({ name: q.trim() })}
+              className="mt-3 h-tap px-4 rounded-row bg-glass border border-glass-border text-label font-semibold text-ink"
+            >
+              Create custom exercise
+            </button>
+          </li>
+        )}
       </ul>
 
       {editing && (
         <ExerciseEditor
           initial={editing}
+          existing={exercises}
           onClose={() => setEditing(null)}
+          // "Use library exercise" here means "stop creating, show me that one":
+          // the list filters down to it so the next tap is on the real thing.
+          onUseLibrary={(ex) => { setQ(ex.name); setFilterMuscle(''); setEditing(null); }}
           onSave={async (ex) => {
             await saveExercise(ex);
             await refresh();
@@ -113,7 +136,7 @@ function Chip({ active, onClick, label }) {
   );
 }
 
-function ExerciseEditor({ initial, onClose, onSave }) {
+function ExerciseEditor({ initial, existing = [], onClose, onSave, onUseLibrary }) {
   const isNew = !initial.id;
   const [name, setName] = useState(initial.name || '');
   const [groups, setGroups] = useState(initial.muscleGroups || []);
@@ -121,10 +144,28 @@ function ExerciseEditor({ initial, onClose, onSave }) {
   const [repLow, setRepLow] = useState(initial.defaultReps?.[0] ?? 8);
   const [repHigh, setRepHigh] = useState(initial.defaultReps?.[1] ?? 10);
   const [rest, setRest] = useState(initial.defaultRestSec ?? 120);
+  const [overridden, setOverridden] = useState(false);
 
   const toggle = (g) => setGroups((cur) => cur.includes(g) ? cur.filter((x) => x !== g) : [...cur, g]);
 
   const canSave = name.trim().length > 0 && repLow > 0 && repHigh >= repLow;
+
+  // DID YOU MEAN — the same prevention the picker's create flow offers, because
+  // this is the other door into creating a custom exercise and a duplicate made
+  // here is exactly as awkward to clean up later.
+  const suggestion = useMemo(() => {
+    if (!isNew || !name.trim() || overridden) return null;
+    const draft = { id: '__draft__', name: name.trim(), equipment, muscleGroups: groups };
+    const pool = visibleExercises(existing).filter((e) => e.id !== initial.id);
+    const match = bestMatch(draft, pool);
+    if (match) return match;
+    let best = null;
+    for (const c of pool) {
+      const score = similarity(draft, c);
+      if (score >= DID_YOU_MEAN_THRESHOLD && (!best || score > best.score)) best = { exercise: c, score };
+    }
+    return best;
+  }, [isNew, name, equipment, groups, existing, initial.id, overridden]);
 
   return (
     <Modal
@@ -135,6 +176,9 @@ function ExerciseEditor({ initial, onClose, onSave }) {
         <button
           disabled={!canSave}
           onClick={() => onSave({
+            // Spread first: an edit must not silently drop fields this form does
+            // not show (aliases, mergedInto, a per-user weight increment).
+            ...initial,
             id: initial.id || uid('ex'),
             name: name.trim(),
             muscleGroups: groups,
@@ -151,8 +195,36 @@ function ExerciseEditor({ initial, onClose, onSave }) {
     >
       <div className="space-y-3">
         <label className="block text-label">Name
-          <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full h-tap rounded-control bg-glass-inset border border-glass-border px-3 text-label" />
+          <input value={name} onChange={(e) => { setName(e.target.value); setOverridden(false); }} className="mt-1 w-full h-tap rounded-control bg-glass-inset border border-glass-border px-3 text-label" />
         </label>
+
+        {suggestion && (
+          <div className="rounded-row bg-pr-soft border border-pr-border px-3 py-3">
+            <p className="text-label font-semibold text-pr">
+              Did you mean {suggestion.exercise.name}?
+            </p>
+            <p className="text-label text-ink-secondary mt-1">
+              {[suggestion.exercise.equipment, (suggestion.exercise.muscleGroups || []).join(' · ')]
+                .filter(Boolean).join(' — ')}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => { onUseLibrary?.(suggestion.exercise); onClose?.(); }}
+                className="h-9 px-3 rounded-full bg-glass border border-glass-border text-label font-semibold text-ink"
+              >
+                Use library exercise
+              </button>
+              <button
+                type="button"
+                onClick={() => setOverridden(true)}
+                className="h-9 px-3 rounded-full bg-glass border border-glass-border text-label font-semibold text-ink"
+              >
+                Continue creating custom
+              </button>
+            </div>
+          </div>
+        )}
         <div>
           <div className="text-label mb-1">Muscle groups</div>
           <div className="flex flex-wrap gap-1">

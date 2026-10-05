@@ -26,7 +26,7 @@ import { formatDuration, startOfWeek, formatDate } from '../utils/date.js';
 export default function Today({
   workout, settings, auth, profile, onResume, onOpenCommunity, onOpenProfile, feed
 }) {
-  const { exercises, workouts, active, startWorkout } = workout;
+  const { exercises, workouts, active, startWorkout, createCustomExercise } = workout;
   const undo = useUndoToast();
 
   const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
@@ -343,6 +343,7 @@ export default function Today({
         splitId={split}
         title="Add to today"
         onPick={(ex) => { addToPlan(ex); setPickerOpen(false); setEditOpen(true); }}
+        onCreateExercise={createCustomExercise}
       />
     </div>
   );

@@ -14,6 +14,23 @@ export default function BottomSheet({
   const panelRef = useRef(null);
   const restoreFocus = useRef(null);
 
+  // THE REASON SEARCH INSIDE A SHEET DID NOT WORK.
+  //
+  // The effect below used to list `onClose` in its dependencies. Callers pass an
+  // inline arrow (`onClose={() => setPickerOpen(false)}`), so its identity
+  // changes on every render of the screen that owns the sheet — and the workout
+  // screen re-renders once a SECOND to tick the session clock. The effect
+  // therefore tore down and re-ran every second, and its requestAnimationFrame
+  // pulled focus off whatever the user was typing in and back onto the panel.
+  // On a phone that closes the keyboard mid-word; the field looked broken
+  // because it effectively was.
+  //
+  // Holding the callback in a ref keeps the handler current while letting the
+  // effect depend on `open` alone, so the focus and scroll-lock work happens
+  // exactly once per opening.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     restoreFocus.current = document.activeElement;
@@ -21,7 +38,7 @@ export default function BottomSheet({
     document.body.style.overflow = 'hidden';
 
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose?.(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current?.(); return; }
       if (e.key !== 'Tab') return;
       // Focus trap: a sheet you can tab out of is a sheet a screen reader user
       // silently escapes from into the page behind it.
@@ -44,7 +61,7 @@ export default function BottomSheet({
       document.body.style.overflow = prevOverflow;
       restoreFocus.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

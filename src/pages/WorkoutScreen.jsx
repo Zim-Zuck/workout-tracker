@@ -39,6 +39,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
     finishWorkout, cancelWorkout, restoreCancelled,
     addExerciseToActive, removeExerciseFromActive, restoreRemovedExercise,
     skipExercise, unskipExercise, reorderExercises, replaceExercise, updateExercise,
+    createCustomExercise,
     addSet, updateSet, toggleSetComplete, deleteSet, restoreSet, setNotes
   } = workout;
 
@@ -354,6 +355,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
             : `Replaced with ${ex.name}`);
         }}
         onManage={() => { setReplaceFor(null); setLibraryOpen(true); }}
+        onCreateExercise={createCustomExercise}
       />
 
       <ExercisePickerSheet
@@ -368,6 +370,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           setPickerOpen(false);
         }}
         onManage={() => { setPickerOpen(false); setLibraryOpen(true); }}
+        onCreateExercise={createCustomExercise}
       />
 
       <BottomSheet open={notesOpen} onClose={() => setNotesOpen(false)} title="Session notes">

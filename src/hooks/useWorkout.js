@@ -251,6 +251,30 @@ export function useWorkout() {
     return { kept: true, keptCount: logged.length };
   }, [active, persistActive]);
 
+  // Create a custom exercise and hand it straight back, so the caller (the
+  // picker's empty state) can add it to the session in the same tap.
+  //
+  // Duplicate prevention happens in the UI BEFORE this is called — see
+  // CreateExerciseSheet, which offers the library match and a "keep creating"
+  // option rather than refusing. This function does not second-guess a user who
+  // chose to continue.
+  const createCustomExercise = useCallback(async (fields) => {
+    const ex = {
+      id: uid('ex'),
+      name: String(fields.name || '').trim(),
+      muscleGroups: fields.muscleGroups || [],
+      equipment: fields.equipment || 'Other',
+      defaultReps: fields.defaultReps || [8, 12],
+      defaultRestSec: fields.defaultRestSec ?? 120,
+      aliases: fields.aliases || [],
+      builtin: false
+    };
+    if (!ex.name) return null;
+    await saveExercise(ex);
+    await refresh();
+    return ex;
+  }, [refresh]);
+
   // ---- Exercise preferences ----
   const updateExercise = useCallback(async (exerciseId, patch) => {
     const ex = exercises.find((e) => e.id === exerciseId);
@@ -381,6 +405,7 @@ export function useWorkout() {
     reorderExercises,
     replaceExercise,
     updateExercise,
+    createCustomExercise,
     addSet,
     updateSet,
     toggleSetComplete,
