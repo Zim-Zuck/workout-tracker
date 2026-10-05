@@ -1,8 +1,9 @@
-import { Component, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ToastProvider, useToast } from './components/Toast.jsx';
 import { TabBar, ResumePill, UndoToastProvider } from './ui/index.js';
 import TodayScreen from './pages/Today.jsx';
 import WorkoutScreen from './pages/WorkoutScreen.jsx';
+import WorkoutSummary from './pages/WorkoutSummary.jsx';
 import HistoryScreen from './pages/History.jsx';
 import ProgressScreen from './pages/Progress.jsx';
 import SocialScreen from './pages/Social.jsx';
@@ -17,6 +18,7 @@ import { useAuth } from './hooks/useAuth.js';
 import { useProfile } from './hooks/useProfile.js';
 import { unreadCount } from './services/friendsApi.js';
 import { maybeAutoBackup } from './services/backupApi.js';
+import { startSyncEngine, stopSyncEngine } from './services/workoutSync.js';
 import { useWorkout } from './hooks/useWorkout.js';
 import { useRestTimer } from './hooks/useRestTimer.js';
 import { useFeed } from './hooks/useFeed.js';
@@ -62,6 +64,11 @@ function Root() {
   // destination you browse to while nothing is running.
   const [tab, setTab] = useState('today');
   const [inSession, setInSession] = useState(false);
+  // The session that was just finished, held here rather than in WorkoutScreen
+  // so that leaving the session does not unmount its own summary. This is the
+  // state the old Finish handler was missing: it set a share sheet inside the
+  // component it then unmounted, so nothing appeared.
+  const [finished, setFinished] = useState(null);
   // Auth is shown as an overlay rather than a tab: it is a detour, and you should
   // land back exactly where you were when you finish or back out.
   const [authOpen, setAuthOpen] = useState(null); // null | 'signin' | 'signup'
@@ -152,6 +159,24 @@ function Root() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // THE BACKGROUND SYNC ENGINE.
+  //
+  // Started once the database is up and left running for the life of the tab.
+  // It sweeps IndexedDB for finished workouts the server does not have, drains
+  // the outbox with persisted exponential backoff, and re-runs itself on
+  // reconnect and on the app becoming visible again. The user id is passed as a
+  // getter because it changes (sign-in, sign-out) and the engine outlives any
+  // one value of it.
+  //
+  // Nothing here is on the Finish path. It is a sweeper, not a dependency.
+  const userIdRef = useRef(auth.userId);
+  userIdRef.current = auth.userId;
+  useEffect(() => {
+    if (!dbReady) return;
+    startSyncEngine(() => userIdRef.current);
+    return () => stopSyncEngine();
+  }, [dbReady]);
+
   const refreshUnread = useCallback(async () => {
     if (!auth.signedIn) { setUnread(0); return; }
     try { setUnread(await unreadCount()); } catch { /* offline: keep last count */ }
@@ -169,10 +194,16 @@ function Root() {
     refreshUnread();
   }, [refreshUnread]);
 
-  const onFinishToast = useCallback((w) => {
+  // Called once the workout is CONFIRMED saved on this device. Everything in
+  // here is after-the-fact: a toast, the summary screen, and cloud work that is
+  // explicitly fire-and-forget. None of it can fail in a way that affects
+  // whether the session was saved.
+  const onFinished = useCallback((w) => {
     if (!w) return;
     const sets = w.sets.filter((s) => s.completed).length;
     toast(`Workout saved · ${sets} sets`, { tone: 'success' });
+    setFinished(w);
+    setInSession(false);
     // Fire-and-forget: the workout is already in IndexedDB. If this fails or the
     // phone is offline, the summary sits in the outbox until the next flush —
     // the person logging sets never sees a spinner or an error for it.
@@ -286,7 +317,7 @@ function Root() {
             workout={workout}
             settings={settings}
             restTimer={restTimer}
-            onFinishToast={onFinishToast}
+            onFinished={onFinished}
             onExit={() => setInSession(false)}
           />
         ) : (
@@ -331,6 +362,17 @@ function Root() {
         </>
         )}
       </main>
+
+      {/* The post-session summary. Rendered at the Root level, over whatever
+          tab the user is now on, so finishing cannot unmount it. */}
+      {finished && (
+        <WorkoutSummary
+          workout={finished}
+          workouts={workout.workouts}
+          exercises={workout.exercises}
+          onDone={() => setFinished(null)}
+        />
+      )}
 
       {/* Above the tab bar on EVERY tab while a session is live, so wandering
           off to check the leaderboard mid-workout is never a one-way trip. */}

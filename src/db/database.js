@@ -332,6 +332,34 @@ export async function getActiveWorkout() {
   const list = await reqPromise(idx.getAll(1));
   return list && list[0] ? normalizeWorkout(list[0]) : null;
 }
+// Finished workouts the server does not have yet, oldest first.
+//
+// A full scan rather than an index: adding an index would mean a schema upgrade
+// that rewrites every row to populate it, and this runs once on launch and once
+// per reconnect over a list the app already reads whole on every refresh.
+export async function getUnsyncedWorkouts() {
+  const all = await getAllWorkouts();
+  return all
+    .filter((w) => !w.isActive && w.status === 'finished' && w.synced === false)
+    .sort((a, b) => a.date - b.date);
+}
+
+// Flip one workout's `synced` flag without rewriting anything else about it.
+//
+// Reads, patches and writes inside ONE readwrite transaction, so a set edit
+// landing at the same moment cannot be clobbered by a stale copy held across an
+// await. Returns false when the record is gone (deleted while queued), which is
+// the signal to drop its queued upload rather than retry forever.
+export async function setWorkoutSynced(id, synced) {
+  const db = await openDB();
+  const t = tx(db, 'workouts', 'readwrite');
+  const store = t.objectStore('workouts');
+  const existing = await reqPromise(store.get(id));
+  if (!existing) return false;
+  await reqPromise(store.put({ ...existing, synced: !!synced }));
+  return true;
+}
+
 export async function getWorkout(id) {
   const db = await openDB();
   const w = await reqPromise(tx(db, 'workouts').objectStore('workouts').get(id));

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowUp, ArrowDown, Repeat, SkipForward, Trash2, Plus, X, Timer, StickyNote
+  ArrowUp, ArrowDown, Repeat, SkipForward, Trash2, Plus, X, Timer, StickyNote,
+  AlertTriangle
 } from 'lucide-react';
 import {
   GlassCard, ExerciseCard, SetRow, PrimaryButton, SecondaryButton, TextLink,
@@ -8,7 +9,6 @@ import {
 } from '../ui/index.js';
 import WheelPicker from '../components/WheelPicker.jsx';
 import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
-import ShareCard from '../components/ShareCard.jsx';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { useHaptic } from '../components/Toast.jsx';
 import { setLabels } from '../db/normalize.js';
@@ -33,7 +33,7 @@ const SET_TYPES = [
 // single confirmation dialog on this screen, including cancelling the whole
 // workout — a dialog asks you to predict whether you will regret something,
 // which is a worse deal than letting you find out and take it back.
-export default function WorkoutScreen({ workout, settings, restTimer, onFinishToast, onExit }) {
+export default function WorkoutScreen({ workout, settings, restTimer, onFinished, onExit }) {
   const {
     exercises, active, workouts, setsFor,
     finishWorkout, cancelWorkout, restoreCancelled,
@@ -50,7 +50,9 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   const [notesOpen, setNotesOpen] = useState(false);
   const [picker, setPicker] = useState(null);         // { setId, field, ... }
   const [finishing, setFinishing] = useState(false);
-  const [shareFor, setShareFor] = useState(null);
+  // A local save that could not be confirmed. Shown in the header, next to the
+  // button that failed, and never cleared by anything other than a retry.
+  const [finishError, setFinishError] = useState(null);
   const [now, setNow] = useState(Date.now());
   const undo = useUndoToast();
   const haptic = useHaptic();
@@ -63,27 +65,14 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
     return () => clearInterval(id);
   }, [active]);
 
-  const shareCardEl = (
-    <ShareCard
-      open={!!shareFor}
-      workout={shareFor}
-      workouts={workouts}
-      exercises={exercises}
-      onClose={() => setShareFor(null)}
-    />
-  );
-
   if (!active) {
     return (
-      <>
-        <EmptyState
-          icon={Timer}
-          title="No session in progress"
-          body="Head back to Today to start one — your split is already picked and the weights are already loaded."
-          action={<SecondaryButton onClick={onExit}>Go to Today</SecondaryButton>}
-        />
-        {shareCardEl}
-      </>
+      <EmptyState
+        icon={Timer}
+        title="No session in progress"
+        body="Head back to Today to start one — your split is already picked and the weights are already loaded."
+        action={<SecondaryButton onClick={onExit}>Go to Today</SecondaryButton>}
+      />
     );
   }
 
@@ -93,16 +82,40 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
   const totalSets = active.sets.filter((s) => s.type !== 'warmup').length;
   const skipped = active.skipped || [];
 
+  // FINISH.
+  //
+  // The critical path is: write locally, prove it landed, move. There is no
+  // network call in it and no await on one — see services/workoutCompletion.js
+  // for what changed and why the old version could silently do nothing.
+  //
+  // Double-submit protection is the `finishing` flag, checked before anything
+  // else and reset in every exit path including the failing one, so a save that
+  // fails leaves a button the user can tap again rather than a dead control.
   const handleFinish = async () => {
     if (finishing) return;
     setFinishing(true);
+    setFinishError(null);
     try {
       const w = await finishWorkout();
+      if (!w) {
+        // Nothing to finish — the session was already closed in another tab, or
+        // cancelled. Leave rather than pretending something was saved.
+        restTimer.stop();
+        onExit?.();
+        return;
+      }
       restTimer.stop();
-      onFinishToast?.(w);
-      if (w) setShareFor(w);
-      onExit?.();
-    } finally { setFinishing(false); }
+      // Hands the finished workout to Root, which owns the summary screen. The
+      // summary deliberately does NOT live in this component: this component is
+      // about to unmount.
+      onFinished?.(w);
+    } catch (err) {
+      // THE SAVE FAILED, SO WE DO NOT MOVE. The session is still active and
+      // still on screen, with every set intact.
+      setFinishError(err?.message || 'Could not save this workout. Your session is still open.');
+    } finally {
+      setFinishing(false);
+    }
   };
 
   return (
@@ -122,9 +135,20 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
             </p>
           </div>
           <PrimaryButton onClick={handleFinish} loading={finishing} className="shrink-0">
-            Finish
+            {finishError ? 'Retry' : 'Finish'}
           </PrimaryButton>
         </div>
+
+        {finishError && (
+          <p
+            role="alert"
+            className="mt-md flex items-start gap-sm rounded-row bg-danger-soft border border-danger-border
+                       px-md py-md text-label font-regular text-danger"
+          >
+            <AlertTriangle size={15} strokeWidth={2.2} className="shrink-0 mt-xxs" />
+            <span>{finishError}</span>
+          </p>
+        )}
 
         {restTimer.running && (
           <div className="mt-md flex items-center gap-sm">
@@ -381,7 +405,6 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinishTo
         />
       )}
 
-      {shareCardEl}
       <ExerciseLibrarySheet open={libraryOpen} onClose={() => setLibraryOpen(false)} workout={workout} />
     </div>
   );

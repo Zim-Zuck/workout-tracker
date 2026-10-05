@@ -11,8 +11,14 @@
 // security in Postgres is what actually protects data. The service_role key must
 // never appear in this repo.
 
-const URL = import.meta.env.VITE_SUPABASE_URL;
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// `import.meta.env` is injected by Vite. It does not exist when a module that
+// imports this one is loaded directly by Node (the test runner), so read it
+// defensively rather than letting an unconfigured environment throw at import
+// time — a module that cannot be imported cannot be tested.
+const ENV = import.meta.env || {};
+
+const URL = ENV.VITE_SUPABASE_URL;
+const ANON_KEY = ENV.VITE_SUPABASE_ANON_KEY;
 
 // Whether a cloud backend is configured at all. Screens check this to decide
 // between "sign in" and hiding social affordances entirely.

@@ -78,6 +78,25 @@ export function normalizeWorkout(workout) {
 
   if (!Array.isArray(next.exercises)) next.exercises = [];
 
+  // THE TWO FIELDS THE FINISH BUTTON DEPENDS ON.
+  //
+  // `status` says what this record IS ('active' while a session is in progress,
+  // 'finished' once it has been completed) and `synced` says whether the server
+  // has it. They are defaulted here rather than in a schema migration on
+  // purpose: normalizeWorkout() runs on every read path already, so a record
+  // written by any older build arrives correctly shaped without rewriting five
+  // thousand rows inside a versionchange transaction.
+  //
+  // A record from before these fields existed defaults to synced=true. That is
+  // deliberate: those sessions predate per-workout upload, their contents are
+  // already covered by the backup pipeline, and defaulting them to false would
+  // make the first launch after an update queue a user's entire history.
+  if (next.status === undefined) next.status = next.isActive ? 'active' : 'finished';
+  if (next.synced === undefined) next.synced = true;
+  // The id the server deduplicates on. Always the local record's own id, so an
+  // upload that is retried after a timeout cannot create a second server row.
+  if (next.clientId === undefined) next.clientId = next.id ?? null;
+
   return next;
 }
 

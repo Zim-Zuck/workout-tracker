@@ -3,6 +3,7 @@ import {
   getActiveWorkout, saveWorkout, deleteWorkout, getAllWorkouts, getAllExercises, saveExercise
 } from '../db/database.js';
 import { nextOrder, orderedSets } from '../db/normalize.js';
+import { finishActiveWorkout, queueWorkoutUpload } from '../services/workoutCompletion.js';
 import { uid } from '../utils/id.js';
 
 // Central state for exercises, workout history and the (single) active workout.
@@ -78,18 +79,39 @@ export function useWorkout() {
       sets,
       skipped: [],
       notes: '',
-      isActive: 1
+      isActive: 1,
+      status: 'active',
+      // The id the server will deduplicate on, generated here — before the
+      // first set is logged and long before any request is made.
+      clientId: null,
+      // An active session is not something the server has, and finishing is
+      // what makes it eligible to be sent.
+      synced: false
     };
+    wo.clientId = wo.id;
     await persistActive(wo);
     return wo;
   }, [persistActive]);
 
+  // FINISH. LOCAL-FIRST, AND NOTHING IN HERE TOUCHES THE NETWORK.
+  //
+  // The work itself is in services/workoutCompletion.js, which reads the
+  // authoritative record out of IndexedDB rather than finishing the React
+  // snapshot held here (that snapshot can be one set behind, and writing it
+  // back used to silently drop the last set logged) and proves the write landed
+  // before returning.
+  //
+  // Errors are NOT swallowed: they propagate to the caller, which keeps the
+  // user on the workout screen and shows what happened. A workout we cannot
+  // confirm is saved must never be reported as saved.
   const finishWorkout = useCallback(async () => {
-    if (!active) return;
-    const done = { ...active, isActive: 0, endTime: Date.now() };
-    await saveWorkout(done);
+    const done = await finishActiveWorkout({ fallback: active });
+    if (!done) return null;
     setActive(null);
     await refresh();
+    // Strictly after the local write is confirmed, and deliberately not
+    // awaited. The upload is a background concern from here on.
+    queueWorkoutUpload(done);
     return done;
   }, [active, refresh]);
 
@@ -309,7 +331,12 @@ export function useWorkout() {
 
   // ---- Historical workouts (History screen) ----
   const updateHistoricalWorkout = useCallback(async (w) => {
-    await saveWorkout({ ...w, isActive: 0 });
+    // Edited history is history the server's copy no longer matches, so the
+    // record goes back into the unsynced state and the sync engine re-uploads
+    // it onto the same row (same clientId, so still one workout).
+    await saveWorkout({
+      ...w, isActive: 0, status: 'finished', synced: false, clientId: w.clientId || w.id
+    });
     await refresh();
   }, [refresh]);
 
