@@ -235,6 +235,10 @@ disabled, empty and loading states where those states are meaningful.
 | `SegmentedTrack` | A track with one white pill inside. Use for **scopes over the same content** (Everyone / Friends); use `SegmentedPills` for **different content**. |
 | `SetRow` | **The set number is a prop, not an array index.** See §9. Its five columns come from `--set-grid`, defined once so the header and the rows cannot drift apart. Warm-ups are lettered (`W`/`D`/`F`), not numbered — they don't count toward volume or PRs, so they don't consume a working-set number. |
 | `ExerciseCard` | Swipe left reveals **Skip**. Skip ≠ Remove (§9). The `⋮` opens a **bottom sheet**, never a dropdown. |
+| `BodyMap` | The anatomy figure: one view, any crop. The only file that knows how a muscle is painted. Artwork lives in `anatomyPaths.js` so design's next version is a drop-in swap. See §13. |
+| `BodyPair` | Front and back together, for whole-session surfaces. Always shows both — a leg day whose back view stayed dark is saying something true. |
+| `Porthole` | A circular window cropped to one exercise's muscle, ringed by its sets. Geometry in `setRing.js`. `total={0}` suppresses the ring for surfaces that aren't a live session. |
+| `MuscleBars` | Sets per muscle. Direct work gets a number; assistance says "assisted". Neutral data ink, never an accent — a bar is a quantity, not a status. |
 | `PRBadge` / `PRHighlight` | The only components allowed to use the PR colour. Three typed kinds: Weight / Reps / Volume. |
 | `StatBlock` / `StatRow` | The value is loud, the label is quiet. The reverse is how dashboards become unreadable. |
 | `WeekStrip` | Trained days filled green; today outlined in `ink` — an untrained today is a Tuesday morning, not a failure. |
@@ -435,6 +439,34 @@ Recorded here rather than raised as questions, per the brief:
     close, and the automatic snapshot plus cloud backup already cover the case
     the nagging would be for.
 
+### Decisions from the anatomy work
+
+29. **Muscle rankings are read from the shipped module, not from the stored
+    exercise row, and nothing is migrated.** The library is seeded into IndexedDB
+    once on first launch; `ensureInitialized()` then only tops up *missing ids*,
+    leaving existing rows alone on purpose, because a person may have edited a
+    builtin and an app update must not overwrite that. So a device that launched
+    before this feature has rows with no `primary` field and would never be sent
+    one. Backfilling them means a write pass over every exercise in the only copy
+    of somebody's training history, to populate a field used for nothing but
+    drawing a picture. `tiersFor()` reads the ranking from `defaultExercises.js`
+    at render time instead: no migration, no write, correct on a two-year-old
+    install's first frame. `weeklyRecap.js` already treats the module as the
+    authority for builtins in exactly this way. A user's own retagging still wins
+    — if the stored row's `muscleGroups` no longer match what the library ships,
+    that exercise is now something else and their list is used.
+30. **`LIBRARY_VERSION` was not bumped for it.** `primary` and `secondary` add,
+    rename and merge no exercise; no identity, name or alias changed. Bumping
+    would send every device through a reconciliation pass over every custom
+    exercise to find exactly what it found last time.
+31. **Direct and assisted sets are counted apart, and only direct work is a
+    number.** Counting both as one figure is how a push session ends up claiming
+    ten triceps sets when three were triceps work and seven were a bench press
+    and an overhead press. "Sets" everywhere else in this app — and in every
+    programme anybody has followed — means sets *of that thing*. The figure still
+    lights an assisting muscle; its bar says "assisted" rather than a count it
+    did not earn. This departs from the mock, which shows a single number.
+
 ---
 
 ## 12. Storage durability
@@ -478,3 +510,80 @@ existing `profiles` policy, and a size cap). That is a schema change and a
 migration, so it is out of scope here and recorded rather than improvised. It is
 the right next step: it is the only safeguard on this list that survives losing
 the device itself, rather than losing the data on it.
+
+---
+
+## 13. Anatomy — the porthole
+
+Imported from Claude Design concept **3A**. A circular window crops an engraved
+body to the region an exercise works; the ring around it is the set tracker, one
+segment per set, green once logged. A whole 58px body is a smudge — a 58px window
+onto one shoulder is a shoulder. That crop is the load-bearing idea, and it is
+nothing more than a different `viewBox` over the same artwork.
+
+### The four layers
+
+| Layer | File | Knows about |
+|---|---|---|
+| Artwork | `src/ui/anatomyPaths.js` | 15 region paths, two views, one coordinate space (`8 0 84 200`) |
+| Renderer | `src/ui/BodyMap.jsx` | How a muscle is painted. Nothing else does. |
+| Composition | `Porthole` / `BodyPair` / `MuscleBars` | Framing, rings, bars |
+| Meaning | `src/services/anatomy.js` | The app's 12 muscle groups ↔ the figure's 15 regions |
+
+Nothing crosses a layer: `defaultExercises.js` never says `rhomboids`, `BodyMap`
+never says `Back`, and no component references a region path by name.
+
+### Where it appears
+
+| Surface | Component | Ring | Intensity |
+|---|---|---|---|
+| Live exercise card | `Porthole`, 72px | Yes — working sets, warm-ups excluded | That exercise's done ÷ planned |
+| Live session header | `BodyPair`, 52px | — | Session's done ÷ planned |
+| Finish plate (`WorkoutSummary`) | `BodyPair`, 260px, staged | — | 1 |
+| History detail sheet | `BodyPair`, 160px | — | 1 |
+| `ExerciseDetail` | `Porthole`, 64px, `total={0}` | — | 1 |
+
+The live surfaces light a region once it has been **trained**, not once it has
+been planned, so an untouched session renders the designed *empty* state rather
+than a body pre-lit with your intentions. Intensity moves opacity *within* a
+tier, never between them: a half-done exercise is a dimmer version of the same
+shape, not a different one.
+
+### The two tiers are the point
+
+Primary sits at 0.86–1.0 opacity, secondary at 0.48–0.68, untrained at a near-flat
+white wash. Collapsing them — every listed muscle painted primary — is what turns
+one of these diagrams into a uniform blob. The flat and wireframe treatments lost
+depth at porthole size, which is why `engraved` (vertical gradient plus a diagonal
+hatch in the page's own background colour) is the default.
+
+Built-in exercises carry explicit `primary` / `secondary`, because the ordering of
+`muscleGroups` alone gets compounds wrong — a deadlift is not a back exercise with
+two footnotes. Custom exercises fall back to *the first one you picked is the one
+you meant*, which is the honest reading of what the create sheet asks. It will not
+start asking for a ranking.
+
+### Extending it
+
+- **A new muscle group** needs an entry in `MUSCLE_ANATOMY`: its regions per view,
+  the view it reads best from, and a crop. `test/anatomy.test.mjs` fails if a group
+  the app offers maps to no regions, or is framed on a view it does not appear on.
+- **A new built-in exercise** needs `primary` / `secondary` alongside
+  `muscleGroups`. Omit them and it degrades to the custom-exercise fallback rather
+  than breaking.
+- **Better artwork** is a replacement of the two maps in `anatomyPaths.js` and
+  nothing else, provided it keeps the same 15 region ids and the same viewBox.
+
+### Known gaps
+
+The shipped paths are **v1 and meant to be replaced** — hand-built, not traced,
+and a porthole magnifies a crop of them rather than shrinking the whole figure
+(`abs` is four rounded rectangles). Ten of the twelve crops are ours; design handed
+off two. The hatch pattern is in user-space units, so a 52-wide crop engraves about
+1.7× coarser than the full figure — faithful to the mock, possibly not intended.
+The 12-segment cap on the set ring is ours; design has not ruled on a threshold.
+
+Two bugs in the mock's own ring helper are fixed in `setRing.js` and covered by
+tests: it hardcodes the SVG large-arc flag to `0`, which would draw a one-set
+exercise as a 10° tick instead of a full ring, and its fixed 10° gaps are 200° of a
+twenty-set ring.
