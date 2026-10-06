@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { GlassCard, SegmentedPills, SegmentedTrack, StatBlock, EmptyState, IconButton } from '../ui/index.js';
+import { GlassCard, SegmentedPills, SegmentedTrack, StatBlock, EmptyState, IconButton, Porthole } from '../ui/index.js';
 import { LineChart } from '../components/Chart.jsx';
 import { orderedSets, setLabels } from '../db/normalize.js';
 import { isWorking, estimate1RM } from '../services/calculations.js';
 import { prTimeline } from '../services/prs.js';
 import { workoutTitle } from '../services/splits.js';
+import { anatomyForExercise, tiersFor } from '../services/anatomy.js';
 import { formatWeight, formatVolume, roundDisplay } from '../utils/units.js';
 import { formatDate } from '../utils/date.js';
 
@@ -72,6 +73,9 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
     value: metric === 'weight' ? roundDisplay(s.topWeight) : s.topReps
   }));
 
+  const anatomy = anatomyForExercise(exercise);
+  const worked = tiersFor(exercise);
+
   return (
     <div className="px-base pb-nav">
       <div className="flex items-center gap-sm pt-sm -ml-sm">
@@ -79,11 +83,35 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
         <h1 className="text-body font-semibold text-ink truncate">{exercise.name}</h1>
       </div>
 
-      <p className="mt-sm text-label font-regular text-ink-secondary tabular">
-        {allTime.sessions} {allTime.sessions === 1 ? 'workout' : 'workouts'}
-        {allTime.bestWeight > 0 && ` · best ${formatWeight(allTime.bestWeight)}`}
-        {allTime.bestReps > 0 && ` · ${allTime.bestReps} reps`}
-      </p>
+      <div className="mt-sm flex items-center gap-md">
+        <div className="flex-1 min-w-0">
+          <p className="text-label font-regular text-ink-secondary tabular">
+            {allTime.sessions} {allTime.sessions === 1 ? 'workout' : 'workouts'}
+            {allTime.bestWeight > 0 && ` · best ${formatWeight(allTime.bestWeight)}`}
+            {allTime.bestReps > 0 && ` · ${allTime.bestReps} reps`}
+          </p>
+          {worked.primary.length > 0 && (
+            <p className="mt-xxs text-label font-regular text-ink-tertiary truncate">
+              {worked.primary.join(', ')}
+              {worked.secondary.length > 0 && ` · also ${worked.secondary.join(', ')}`}
+            </p>
+          )}
+        </div>
+        {/* No ring. The ring counts sets left in a session, and this screen is
+            not a session — it is the whole history of one lift. Passing total=0
+            is what suppresses it, so the porthole stays one component rather
+            than two that have to agree. */}
+        <Porthole
+          view={anatomy.view}
+          box={anatomy.box}
+          primary={anatomy.primary}
+          secondary={anatomy.secondary}
+          intensity={1}
+          total={0}
+          size={64}
+          label={`Works ${worked.primary.join(', ') || exercise.name}`}
+        />
+      </div>
 
       <SegmentedTrack
         className="mt-base"

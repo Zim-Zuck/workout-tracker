@@ -99,7 +99,7 @@ export default function RecapCards({ open, recap, onClose }) {
           {CARD_META.map((meta, i) => (
             <span
               key={meta.id}
-              className={`h-1.5 rounded-full transition-all ${i === index ? 'w-5 bg-primary' : 'w-1.5 bg-border'}`}
+              className={`h-1.5 rounded-full transition-all ${i === index ? 'w-5 bg-primary' : 'w-1.5 bg-data'}`}
             />
           ))}
         </div>

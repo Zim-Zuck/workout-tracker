@@ -3,7 +3,7 @@ import { Flame, Dumbbell, Pencil, Eye, EyeOff, Check, CloudOff, RefreshCw, Camer
 import { Avatar } from '../components/AppHeader.jsx';
 import Modal from '../components/Modal.jsx';
 import { useToast } from '../components/Toast.jsx';
-import { formatWeight } from '../utils/units.js';
+import { formatWeight, compactVolume } from '../utils/units.js';
 import { relativeDay } from '../utils/date.js';
 import { buildStatsSummary, buildLiftsSummary, pickTopLifts } from '../services/socialSummary.js';
 import { updateProfile } from '../services/profileApi.js';
@@ -62,28 +62,31 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
     } catch { /* the notice reappearing is not worth an error toast */ }
   };
 
+  // Tonnes once a lifetime total passes one, so the number fits the tile.
+  const volume = compactVolume(stats.lifetime_volume_kg);
+
   return (
-    <div className="p-3 space-y-3">
+    <div className="px-base pt-base pb-base space-y-md">
       {/* Identity */}
-      <section className="bg-glass border border-glass-border rounded-card p-4">
-        <div className="flex items-start gap-3">
+      <section className="bg-glass border border-glass-border rounded-card p-base">
+        <div className="flex items-start gap-md">
           <Avatar profile={profile} size={56} />
           <div className="flex-1 min-w-0">
             <h1 className="text-body font-semibold leading-tight truncate">{profile.display_name}</h1>
             <p className="text-label text-ink-tertiary">@{profile.username}</p>
-            {profile.bio && <p className="text-label mt-2 leading-snug">{profile.bio}</p>}
+            {profile.bio && <p className="text-label mt-sm leading-snug">{profile.bio}</p>}
           </div>
           <button
             onClick={() => setEditing(true)}
             aria-label="Edit profile"
-            className="p-2 -m-1 text-ink-tertiary active:text-ink shrink-0"
+            className="p-sm -m-xs text-ink-tertiary active:text-ink shrink-0"
           >
             <Pencil size={18} />
           </button>
         </div>
 
         {stats.streak_weeks > 0 && (
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-glass-inset border border-glass-border">
+          <div className="mt-md inline-flex items-center gap-xs px-md h-8 rounded-full bg-glass-inset border border-glass-border">
             <Flame size={14} className="text-ink-secondary" />
             <span className="text-label font-semibold text-ink-secondary">
               {stats.streak_weeks} week{stats.streak_weeks === 1 ? '' : 's'} in a row
@@ -93,27 +96,23 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
       </section>
 
       {/* Totals */}
-      <section className="grid grid-cols-3 gap-2">
+      <section className="grid grid-cols-3 gap-sm">
         <Stat label="Workouts" value={stats.total_workouts} />
         <Stat label="This week" value={stats.workouts_this_week} />
-        <Stat
-          label="Volume"
-          value={formatWeight(stats.lifetime_volume_kg, { withUnit: false })}
-          suffix="kg"
-        />
+        <Stat label="Volume" value={volume.value} suffix={volume.unit} />
       </section>
 
       {/* Top lifts */}
-      <section className="bg-glass border border-glass-border rounded-card p-3">
-        <h2 className="text-label font-semibold mb-2">Top lifts</h2>
+      <section className="bg-glass border border-glass-border rounded-card p-base">
+        <h2 className="text-label font-semibold mb-sm">Top lifts</h2>
         {topLifts.length === 0 ? (
-          <p className="text-label text-ink-tertiary py-3 text-center">
+          <p className="text-label text-ink-tertiary py-md text-center">
             Log a few working sets on the built-in exercises and your best lifts show up here.
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
             {topLifts.map((l) => (
-              <li key={l.exercise_id} className="py-2.5 flex items-center justify-between gap-2">
+              <li key={l.exercise_id} className="py-sm flex items-center justify-between gap-sm">
                 <div className="min-w-0">
                   <div className="text-label font-semibold truncate">{exNames.get(l.exercise_id) || 'Exercise'}</div>
                   <div className="text-micro tracking-normal text-ink-tertiary">{relativeDay(new Date(l.achieved_at).getTime())}</div>
@@ -140,15 +139,15 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
           community did. Raised by migration 009 and cleared the moment this
           person has read it or touched either switch. */}
       {profile.community_notice_pending && (
-        <section className="bg-glass border border-focus/40 rounded-card p-3">
-          <h2 className="text-label font-semibold flex items-center gap-1.5">
+        <section className="bg-glass border border-focus/40 rounded-card p-base">
+          <h2 className="text-label font-semibold flex items-center gap-xs">
             <Sparkles size={15} className="text-ink" /> Kun is now one community
           </h2>
-          <p className="text-label text-ink-tertiary mt-1.5 leading-relaxed">
+          <p className="text-label text-ink-tertiary mt-xs leading-relaxed">
             You no longer need friends to use the social features. Everyone shares a feed, a
             leaderboard and a weekly recap.
           </p>
-          <p className="text-label text-ink-tertiary mt-2 leading-relaxed">
+          <p className="text-label text-ink-tertiary mt-sm leading-relaxed">
             Because you were already sharing stats with friends, your community sharing was
             turned <strong className="text-ink">{profile.share_activity ? 'on' : 'off'}</strong> to
             match. It covers far less than your friends already see — milestones only, never
@@ -157,7 +156,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
           </p>
           <button
             onClick={dismissNotice}
-            className="mt-3 h-10 px-4 rounded-row bg-primary text-on-primary text-label font-semibold active:opacity-80"
+            className="mt-md h-10 px-base rounded-row bg-primary text-on-primary text-label font-semibold active:opacity-80"
           >
             Got it
           </button>
@@ -170,14 +169,14 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
           cards, because the whole risk here is somebody reading one and assuming
           it governs the other. They are adjacent, and each says exactly who it
           is about. */}
-      <section className="bg-glass border border-glass-border rounded-card p-3">
-        <h2 className="text-label font-semibold mb-1">Who can see what</h2>
+      <section className="bg-glass border border-glass-border rounded-card p-base">
+        <h2 className="text-label font-semibold mb-xs">Who can see what</h2>
 
         <button
           onClick={toggleActivity}
-          className="w-full flex items-center justify-between gap-3 min-h-tap text-left pt-1"
+          className="w-full flex items-center justify-between gap-md min-h-tap text-left pt-1"
         >
-          <span className="flex items-center gap-2.5">
+          <span className="flex items-center gap-sm">
             {profile.share_activity
               ? <Users size={18} className="text-done shrink-0" />
               : <EyeOff size={18} className="text-ink-tertiary shrink-0" />}
@@ -193,13 +192,13 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
           <Toggle on={profile.share_activity} />
         </button>
 
-        <div className="h-px bg-border my-2" />
+        <div className="h-px bg-hairline my-sm" />
 
         <button
           onClick={toggleSharing}
-          className="w-full flex items-center justify-between gap-3 min-h-tap text-left"
+          className="w-full flex items-center justify-between gap-md min-h-tap text-left"
         >
-          <span className="flex items-center gap-2.5">
+          <span className="flex items-center gap-sm">
             {profile.share_stats
               ? <Eye size={18} className="text-done shrink-0" />
               : <EyeOff size={18} className="text-ink-tertiary shrink-0" />}
@@ -215,7 +214,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
           <Toggle on={profile.share_stats} />
         </button>
 
-        <p className="text-micro tracking-normal text-ink-tertiary mt-2 pt-2 border-t border-glass-border leading-relaxed">
+        <p className="text-micro tracking-normal text-ink-tertiary mt-sm pt-sm border-t border-glass-border leading-relaxed">
           The community sees milestones — a new record, a streak, a workout count. Friends see
           the detail behind them. Nobody, in either case, ever sees your individual sets, reps
           or notes — those never leave this device.
@@ -223,9 +222,9 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
       </section>
 
       {/* Sync status */}
-      <section className="bg-glass border border-glass-border rounded-card p-3">
-        <div className="flex items-center justify-between gap-2 min-h-tap">
-          <span className="flex items-center gap-2 text-label">
+      <section className="bg-glass border border-glass-border rounded-card p-base">
+        <div className="flex items-center justify-between gap-sm min-h-tap">
+          <span className="flex items-center gap-sm text-label">
             {pendingSync > 0
               ? <CloudOff size={16} className="text-ink-secondary" />
               : <Check size={16} className="text-done" />}
@@ -250,7 +249,7 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
               }
             }}
             disabled={syncing}
-            className="h-9 px-3 rounded-control border border-glass-border text-label text-ink-tertiary flex items-center gap-1.5 active:bg-glass-inset disabled:opacity-50"
+            className="h-9 px-md rounded-control border border-glass-border text-label text-ink-tertiary flex items-center gap-xs active:bg-glass-inset disabled:opacity-50"
           >
             <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} /> Sync
           </button>
@@ -270,9 +269,18 @@ export default function ProfileScreen({ profileState, workouts, exercises, auth 
 
 function Stat({ label, value, suffix }) {
   return (
-    <div className="bg-glass border border-glass-border rounded-card p-3 text-center">
-      <div className="text-title font-semibold tabular-nums leading-tight">{value}</div>
-      <div className="text-micro tracking-normal text-ink-tertiary mt-0.5">{suffix ? `${label} (${suffix})` : label}</div>
+    <div className="bg-glass border border-glass-border rounded-card p-md text-center min-w-0">
+      {/* A third of a phone wide. The value must shrink rather than spill, so
+          it is clamped to the tile and never wraps mid-number. */}
+      <div
+        className="font-semibold tabular-nums leading-tight truncate"
+        style={{ fontSize: 'clamp(20px, 7.5vw, 32px)', letterSpacing: '-0.025em' }}
+      >
+        {value}
+      </div>
+      <div className="text-micro tracking-normal text-ink-tertiary mt-xxs truncate">
+        {suffix ? `${label} (${suffix})` : label}
+      </div>
     </div>
   );
 }
@@ -281,7 +289,7 @@ function Toggle({ on }) {
   return (
     <span
       aria-hidden="true"
-      className={`w-tap h-6 rounded-full shrink-0 relative transition-colors ${on ? 'bg-done' : 'bg-border'}`}
+      className={`w-tap h-6 rounded-full shrink-0 relative transition-colors ${on ? 'bg-done' : 'bg-glass-inset'}`}
     >
       <span
         className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${on ? 'left-[22px]' : 'left-0.5'}`}
@@ -360,7 +368,7 @@ function EditProfileModal({ open, profile, onClose, onSaved, onAvatarChanged }) 
       onClose={onClose}
       title="Edit profile"
       footer={
-        <div className="flex gap-2">
+        <div className="flex gap-sm">
           <button onClick={onClose} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
           <button
             onClick={save}
@@ -372,8 +380,8 @@ function EditProfileModal({ open, profile, onClose, onSaved, onAvatarChanged }) 
         </div>
       }
     >
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
+      <div className="space-y-md">
+        <div className="flex items-center gap-md">
           <button
             onClick={() => fileRef.current?.click()}
             disabled={photoBusy}
@@ -396,7 +404,7 @@ function EditProfileModal({ open, profile, onClose, onSaved, onAvatarChanged }) 
               <button
                 onClick={clearPhoto}
                 disabled={photoBusy}
-                className="mt-1.5 h-8 px-2.5 -ml-2.5 rounded-control text-micro tracking-normal text-ink-tertiary flex items-center gap-1.5 active:text-danger disabled:opacity-50"
+                className="mt-xs h-8 px-sm -ml-sm rounded-control text-micro tracking-normal text-ink-tertiary flex items-center gap-xs active:text-danger disabled:opacity-50"
               >
                 <Trash2 size={12} /> Remove
               </button>
@@ -414,26 +422,26 @@ function EditProfileModal({ open, profile, onClose, onSaved, onAvatarChanged }) 
         </div>
 
         <div>
-          <label className="text-label text-ink-tertiary mb-1.5 block">Display name</label>
+          <label className="text-label text-ink-tertiary mb-xs block">Display name</label>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             maxLength={40}
-            className="w-full h-tap px-3 rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
+            className="w-full h-tap px-md rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
           />
         </div>
         <div>
-          <label className="text-label text-ink-tertiary mb-1.5 block">Bio</label>
+          <label className="text-label text-ink-tertiary mb-xs block">Bio</label>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             maxLength={160}
             placeholder="Optional"
-            className="w-full min-h-[70px] p-3 rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
+            className="w-full min-h-[70px] p-md rounded-row bg-glass-inset border border-glass-border outline-none focus:border-focus text-label"
           />
-          <p className="text-micro tracking-normal text-ink-tertiary mt-1 text-right">{bio.length}/160</p>
+          <p className="text-micro tracking-normal text-ink-tertiary mt-xs text-right">{bio.length}/160</p>
         </div>
-        <p className="text-micro tracking-normal text-ink-tertiary flex items-center gap-1.5">
+        <p className="text-micro tracking-normal text-ink-tertiary flex items-center gap-xs">
           <Dumbbell size={12} /> @{profile?.username} cannot be changed.
         </p>
         {error && <p role="alert" className="text-label text-danger">{error}</p>}

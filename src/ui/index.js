@@ -17,3 +17,7 @@ export { default as SetRow, SetRowHeader } from './SetRow.jsx';
 export { default as ExerciseCard } from './ExerciseCard.jsx';
 export { default as FeedItem, FeedAcceptAction, FeedGroup, NewItemsPill, FeedItemSkeleton } from './FeedItem.jsx';
 export { EVENT_REGISTRY, eventStyle, TONE_CLASS } from './feedRegistry.js';
+export { default as BodyMap } from './BodyMap.jsx';
+export { default as BodyPair } from './BodyPair.jsx';
+export { default as Porthole } from './Porthole.jsx';
+export { default as MuscleBars } from './MuscleBars.jsx';

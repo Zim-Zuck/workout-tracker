@@ -5,9 +5,9 @@ import {
 } from 'lucide-react';
 import {
   GlassCard, ExerciseCard, SetRow, PrimaryButton, SecondaryButton, TextLink,
-  BottomSheet, SheetAction, useUndoToast, EmptyState
+  BottomSheet, SheetAction, useUndoToast, EmptyState, BodyPair
 } from '../ui/index.js';
-import WheelPicker from '../components/WheelPicker.jsx';
+import ValuePicker from '../components/ValuePicker.jsx';
 import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { useHaptic } from '../components/Toast.jsx';
@@ -17,6 +17,7 @@ import { sessionPRForExercise } from '../services/prs.js';
 import { recommend } from '../services/progression.js';
 import { alternativesFor } from '../services/sessionBuilder.js';
 import { splitLabel } from '../services/splits.js';
+import { sessionAnatomy } from '../services/anatomy.js';
 import { formatWeight, roundDisplay } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
@@ -79,6 +80,12 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
 
   const elapsed = now - active.startTime;
   const title = active.split ? splitLabel(active.split) : (active.name || 'Workout');
+  // The figure in the header is a reading of what you have actually logged, not
+  // of what you intend to: regions arrive as sets get checked. That is why an
+  // untouched session shows the designed "nothing trained yet" body rather than
+  // a pre-lit one, and why the line beneath it can name muscles in the past
+  // tense without lying.
+  const trained = sessionAnatomy(active.sets, exerciseMap);
   const completedSets = active.sets.filter((s) => s.completed && s.type !== 'warmup').length;
   const totalSets = active.sets.filter((s) => s.type !== 'warmup').length;
   const skipped = active.skipped || [];
@@ -151,6 +158,32 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           </p>
         )}
 
+        {/* WHAT YOU HAVE WORKED SO FAR.
+            Below the title and above the rest timer, on its own hairline, so the
+            sticky header reads top to bottom as: which session, how far in, what
+            it has touched, how long until the next set. */}
+        <div className="mt-md pt-md border-t border-hairline flex items-center gap-md">
+          <BodyPair
+            front={trained.front}
+            back={trained.back}
+            intensity={trained.intensity}
+            height={52}
+            label={trained.groups.length > 0
+              ? `Trained so far: ${trained.groups.map((g) => g.group).join(', ')}`
+              : 'Nothing trained yet'}
+          />
+          {trained.groups.length === 0 ? (
+            <p className="flex-1 min-w-0 text-label font-regular text-ink-secondary">
+              Lights up as you log.
+            </p>
+          ) : (
+            <p className="flex-1 min-w-0 text-label font-regular text-ink-secondary">
+              <span className="block text-micro font-semibold uppercase text-ink-tertiary">Worked</span>
+              <span className="block text-ink mt-xxs">{muscleSentence(trained.groups)}</span>
+            </p>
+          )}
+        </div>
+
         {restTimer.running && (
           <div className="mt-md flex items-center gap-sm">
             <span className="flex-1 flex items-center gap-sm text-label font-semibold text-done tabular">
@@ -210,8 +243,16 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
                   repsLabel: String(s.reps),
                   placeholderWeight: prevSet ? formatNum(roundDisplay(prevSet.weightKg)) : null,
                   placeholderReps: prevSet ? String(prevSet.reps) : null,
-                  onEditWeight: () => setPicker({ setId: s.id, field: 'weight', set: s, exercise: ex, number: l?.number }),
-                  onEditReps: () => setPicker({ setId: s.id, field: 'reps', set: s, exercise: ex, number: l?.number }),
+                  onEditWeight: () => setPicker({
+                    setId: s.id, field: 'weight', set: s, exercise: ex, number: l?.number,
+                    last: prevSet ? roundDisplay(prevSet.weightKg) : null,
+                    target: rec.targetWeightKg > 0 ? roundDisplay(rec.targetWeightKg) : null
+                  }),
+                  onEditReps: () => setPicker({
+                    setId: s.id, field: 'reps', set: s, exercise: ex, number: l?.number,
+                    last: prevSet ? prevSet.reps : null,
+                    target: rec.targetRepsLow > 0 ? rec.targetRepsLow : null
+                  }),
                   onToggleComplete: async () => {
                     const next = await toggleSetComplete(s.id);
                     haptic();
@@ -387,7 +428,7 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
       </BottomSheet>
 
       {picker && (
-        <WheelPicker
+        <ValuePicker
           open
           title={`Set ${picker.number || ''} · ${picker.field === 'weight' ? 'Weight' : 'Reps'}`}
           value={picker.field === 'weight' ? roundDisplay(picker.set.weightKg) : picker.set.reps}
@@ -395,6 +436,9 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           max={picker.field === 'weight' ? 500 : 50}
           step={picker.field === 'weight' ? (picker.exercise.weightIncrement || 1) : 1}
           unit={picker.field === 'weight' ? 'kg' : ''}
+          noun={picker.field === 'weight' ? 'kg' : 'reps'}
+          lastValue={picker.last}
+          targetValue={picker.target}
           stepOptions={picker.field === 'weight' ? [1, 2.5] : undefined}
           onStepChange={picker.field === 'weight'
             ? (inc) => {
@@ -450,6 +494,15 @@ function ExerciseMenuSheet({
 function mmss(totalSec) {
   const s = Math.max(0, Math.round(totalSec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// The muscles you have worked, as a sentence. Three names and a count, because
+// a full list of nine wraps the header to three lines and stops being readable
+// at exactly the moment it has the most to say.
+function muscleSentence(groups) {
+  const names = groups.map((g) => g.group);
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
 }
 
 function formatNum(v) {

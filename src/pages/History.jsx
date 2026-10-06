@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react';
 import { Search, Trash2, SlidersHorizontal, ChevronRight, Share2, Check, X, MoreHorizontal } from 'lucide-react';
 import {
   GlassCard, SegmentedTrack, BottomSheet, SheetAction, SetRow, SetRowHeader,
-  PrimaryButton, SecondaryButton, TextLink, StatBlock, EmptyState, useUndoToast, Pill
+  PrimaryButton, SecondaryButton, TextLink, StatBlock, EmptyState, useUndoToast, Pill,
+  BodyPair, MuscleBars
 } from '../ui/index.js';
 import ShareCard from '../components/ShareCard.jsx';
-import WheelPicker from '../components/WheelPicker.jsx';
+import ValuePicker from '../components/ValuePicker.jsx';
 import { orderedSets, setLabels } from '../db/normalize.js';
+import { sessionAnatomy } from '../services/anatomy.js';
 import { workoutTitle } from '../services/splits.js';
 import { workingVolume, isWorking } from '../services/calculations.js';
 import { formatDate, formatDuration, formatDateTime } from '../utils/date.js';
@@ -200,6 +202,10 @@ function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSav
 
   const dur = w.endTime ? w.endTime - w.startTime : 0;
   const groupedIds = w.exercises.length ? w.exercises : [...new Set(w.sets.map((s) => s.exerciseId))];
+  // Recomputed from `w`, not from `workout`, so the figure follows the edits
+  // being made in this sheet: uncheck a set here and the muscle it was the only
+  // evidence for goes dark, which is the point of showing it at all.
+  const anatomy = sessionAnatomy(w.sets, exMap);
   const updateSet = (id, patch) => setW({ ...w, sets: w.sets.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
 
   return (
@@ -226,6 +232,29 @@ function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSav
           </div>
         }
       >
+        {/* The session's body, above the sets that made it. Smaller than the
+            finish plate and with no ring — the ring counts a set you are about
+            to do, and there is nothing left to do here. */}
+        {anatomy.groups.length > 0 && (
+          <GlassCard variant="inset" className="p-md mb-md">
+            <BodyPair
+              front={anatomy.front}
+              back={anatomy.back}
+              intensity={1}
+              height={160}
+              gap={16}
+              label={`Trained: ${anatomy.groups.map((g) => g.group).join(', ')}`}
+            />
+            <div className="mt-md pt-md border-t border-hairline">
+              <p className="text-micro font-semibold uppercase text-ink-tertiary">Muscles worked</p>
+              <MuscleBars
+                groups={anatomy.groups}
+                className="mt-md flex flex-col gap-sm"
+              />
+            </div>
+          </GlassCard>
+        )}
+
         <div className="flex flex-col gap-md">
           {groupedIds.map((exId) => {
             const ex = exMap.get(exId);
@@ -237,21 +266,27 @@ function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSav
                   {ex ? ex.name : `Deleted exercise (${exId.slice(0, 8)}…)`}
                 </p>
                 <SetRowHeader />
-                {rows.map((s) => {
-                  const l = labelled.find((x) => x.set.id === s.id);
-                  return (
-                    <SetRow
-                      key={s.id}
-                      number={l?.number ?? null}
-                      set={s}
-                      weightLabel={fmtNum(roundDisplay(s.weightKg))}
-                      repsLabel={String(s.reps)}
-                      onEditWeight={() => setPicker({ id: s.id, field: 'weight', set: s, ex })}
-                      onEditReps={() => setPicker({ id: s.id, field: 'reps', set: s, ex })}
-                      onToggleComplete={() => updateSet(s.id, { completed: !s.completed })}
-                    />
-                  );
-                })}
+                {/* The SAME 12px stack as the live session. These rows used to
+                    be emitted straight into the card with no wrapper, so the
+                    identical component had a 12px rhythm on one screen and
+                    none at all on this one. */}
+                <div className="flex flex-col gap-md">
+                  {rows.map((s) => {
+                    const l = labelled.find((x) => x.set.id === s.id);
+                    return (
+                      <SetRow
+                        key={s.id}
+                        number={l?.number ?? null}
+                        set={s}
+                        weightLabel={fmtNum(roundDisplay(s.weightKg))}
+                        repsLabel={String(s.reps)}
+                        onEditWeight={() => setPicker({ id: s.id, field: 'weight', set: s, ex })}
+                        onEditReps={() => setPicker({ id: s.id, field: 'reps', set: s, ex })}
+                        onToggleComplete={() => updateSet(s.id, { completed: !s.completed })}
+                      />
+                    );
+                  })}
+                </div>
                 {!rows.length && <p className="py-sm text-label font-regular text-ink-tertiary">No sets</p>}
               </GlassCard>
             );
@@ -296,7 +331,7 @@ function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSav
       </BottomSheet>
 
       {picker && (
-        <WheelPicker
+        <ValuePicker
           open
           title={picker.field === 'weight' ? 'Weight' : 'Reps'}
           value={picker.field === 'weight' ? roundDisplay(picker.set.weightKg) : picker.set.reps}
@@ -304,7 +339,8 @@ function WorkoutDetail({ workout, title, exMap, onUpdateExercise, onClose, onSav
           max={picker.field === 'weight' ? 500 : 50}
           step={picker.field === 'weight' ? (picker.ex?.weightIncrement || 2.5) : 1}
           unit={picker.field === 'weight' ? 'kg' : ''}
-          stepOptions={picker.field === 'weight' ? [1, 2.5, 5] : undefined}
+          noun={picker.field === 'weight' ? 'kg' : 'reps'}
+          stepOptions={picker.field === 'weight' ? [1, 2.5] : undefined}
           onStepChange={picker.ex ? (inc) => onUpdateExercise(picker.ex.id, { weightIncrement: inc }) : undefined}
           onCancel={() => setPicker(null)}
           onConfirm={(v) => {

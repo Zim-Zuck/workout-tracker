@@ -26,7 +26,7 @@ export default function SetRow({
 }) {
   if (loading) {
     return (
-      <div className="grid items-center gap-md py-base" style={{ gridTemplateColumns: 'var(--set-grid)' }}>
+      <div className="grid items-center gap-md px-sm py-sm" style={{ gridTemplateColumns: 'var(--set-grid)' }}>
         <span className="skeleton h-4 rounded-control" />
         <span className="skeleton h-6 rounded-control" />
         <span className="skeleton h-6 rounded-control" />
@@ -42,12 +42,15 @@ export default function SetRow({
   const hasR = (set.reps || 0) > 0;
 
   return (
-    // 16px of padding inside the row and 12px between rows (set by the parent's
-    // gap-md). The old row had neither: a 2px inset and a 48px minimum height
-    // around 44px controls, which is why a stack of them read as one solid
-    // block of numbers with no rows in it.
+    // 8px of padding inside the row, 12px between rows (the parent's gap-md).
+    //
+    // INSIDE MUST BE SMALLER THAN BETWEEN, or the rows read as further apart
+    // from themselves than from each other. The previous py-base put 16px
+    // inside and 12px between, on top of the 44pt tap targets the row already
+    // contains — a 76px tall row around a 32px number, with the stack reading
+    // as loose and unevenly spaced.
     <div
-      className={`grid items-center gap-md rounded-row px-sm py-base transition-colors duration-fast ease-out
+      className={`grid items-center gap-md rounded-row px-sm py-sm transition-colors duration-fast ease-out
                   ${done ? 'bg-done-soft' : ''} ${disabled ? 'opacity-40 pointer-events-none' : ''}`}
       style={{ gridTemplateColumns: 'var(--set-grid)' }}
     >

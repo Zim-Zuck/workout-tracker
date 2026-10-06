@@ -89,8 +89,14 @@ body[data-resume="1"] { --chrome-bottom: calc(env(safe-area-inset-bottom) + var(
 /* Room for the tab bar (and the resume pill when one is showing). The pill's
    own height is added by ResumePill via a data attribute on <body>. */
 .pb-nav { padding-bottom: calc(env(safe-area-inset-bottom) + var(--layout-tab-bar) + var(--space-base)); }
+/* The pill floats 8px above the tab bar, so the reserve is tab + 8 + pill, and
+   then one 16px gap of breathing room — not the 32 it used to add on top of a
+   measurement that already included its own clearance. */
 body[data-resume="1"] .pb-nav {
-  padding-bottom: calc(env(safe-area-inset-bottom) + var(--layout-tab-bar) + var(--layout-resume-pill) + var(--space-xl));
+  padding-bottom: calc(
+    env(safe-area-inset-bottom) + var(--layout-tab-bar) + var(--space-sm)
+    + var(--layout-resume-pill) + var(--space-base)
+  );
 }
 
 .scroll-y { -webkit-overflow-scrolling: touch; }

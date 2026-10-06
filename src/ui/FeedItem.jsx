@@ -92,11 +92,16 @@ export default function FeedItem({
     </div>
   );
 
-  // Raised events get a card; ordinary ones sit directly on the page with a
-  // hairline between them. Cards for everything is how a feed turns into a wall.
+  // Raised events get a card; ordinary ones sit directly on the page. Cards for
+  // everything is how a feed turns into a wall.
+  //
+  // NEITHER CARRIES ITS OWN VERTICAL SPACING. The list owns the 12px rhythm
+  // between items (see ActivityFeed), because the old version put py-base on
+  // plain rows and nothing at all on cards — so two milestone cards in a row
+  // touched edge to edge while the rows around them sat 16px apart.
   return raised
     ? <GlassCard className="p-base">{body}</GlassCard>
-    : <div className="py-base border-b border-hairline last:border-b-0">{body}</div>;
+    : <div className="px-base">{body}</div>;
 }
 
 // The inline Accept offered on a challenge aimed at the current user. A separate
@@ -116,8 +121,8 @@ export function FeedGroup({ icon: Icon, headline, actors = [], timestamp, onExpa
     <button
       type="button"
       onClick={onExpand}
-      className="w-full py-base flex items-center gap-md text-left border-b border-hairline
-                 transition-colors duration-fast ease-out active:bg-glass-pressed rounded-row"
+      className="w-full px-base py-sm flex items-center gap-md text-left rounded-row
+                 transition-colors duration-fast ease-out active:bg-glass-pressed"
     >
       <span className="flex -space-x-2 shrink-0">
         {actors.slice(0, 3).map((a, i) => (
@@ -154,7 +159,7 @@ export function NewItemsPill({ count, onClick }) {
 
 export function FeedItemSkeleton() {
   return (
-    <div className="py-base border-b border-hairline flex items-start gap-md">
+    <div className="px-base flex items-start gap-md">
       <Skeleton w={36} h={36} radius="pill" />
       <div className="flex-1">
         <SkeletonText lines={2} />

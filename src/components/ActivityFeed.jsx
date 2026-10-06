@@ -174,7 +174,10 @@ export default function ActivityFeed({
         <NewItemsPill count={feed?.pendingCount || 0} onClick={feed?.showPending} />
       )}
 
-      <div ref={listRef} className="mt-sm">
+      {/* ONE rhythm for the whole feed: 12px between every item, whatever
+          shape it is. Cards and plain rows used to space themselves, which
+          meant the gap between two items depended on which two they were. */}
+      <div ref={listRef} className="mt-md flex flex-col gap-md">
         {feed?.loading && !shown.length && (
           <>
             <FeedItemSkeleton /><FeedItemSkeleton /><FeedItemSkeleton />

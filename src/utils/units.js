@@ -31,3 +31,17 @@ export function formatVolume(kg) {
   const v = Math.round(kg || 0);
   return `${v.toLocaleString(undefined, { maximumFractionDigits: 0 })} kg`;
 }
+
+// A lifetime or multi-month volume, for a tile with a third of a phone to live
+// in. "192457.5" rendered at 32px overflowed its card, so past a tonne the
+// number switches units rather than the card losing the fight: 192.5 t.
+//
+// Returns the parts separately — the tile prints the unit in its own label, and
+// a 32px "t" next to a 32px number is just noise.
+export function compactVolume(kg) {
+  const v = Math.max(0, Math.round(kg || 0));
+  if (v < 1000) return { value: v.toLocaleString(), unit: 'kg' };
+  const t = v / 1000;
+  const digits = t >= 100 ? 0 : 1;
+  return { value: t.toLocaleString(undefined, { maximumFractionDigits: digits }), unit: 't' };
+}

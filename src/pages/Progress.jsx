@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Download, Share2, ChevronRight, LineChart as LineIcon } from 'lucide-react';
+import { Share2, ChevronRight, LineChart as LineIcon } from 'lucide-react';
 import {
   GlassCard, StatBlock, PRBadge, SecondaryButton, TextLink, EmptyState, SegmentedPills
 } from '../ui/index.js';
-import { BarChart, DistributionBars } from '../components/Chart.jsx';
+import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
 import ExerciseDetail from './ExerciseDetail.jsx';
 import ProgressShareCard from '../components/ProgressShareCard.jsx';
@@ -12,11 +12,19 @@ import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
 import { isWorking, workingVolume } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
-import { formatWeight, formatVolume } from '../utils/units.js';
+import { formatWeight } from '../utils/units.js';
 import { startOfWeek, formatDate } from '../utils/date.js';
 
+// Push, pull, then legs. Fixed, so the radar's outline means something.
+const MUSCLE_ORDER = [
+  'Chest', 'Shoulders', 'Triceps', 'Biceps', 'Back', 'Traps',
+  'Core', 'Forearms', 'Glutes', 'Hamstrings', 'Quads', 'Calves'
+];
+
 const WINDOWS = [
+  { value: '2w', label: '2 weeks', days: 14 },
   { value: '4w', label: '4 weeks', days: 28 },
+  { value: '6w', label: '6 weeks', days: 42 },
   { value: '12w', label: '12 weeks', days: 84 },
   { value: '1y', label: '1 year', days: 365 }
 ];
@@ -55,6 +63,7 @@ export default function ProgressScreen({ workout }) {
     for (let i = 0; i < weeks; i++) {
       out.unshift({
         label: new Date(cur).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        weekStart: cur,
         value: Math.round(map.get(cur) || 0)
       });
       cur -= 7 * 86400000;
@@ -66,6 +75,23 @@ export default function ProgressScreen({ workout }) {
   // readable on an axis. Decided once, for the whole chart, so the bars stay
   // comparable between weeks.
   const useTonnes = useMemo(() => Math.max(0, ...weekly.map((d) => d.value)) >= 2000, [weekly]);
+
+  // The current week against the average of the COMPLETED weeks behind it.
+  // Comparing a Tuesday against full weeks and calling it a drop would be
+  // noise, so the badge says the week is still running rather than judging it.
+  const weekNow = weekly[weekly.length - 1];
+  const priorWeeks = weekly.slice(0, -1).filter((d) => d.value > 0);
+  const priorAvg = priorWeeks.length
+    ? priorWeeks.reduce((a, d) => a + d.value, 0) / priorWeeks.length
+    : 0;
+  // Only once there is something to compare. A week you have not trained yet is
+  // always "−100% vs avg", which is arithmetic rather than information.
+  const vsAvg = priorAvg > 0 && weekNow.value > 0
+    ? Math.round(((weekNow.value - priorAvg) / priorAvg) * 100)
+    : null;
+  const fmtVol = (v) => (useTonnes
+    ? `${(Math.round((v / 1000) * 10) / 10).toLocaleString()} t`
+    : `${Math.round(v).toLocaleString()} kg`);
 
   // ---- Muscle groups ----
   const muscle = useMemo(() => {
@@ -79,9 +105,14 @@ export default function ProgressScreen({ workout }) {
         for (const g of groups) totals.set(g, (totals.get(g) || 0) + share);
       }
     }
-    return [...totals.entries()]
-      .map(([label, value]) => ({ label, value: Math.round(value) }))
-      .sort((a, b) => b.value - a.value);
+    // The radar is read as a SHAPE, so the axes must sit in a fixed anatomical
+    // order — sorting them by size would make a balanced month and a lopsided
+    // one draw the same outline. Biggest eight, put back in body order.
+    const top = [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([label, value]) => ({ label, value: Math.round(value) }));
+    return top.sort((a, b) => MUSCLE_ORDER.indexOf(a.label) - MUSCLE_ORDER.indexOf(b.label));
   }, [inWindow, exMap]);
 
   const muscleTonnes = useMemo(() => Math.max(0, ...muscle.map((d) => d.value)) >= 2000, [muscle]);
@@ -138,11 +169,17 @@ export default function ProgressScreen({ workout }) {
 
   return (
     <div className="px-base pb-nav">
-      <div className="flex items-center justify-between pt-base">
-        <StatBlock value={totals.thisWeek} label="This week" />
-        <StatBlock value={totals.thisMonth} label="This month" align="center" />
-        <StatBlock value={`${totals.streakWeeks}w`} label="Streak" align="center" />
-        <StatBlock value={totals.total} label="Total" align="center" />
+      {/* Four tiles on one row, each centred over an equal share of the width.
+          The first used to be left-aligned while the other three were centred,
+          which read as a typo. */}
+      <div className="grid grid-cols-4 gap-xs pt-base">
+        {/* whitespace-nowrap: "This month" is exactly one column wide at 375pt,
+            so it wrapped to two lines while its three neighbours stayed on one
+            and the row read as misaligned. */}
+        <StatBlock value={totals.thisWeek} label="This week" align="center" className="whitespace-nowrap" />
+        <StatBlock value={totals.thisMonth} label="This month" align="center" className="whitespace-nowrap" />
+        <StatBlock value={`${totals.streakWeeks}w`} label="Streak" align="center" className="whitespace-nowrap" />
+        <StatBlock value={totals.total} label="Total" align="center" className="whitespace-nowrap" />
       </div>
 
       <SegmentedPills
@@ -204,38 +241,56 @@ export default function ProgressScreen({ workout }) {
 
       {/* Weekly volume ----------------------------------------------------- */}
       <Section title="Weekly volume" subtitle="Working sets only — warm-ups excluded.">
+        <div className="flex items-end justify-between gap-md">
+          <div className="min-w-0">
+            <p className="text-title font-semibold text-ink tabular leading-none">{fmtVol(weekNow.value)}</p>
+            <p className="text-label font-regular text-ink-tertiary mt-xs">
+              Week of {weekNow.label} · {weekNow.value > 0 ? 'in progress' : 'nothing logged yet'}
+            </p>
+          </div>
+          {vsAvg != null && (
+            <span className="shrink-0 h-9 px-base inline-flex items-center rounded-full bg-glass-inset
+                             border border-glass-inset-border text-label font-semibold text-ink-secondary tabular">
+              {vsAvg >= 0 ? '+' : '−'}{Math.abs(vsAvg)}% vs avg
+            </span>
+          )}
+        </div>
+
         {/* Tonnes once the numbers get big, rather than an abbreviated
             kilogram: "20k kg" reads as "twenty kilo kilograms". */}
-        <BarChart
-          data={useTonnes ? weekly.map((d) => ({ ...d, value: d.value / 1000 })) : weekly}
-          unit={useTonnes ? 't' : 'kg'}
-          highlightLast
-          formatValue={(v) => (useTonnes
-            ? (Math.round(v * 10) / 10).toLocaleString()
-            : Math.round(v).toLocaleString())}
-          emptyMessage="No volume logged in this window."
-        />
+        <div className="mt-lg">
+          <AreaChart
+            data={useTonnes ? weekly.map((d) => ({ ...d, value: d.value / 1000 })) : weekly}
+            unit={useTonnes ? 't' : 'kg'}
+            pointLabel={`${fmtVol(weekNow.value)} · ${weekNow.label}`}
+            formatValue={(v) => (useTonnes
+              ? (Math.round(v * 10) / 10).toLocaleString()
+              : Math.round(v).toLocaleString())}
+            emptyMessage="No volume logged in this window."
+          />
+        </div>
       </Section>
 
-      {/* Muscle groups ----------------------------------------------------- */}
-      <Section title="Volume by muscle group" subtitle={`Last ${WINDOWS.find((w) => w.value === win).label}.`}>
-        <DistributionBars
+      {/* Muscle balance ---------------------------------------------------- */}
+      <Section title="Muscle balance" subtitle={`Volume by muscle group, last ${WINDOWS.find((w) => w.value === win).label}.`}>
+        <RadarChart
           data={muscle}
           unit={muscleTonnes ? 't' : 'kg'}
           formatValue={(v) => (muscleTonnes
             ? (Math.round(v / 100) / 10).toLocaleString()
             : Math.round(v).toLocaleString())}
+          emptyMessage="No working sets logged in this window."
         />
       </Section>
 
       {/* Rep ranges -------------------------------------------------------- */}
       <Section title="Rep range distribution" subtitle="Working sets in each range.">
-        <DistributionBars data={repRange} formatValue={(v) => String(v)} unit="sets" />
+        <DonutChart data={repRange} unit="sets" />
       </Section>
 
       {/* Calendar ---------------------------------------------------------- */}
       <Section title="Training calendar" subtitle="Green days are days you trained.">
-        <MonthCalendar workouts={workouts} monthsBack={win === '1y' ? 12 : win === '12w' ? 3 : 1} />
+        <MonthCalendar workouts={workouts} monthsBack={win === '1y' ? 12 : win === '12w' ? 3 : win === '6w' ? 2 : 1} />
       </Section>
 
       {/* Per exercise ------------------------------------------------------ */}

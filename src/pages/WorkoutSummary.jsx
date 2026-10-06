@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Check, Share2, CloudOff, Cloud } from 'lucide-react';
-import { GlassCard, PrimaryButton, SecondaryButton, PRBadge } from '../ui/index.js';
+import { GlassCard, PrimaryButton, SecondaryButton, PRBadge, BodyPair, MuscleBars } from '../ui/index.js';
 import ShareCard from '../components/ShareCard.jsx';
 import { workoutSummary } from '../services/workoutSummary.js';
 import { sessionPRForExercise } from '../services/prs.js';
+import { sessionAnatomy } from '../services/anatomy.js';
 import { formatWeight, formatVolume } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
@@ -29,12 +30,20 @@ export default function WorkoutSummary({ workout, workouts, exercises, onDone })
     [workout, workouts, exercises]
   );
 
+  const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
+
+  // THE FINISH PLATE. The same figure the header carried all session, now at
+  // full size with nothing cropped away, plus how many sets each muscle took.
+  const anatomy = useMemo(
+    () => (workout ? sessionAnatomy(workout.sets, exMap) : null),
+    [workout, exMap]
+  );
+
   // PRs come from the PR authority (services/prs.js), not from the share
   // card's older workoutPRs() — one badge per exercise, the three real kinds,
   // and estimated 1RM used as a tiebreaker rather than claimed as a record.
   const prs = useMemo(() => {
     if (!workout) return [];
-    const exMap = new Map(exercises.map((e) => [e.id, e]));
     const history = workouts.filter((w) => w.id !== workout.id && w.date < workout.date);
     return (workout.exercises || [])
       .map((id) => {
@@ -42,7 +51,7 @@ export default function WorkoutSummary({ workout, workouts, exercises, onDone })
         return pr ? { ...pr, name: exMap.get(id)?.name || 'Exercise' } : null;
       })
       .filter(Boolean);
-  }, [workout, workouts, exercises]);
+  }, [workout, workouts, exMap]);
 
   if (!summary) return null;
 
@@ -69,6 +78,33 @@ export default function WorkoutSummary({ workout, workouts, exercises, onDone })
             <Stat value={formatDuration(summary.durationMs)} label="Duration" />
           </div>
         </GlassCard>
+
+        {/* The body, then the bars. The figure answers "what did I just train",
+            which is the thing you can see at arm's length while putting a bar
+            back; the bars answer "how much of each", which is the thing you
+            actually read. Suppressed entirely when nothing was logged — an empty
+            figure under the words "workout saved" would be a taunt. */}
+        {anatomy && anatomy.groups.length > 0 && (
+          <GlassCard className="mt-base p-base">
+            <BodyPair
+              front={anatomy.front}
+              back={anatomy.back}
+              intensity={1}
+              height={260}
+              gap={24}
+              stage
+              className="py-sm"
+              label={`Trained: ${anatomy.groups.map((g) => g.group).join(', ')}`}
+            />
+            <div className="mt-base pt-base border-t border-hairline">
+              <p className="text-micro font-semibold uppercase text-ink-tertiary">Muscles worked</p>
+              <MuscleBars
+                groups={anatomy.groups}
+                className="mt-md flex flex-col gap-md"
+              />
+            </div>
+          </GlassCard>
+        )}
 
         {prs.length > 0 && (
           <GlassCard className="mt-base p-base">

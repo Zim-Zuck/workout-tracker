@@ -3,6 +3,8 @@ import { MoreVertical, Plus, RotateCcw } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import SetRow, { SetRowHeader } from './SetRow.jsx';
 import PRBadge from './PRBadge.jsx';
+import Porthole from './Porthole.jsx';
+import { anatomyForExercise, tiersFor } from '../services/anatomy.js';
 
 // One exercise inside a live session.
 //
@@ -77,6 +79,15 @@ export default function ExerciseCard({
     setDx(dx < -REVEAL * 0.55 ? -REVEAL : 0);
   };
 
+  // Warm-ups are excluded from the ring for the same reason they are excluded
+  // from volume and PRs: they are not the work. A card of three working sets
+  // reads as three segments whether or not you warmed up into it.
+  const working = sets.filter((s) => s.type !== 'warmup');
+  const ringTotal = working.length;
+  const ringDone = working.filter((s) => s.completed).length;
+  const anatomy = anatomyForExercise(exercise);
+  const portholeLabel = `${tiersFor(exercise).primary.join(', ') || 'Exercise'} · ${ringDone} of ${ringTotal} sets logged`;
+
   return (
     <div className="relative overflow-hidden rounded-card">
       <button
@@ -127,6 +138,24 @@ export default function ExerciseCard({
               )}
             </div>
 
+            {/* THE PORTHOLE. A window onto the muscle this lift is for, with the
+                set tracker as the ring around it. It sits here, against the
+                prev/target lines, because those three things answer the same
+                question — what am I doing, and how much of it is left — and it
+                centres on the text block rather than topping out with the ⋮ so
+                the ring reads as belonging to the sets below it. */}
+            <Porthole
+              className="self-center"
+              view={anatomy.view}
+              box={anatomy.box}
+              primary={anatomy.primary}
+              secondary={anatomy.secondary}
+              intensity={ringTotal > 0 ? ringDone / ringTotal : 0}
+              done={ringDone}
+              total={ringTotal}
+              label={portholeLabel}
+            />
+
             {/* Opens a bottom SHEET, never a dropdown: the old menu rendered
                 directly over the weight and reps columns it was asking you to
                 make a decision about. */}
@@ -144,17 +173,20 @@ export default function ExerciseCard({
 
           <div className="mt-base">
             <SetRowHeader />
-            {/* 12px between rows. Each row carries its own 16px of vertical
-                padding, so this is the gap BETWEEN rows, not inside them. */}
+            {/* 12px between rows — more than the 8px each row keeps inside
+                itself, so a row reads as one thing and the stack reads as a
+                list of them. */}
             <div className="flex flex-col gap-md">
               {sets.map((s, i) => <SetRow key={s.id} {...renderSet(s, i)} />)}
             </div>
           </div>
 
+          {/* Part of the same stack as the rows above it, so it keeps their
+              12px rhythm rather than starting a new group. */}
           <button
             type="button"
             onClick={onAddSet}
-            className="mt-base w-full h-tap rounded-row flex items-center justify-center gap-xs
+            className="mt-md w-full h-tap rounded-row flex items-center justify-center gap-xs
                        text-label font-semibold text-ink-secondary
                        transition-colors duration-fast ease-out active:bg-glass-pressed active:text-ink"
           >

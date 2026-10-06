@@ -8,7 +8,7 @@ import { fetchUserActivity } from '../services/communityApi.js';
 import { describeEvent } from '../services/communityEvents.js';
 import { buildStatsSummary, buildLiftsSummary } from '../services/socialSummary.js';
 import AchievementsRow from '../components/AchievementsRow.jsx';
-import { formatWeight } from '../utils/units.js';
+import { formatWeight, compactVolume } from '../utils/units.js';
 import { relativeDay } from '../utils/date.js';
 
 // Anyone's profile.
@@ -65,9 +65,9 @@ export default function UserProfile({
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-base">
         <BackBar onBack={onBack} />
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-6xl">
           <span className="w-6 h-6 rounded-full border-2 border-muted border-t-accent animate-spin" />
         </div>
       </div>
@@ -76,9 +76,9 @@ export default function UserProfile({
 
   if (error || !data) {
     return (
-      <div className="p-4">
+      <div className="p-base">
         <BackBar onBack={onBack} />
-        <p className="text-center text-label text-danger py-10">{error || 'Could not load this profile.'}</p>
+        <p className="text-center text-label text-danger py-4xl">{error || 'Could not load this profile.'}</p>
         <button onClick={load} className="w-full h-tap rounded-row border border-glass-border">Try again</button>
       </div>
     );
@@ -99,21 +99,21 @@ export default function UserProfile({
     .slice(0, 6);
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="px-base pt-base pb-base space-y-md">
       <BackBar onBack={onBack} />
 
-      <section className="bg-glass border border-glass-border rounded-card p-4">
-        <div className="flex items-start gap-3">
+      <section className="bg-glass border border-glass-border rounded-card p-base">
+        <div className="flex items-start gap-md">
           <Avatar profile={profile} size={56} />
           <div className="flex-1 min-w-0">
             <h1 className="text-body font-semibold leading-tight truncate">{profile.display_name}</h1>
             <p className="text-label text-ink-tertiary">@{profile.username}</p>
-            {profile.bio && <p className="text-label mt-2 leading-snug">{profile.bio}</p>}
+            {profile.bio && <p className="text-label mt-sm leading-snug">{profile.bio}</p>}
           </div>
         </div>
 
         {canView && stats?.streak_weeks > 0 && (
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 h-8 rounded-full bg-glass-inset border border-glass-border">
+          <div className="mt-md inline-flex items-center gap-xs px-md h-8 rounded-full bg-glass-inset border border-glass-border">
             <Flame size={14} className="text-ink-secondary" />
             <span className="text-label font-semibold text-ink-secondary">
               {stats.streak_weeks} week{stats.streak_weeks === 1 ? '' : 's'} in a row
@@ -126,10 +126,10 @@ export default function UserProfile({
             them — the server stopped requiring a friendship in migration 014.
             Friending is the smaller button beside it. */}
         {relationship !== 'self' && (
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-sm mt-base">
             <button
               onClick={() => onChallenge?.(profile)}
-              className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-2 active:opacity-80"
+              className="flex-1 h-tap rounded-row bg-primary text-on-primary font-semibold flex items-center justify-center gap-sm active:opacity-80"
             >
               <Swords size={16} /> Challenge
             </button>
@@ -145,7 +145,7 @@ export default function UserProfile({
                   } catch (err) { toast(err.message, { tone: 'error' }); }
                 }}
                 aria-label="Add friend"
-                className="h-tap px-3 rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-1.5 active:bg-glass-inset"
+                className="h-tap px-md rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-xs active:bg-glass-inset"
               >
                 <UserPlus size={16} /> <span className="text-label">Add</span>
               </button>
@@ -162,14 +162,14 @@ export default function UserProfile({
                   } catch (err) { toast(err.message, { tone: 'error' }); }
                 }}
                 aria-label="Accept friend request"
-                className="h-tap px-3 rounded-row border border-done-border text-done flex items-center justify-center gap-1.5 active:bg-glass-inset"
+                className="h-tap px-md rounded-row border border-done-border text-done flex items-center justify-center gap-xs active:bg-glass-inset"
               >
                 <Check size={16} /> <span className="text-label">Accept</span>
               </button>
             )}
 
             {relationship === 'requested' && (
-              <span className="h-tap px-3 rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-1.5 text-label">
+              <span className="h-tap px-md rounded-row border border-glass-border text-ink-tertiary flex items-center justify-center gap-xs text-label">
                 <Clock size={15} /> Sent
               </span>
             )}
@@ -195,18 +195,18 @@ export default function UserProfile({
           what you are being refused. It is the one place in the app where adding
           someone still has a concrete payoff, now that nothing else requires it. */}
       {!canView && (
-        <section className="bg-glass border border-glass-border rounded-card p-6 text-center">
+        <section className="bg-glass border border-glass-border rounded-card p-xl text-center">
           {relationship === 'friends' ? (
             <>
-              <EyeOff size={24} className="text-ink-tertiary mx-auto mb-2" />
+              <EyeOff size={24} className="text-ink-tertiary mx-auto mb-sm" />
               <p className="text-label font-semibold">{profile.display_name} keeps their detailed stats private</p>
-              <p className="text-label text-ink-tertiary mt-1">They have turned off stat sharing.</p>
+              <p className="text-label text-ink-tertiary mt-xs">They have turned off stat sharing.</p>
             </>
           ) : (
             <>
-              <Lock size={24} className="text-ink-tertiary mx-auto mb-2" />
+              <Lock size={24} className="text-ink-tertiary mx-auto mb-sm" />
               <p className="text-label font-semibold">Add {profile.display_name.split(' ')[0]} to compare lifts</p>
-              <p className="text-label text-ink-tertiary mt-1 leading-relaxed">
+              <p className="text-label text-ink-tertiary mt-xs leading-relaxed">
                 Friends see each other's totals and top lifts side by side. You can still
                 challenge them without it.
               </p>
@@ -216,10 +216,10 @@ export default function UserProfile({
       )}
 
       {canView && stats && (
-        <section className="bg-glass border border-glass-border rounded-card p-3">
-          <h2 className="text-label font-semibold mb-3">Head to head</h2>
+        <section className="bg-glass border border-glass-border rounded-card p-base">
+          <h2 className="text-label font-semibold mb-md">Head to head</h2>
 
-          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-3 items-center mb-2">
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-md items-center mb-sm">
             <span className="text-micro tracking-normal text-ink-tertiary text-right">You</span>
             <span />
             <span className="text-micro tracking-normal text-ink-tertiary truncate">{profile.display_name.split(' ')[0]}</span>
@@ -240,10 +240,12 @@ export default function UserProfile({
             label="Volume"
             mine={myStats.lifetime_volume_kg}
             theirs={Number(stats.lifetime_volume_kg)}
-            format={(v) => formatWeight(v)}
+            // Tonnes past 1,000 kg: a lifetime total in kilograms does not fit
+            // half a phone width, on either side of the comparison.
+            format={(v) => { const c = compactVolume(v); return `${c.value} ${c.unit}`; }}
           />
 
-          {shared.length > 0 && <div className="h-px bg-border my-2" />}
+          {shared.length > 0 && <div className="h-px bg-hairline my-sm" />}
 
           {shared.map((l) => {
             const mine = myLifts.get(l.exercise_id);
@@ -260,13 +262,13 @@ export default function UserProfile({
           })}
 
           {shared.length === 0 && (
-            <p className="text-label text-ink-tertiary text-center py-3">
+            <p className="text-label text-ink-tertiary text-center py-md">
               No lifts in common yet. Train some of the same exercises to compare.
             </p>
           )}
 
           {stats.last_workout_at && (
-            <p className="text-micro tracking-normal text-ink-tertiary mt-3 pt-2 border-t border-glass-border text-center">
+            <p className="text-micro tracking-normal text-ink-tertiary mt-md pt-sm border-t border-glass-border text-center">
               Last trained {relativeDay(new Date(stats.last_workout_at).getTime()).toLowerCase()}
             </p>
           )}
@@ -282,11 +284,11 @@ export default function UserProfile({
       )}
 
       {canView && lifts?.length > 0 && (
-        <section className="bg-glass border border-glass-border rounded-card p-3">
-          <h2 className="text-label font-semibold mb-2">Their top lifts</h2>
+        <section className="bg-glass border border-glass-border rounded-card p-base">
+          <h2 className="text-label font-semibold mb-sm">Their top lifts</h2>
           <ul className="divide-y divide-hairline">
             {lifts.slice(0, 5).map((l) => (
-              <li key={l.exercise_id} className="py-2.5 flex items-center justify-between gap-2">
+              <li key={l.exercise_id} className="py-sm flex items-center justify-between gap-sm">
                 <span className="text-label truncate">{exNames.get(l.exercise_id) || l.exercise_id}</span>
                 <span className="text-label font-semibold tabular-nums shrink-0">
                   {Number(l.top_weight_kg) > 0
@@ -300,8 +302,8 @@ export default function UserProfile({
       )}
 
       {activity.length > 0 && (
-        <section className="bg-glass border border-glass-border rounded-card p-3">
-          <h2 className="text-label font-semibold mb-1">Recent activity</h2>
+        <section className="bg-glass border border-glass-border rounded-card p-base">
+          <h2 className="text-label font-semibold mb-xs">Recent activity</h2>
           <ul className="divide-y divide-hairline">
             {activity.map((ev) => {
               const d = describeEvent(ev, exNames);
@@ -309,12 +311,12 @@ export default function UserProfile({
               // than rendered blank.
               if (!d) return null;
               return (
-                <li key={ev.id} className="py-2.5 flex items-start gap-2.5">
-                  <span aria-hidden="true" className="text-body leading-none mt-0.5">{d.emoji}</span>
+                <li key={ev.id} className="py-sm flex items-start gap-sm">
+                  <span aria-hidden="true" className="text-body leading-none mt-xxs">{d.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-label leading-snug">{d.headline}</p>
                     {d.detail && (
-                      <p className="text-label font-semibold tabular-nums mt-0.5">{d.detail}</p>
+                      <p className="text-label font-semibold tabular-nums mt-xxs">{d.detail}</p>
                     )}
                   </div>
                   <span className="text-micro tracking-normal text-ink-tertiary shrink-0">
@@ -332,7 +334,7 @@ export default function UserProfile({
         onClose={() => setConfirmRemove(false)}
         title={`Remove ${profile.display_name}?`}
         footer={
-          <div className="flex gap-2">
+          <div className="flex gap-sm">
             <button onClick={() => setConfirmRemove(false)} className="flex-1 h-tap rounded-row border border-glass-border">Cancel</button>
             <button
               onClick={async () => {
@@ -359,7 +361,7 @@ export default function UserProfile({
 
 function BackBar({ onBack }) {
   return (
-    <button onClick={onBack} className="h-tap -ml-2 px-2 text-label text-ink-tertiary flex items-center gap-1 active:text-ink">
+    <button onClick={onBack} className="h-tap -ml-sm px-sm text-label text-ink-tertiary flex items-center gap-xs active:text-ink">
       <ArrowLeft size={18} /> Back
     </button>
   );
@@ -376,8 +378,8 @@ function CompareRow({ label, mine, theirs, format = (v) => String(v) }) {
   const tie = m === t;
 
   return (
-    <div className="py-1.5">
-      <div className="grid grid-cols-[1fr_auto_1fr] gap-x-3 items-baseline">
+    <div className="py-xs">
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-x-md items-baseline">
         <span className={`text-label font-semibold tabular-nums text-right ${
           tie ? 'text-ink' : iWin ? 'text-done' : 'text-ink-tertiary'
         }`}>
@@ -390,12 +392,12 @@ function CompareRow({ label, mine, theirs, format = (v) => String(v) }) {
           {format(t)}
         </span>
       </div>
-      <div className="flex h-1 mt-1 rounded-full overflow-hidden bg-border" aria-hidden="true">
+      <div className="flex h-1 mt-xs rounded-full overflow-hidden bg-glass-inset" aria-hidden="true">
         <span
-          className={`h-full ${tie ? 'bg-muted' : iWin ? 'bg-done' : 'bg-border'}`}
+          className={`h-full ${tie ? 'bg-data-strong' : iWin ? 'bg-done' : 'bg-glass-inset'}`}
           style={{ width: `${minePct}%` }}
         />
-        <span className={`h-full flex-1 ${tie ? 'bg-muted' : !iWin ? 'bg-done' : 'bg-border'}`} />
+        <span className={`h-full flex-1 ${tie ? 'bg-data-strong' : !iWin ? 'bg-done' : 'bg-glass-inset'}`} />
       </div>
     </div>
   );
