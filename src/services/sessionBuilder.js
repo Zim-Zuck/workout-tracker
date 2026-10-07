@@ -20,8 +20,12 @@ const WEEK = 7 * 86400000;
 export const BUILDER = {
   lookbackWeeks: 8,      // "what do you actually train" window
   volumeWindowWeeks: 4,  // the window that decides what is under-trained
-  minExercises: 4,
-  maxExercises: 6,
+  // Six suggestions is the target, not a quota. A split covers three or four
+  // muscle groups (Push is Chest/Shoulders/Triceps), so slots five and six are
+  // filled by going back through the ranking — a second lift for a muscle that
+  // deserves one — and are simply left off when the library runs out rather than
+  // padded with something nobody would do.
+  targetExercises: 6,
   skipStreakLimit: 3,    // skipped this many times in a row -> stop suggesting it
   fallbackSecPerSet: 195, // ~3¼ min incl. rest, used only before we know better
   // The band a measured pace is allowed to fall in. Outside it, the number is
@@ -124,7 +128,8 @@ function rankCandidates(exercises, splitId, counts, streaks, workouts) {
       // 0 means it is the prime mover. Only consulted when frequency and 1RM are
       // both silent — which is exactly the cold-start case, and exactly when
       // "which lift actually trains hamstrings" beats alphabetical order.
-      focus: focusScore(ex, splitId)
+      focus: focusScore(ex, splitId),
+      popularity: popularityScore(ex, primaryMuscleIn(ex, splitId))
     }))
     .filter((c) => c.muscle)
     .sort((a, b) => {
@@ -135,9 +140,36 @@ function rankCandidates(exercises, splitId, counts, streaks, workouts) {
       if (aDrop !== bDrop) return aDrop - bDrop;
       if (b.count !== a.count) return b.count - a.count;
       if (b.e1rm !== a.e1rm) return b.e1rm - a.e1rm;
+      // Never trained either of them: the better-known lift goes first.
+      if (a.popularity !== b.popularity) return a.popularity - b.popularity;
       if (a.focus !== b.focus) return a.focus - b.focus;
       return a.exercise.name.localeCompare(b.exercise.name);
     });
+}
+
+// The lifts somebody with no history would recognise, best-known first. Used
+// ONLY as a tiebreak among exercises the person has never logged: it decides
+// that a cold-start Chest slot is a Bench Press rather than a Cable Fly, which
+// focus alone gets backwards (an isolation lift looks more "focused" than the
+// compound that actually belongs at the front of the session). Anything not
+// listed falls through to focus, so the list stays short and never has to be
+// exhaustive.
+const POPULAR_IDS = [
+  'ex_bench_press', 'ex_squat', 'ex_deadlift', 'ex_ohp', 'ex_pullup',
+  'ex_barbell_row', 'ex_incline_db_press', 'ex_lat_pulldown', 'ex_rdl',
+  'ex_leg_press', 'ex_db_shoulder_press', 'ex_dips', 'ex_barbell_curl',
+  'ex_lateral_raise', 'ex_tricep_pushdown', 'ex_leg_curl', 'ex_hip_thrust',
+  'ex_standing_calf', 'ex_seated_row', 'ex_rear_delt_fly'
+];
+const POPULAR_RANK = new Map(POPULAR_IDS.map((id, i) => [id, i]));
+
+// A popularity rank only counts for the muscle the lift is actually about:
+// without that, a Deadlift would win every slot it touches.
+function popularityScore(exercise, muscle) {
+  const rank = POPULAR_RANK.get(exercise.id);
+  if (rank === undefined) return Infinity;
+  const primary = exercise.primary || exercise.muscleGroups || [];
+  return primary.includes(muscle) ? rank : Infinity;
 }
 
 // Lower is more focused: the target muscle listed first and few other muscles
@@ -202,18 +234,34 @@ export function buildSession(splitId, { exercises, workouts, now = Date.now() } 
 
   // 2. One exercise per remaining muscle in the split, best-ranked first.
   for (const c of ranked) {
-    if (picked.length >= BUILDER.maxExercises) break;
+    if (picked.length >= BUILDER.targetExercises) break;
     if (usedMuscles.has(c.muscle)) continue;
     if (c.skipStreak >= BUILDER.skipStreakLimit) continue;
     take(c, 'most-trained');
   }
 
-  // 3. Still thin (a split with few muscles, or a short library)? Add the next
-  //    best regardless of muscle, so a session is never two exercises long.
-  for (const c of ranked) {
-    if (picked.length >= BUILDER.minExercises) break;
-    if (c.skipStreak >= BUILDER.skipStreakLimit) continue;
-    take(c, 'filler');
+  // 3. Every muscle in the split now has a slot and we are still short of six,
+  //    because a split simply does not have six muscles in it. Go back through
+  //    the ranking twice over:
+  //
+  //    3a. Lifts this person has ACTUALLY DONE, whatever muscle they repeat. A
+  //        second chest exercise they train every week is a better suggestion
+  //        than a first one they have never touched.
+  //    3b. Then the best-known lifts, which is all we can honestly offer
+  //        somebody with no history. These come through the same progression
+  //        engine, which has no prior data to work from and so returns no
+  //        starting weight — the row shows a rep range only, and the person
+  //        chooses the load.
+  //
+  //    Both passes stop when the library runs out: five exercises, or four, is
+  //    a truthful answer. Nothing is padded to hit the number.
+  for (const pass of ['previously-logged', 'popular']) {
+    for (const c of ranked) {
+      if (picked.length >= BUILDER.targetExercises) break;
+      if (c.skipStreak >= BUILDER.skipStreakLimit) continue;
+      if (pass === 'previously-logged' && c.count === 0) continue;
+      take(c, pass);
+    }
   }
 
   // 4. Compounds first. Heavy work belongs at the front, while you are fresh —
