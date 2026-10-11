@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, X, Plus, ListChecks, RotateCcw } from 'lucide-react';
+import { ArrowRight, X, RotateCcw } from 'lucide-react';
 import {
-  GlassCard, SegmentedPills, PrimaryCircleButton, SecondaryButton, TextLink,
-  StatBlock, WeekStrip, buildWeek, PRHighlight, BottomSheet, SheetAction,
-  useUndoToast, Skeleton
+  GlassCard, SegmentedPills, PrimaryCircleButton, SecondaryButton,
+  StatBlock, WeekStrip, buildWeek, PRHighlight, useUndoToast, Skeleton
 } from '../ui/index.js';
-import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
+import TrainChoice from './TrainChoice.jsx';
+import PickExercises from './PickExercises.jsx';
 import ActivityFeed from '../components/ActivityFeed.jsx';
 import MergeSuggestionCard from '../components/MergeSuggestionCard.jsx';
 import { SPLITS, splitLabel } from '../services/splits.js';
@@ -28,8 +28,12 @@ export default function Today({
   workout, settings, auth, profile, onResume, onOpenCommunity, onOpenProfile, feed,
   mergeSuggestions = [], onMergeSuggestion, onKeepSeparate
 }) {
-  const { exercises, workouts, active, startWorkout, createCustomExercise } = workout;
+  const { exercises, workouts, active, startWorkout } = workout;
   const undo = useUndoToast();
+  // 'home' is the hero; 'choice' is "how do you want to train today?"; 'pick'
+  // is the Make-plan exercise picker. Pushed and popped locally rather than
+  // through App.jsx, same as Progress pushes ExerciseDetail.
+  const [view, setView] = useState('home');
 
   const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
   const totals = useWorkoutTotals(workouts);
@@ -47,8 +51,6 @@ export default function Today({
   const split = chosenSplit ?? rotationSplit;
   const setSplit = setChosenSplit;
   const [plan, setPlan] = useState(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   // Drives the crossfade when the hero's content changes. A hard swap reads as
   // a reload; 200ms of fade reads as the card answering you.
@@ -85,28 +87,19 @@ export default function Today({
     });
   }, [undo, workouts]);
 
-  const addToPlan = useCallback((exercise) => {
-    setPlan((p) => {
-      if (!p || p.exercises.some((x) => x.exercise.id === exercise.id)) return p;
-      const item = {
-        exercise,
-        muscle: (exercise.muscleGroups || [])[0] || null,
-        reason: 'manual',
-        sets: 3,
-        target: recommend({ exercise, workoutHistory: workouts })
-      };
-      return { ...p, ...recomputePlan([...p.exercises, item], workouts) };
-    });
-  }, [workouts]);
-
-  const start = async () => {
-    if (starting || !plan?.exercises.length) return;
+  // Both entry points from the "how do you want to train today?" screen funnel
+  // through here. The split tags the session either way — "log as I go" only
+  // skips picking exercises up front, not which day this was.
+  const startSession = useCallback(async (items) => {
+    if (starting || active) return;
     setStarting(true);
     try {
-      await startWorkout({ split, name: splitLabel(split), plan: plan.exercises });
+      await startWorkout({ split, name: splitLabel(split), plan: items });
       onResume?.();
     } finally { setStarting(false); }
-  };
+  }, [starting, active, startWorkout, split, onResume]);
+
+  const startBlank = useCallback(() => startSession([]), [startSession]);
 
   // ---- Derived stats, all from the ONE totals source ----
   const lastSession = workouts[0] || null;
@@ -114,7 +107,32 @@ export default function Today({
   const latestPR = useMemo(() => prTimeline(workouts)[0] || null, [workouts]);
 
   const preview = plan?.exercises.slice(0, 3) || [];
-  const hidden = Math.max(0, (plan?.exercises.length || 0) - preview.length);
+
+  if (view === 'choice') {
+    return (
+      <TrainChoice
+        splitId={split}
+        starting={starting}
+        onBack={() => setView('home')}
+        onMakePlan={() => setView('pick')}
+        onLogAsIGo={startBlank}
+      />
+    );
+  }
+
+  if (view === 'pick') {
+    return (
+      <PickExercises
+        splitId={split}
+        suggested={plan?.exercises || []}
+        exercises={exercises}
+        workouts={workouts}
+        starting={starting}
+        onBack={() => setView('choice')}
+        onStart={startSession}
+      />
+    );
+  }
 
   return (
     <div className="px-base pb-nav">
@@ -155,9 +173,8 @@ export default function Today({
                 icon={ArrowRight}
                 label={`Start ${splitLabel(split)}`}
                 size={88}
-                loading={starting}
-                disabled={!plan.exercises.length || !!active}
-                onClick={start}
+                disabled={!!active}
+                onClick={() => setView('choice')}
               />
             </div>
 
@@ -192,23 +209,11 @@ export default function Today({
               ))}
             </ul>
 
-            <div className="mt-md flex items-center justify-between gap-sm">
-              <button
-                type="button"
-                onClick={() => setEditOpen(true)}
-                className="inline-flex items-center gap-xs min-h-tap px-sm -ml-sm rounded-full
-                           text-label font-semibold text-ink-secondary
-                           transition-colors duration-fast ease-out active:text-ink"
-              >
-                <ListChecks size={15} strokeWidth={2.2} />
-                {hidden > 0 ? `Edit plan · ${hidden} more` : 'Edit plan'}
-              </button>
-              {plan.usingDefaults && (
-                <p className="text-micro font-semibold tracking-normal text-ink-tertiary text-right max-w-[18ch]">
-                  Based on defaults — will learn as you train
-                </p>
-              )}
-            </div>
+            {plan.usingDefaults && (
+              <p className="mt-md text-micro font-semibold tracking-normal text-ink-tertiary">
+                Based on defaults — will learn as you train
+              </p>
+            )}
           </div>
         )}
       </GlassCard>
@@ -280,20 +285,7 @@ export default function Today({
         </PRHighlight>
       )}
 
-      {/* 7. Start empty ----------------------------------------------------- */}
-      <div className="mt-base flex justify-center">
-        <TextLink
-          disabled={!!active}
-          onClick={async () => {
-            await startWorkout({ split: null, name: null, plan: [] });
-            onResume?.();
-          }}
-        >
-          Start empty workout
-        </TextLink>
-      </div>
-
-      {/* 8. Activity -------------------------------------------------------- */}
+      {/* 7. Activity -------------------------------------------------------- */}
       <ActivityFeed
         variant="preview"
         feed={feed}
@@ -304,61 +296,6 @@ export default function Today({
         onSeeAll={onOpenCommunity}
         onOpenProfile={onOpenProfile}
         className="mt-xxl"
-      />
-
-      {/* Edit plan ---------------------------------------------------------- */}
-      <BottomSheet
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title={`${splitLabel(split)} · today's plan`}
-        description="The hero shows the first three. This is all of them."
-        footer={
-          <SecondaryButton full icon={Plus} onClick={() => { setEditOpen(false); setPickerOpen(true); }}>
-            Add exercise
-          </SecondaryButton>
-        }
-      >
-        <ul className="flex flex-col gap-xs">
-          {(plan?.exercises || []).map((item) => (
-            <li key={item.exercise.id} className="flex items-center gap-sm">
-              <span className="flex-1 min-w-0 py-sm">
-                <span className="block text-body font-regular text-ink truncate">{item.exercise.name}</span>
-                <span className="block text-label font-regular text-ink-tertiary truncate">
-                  {item.sets} sets ·{' '}
-                  {item.target.targetWeightKg > 0
-                    ? `${formatWeight(item.target.targetWeightKg)} × ${item.target.targetRepsLow}-${item.target.targetRepsHigh}`
-                    : `${item.target.targetRepsLow}-${item.target.targetRepsHigh} reps`}
-                  {item.reason === 'under-trained' && ' · under-trained'}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => removeFromPlan(item.exercise.id)}
-                aria-label={`Remove ${item.exercise.name}`}
-                className="shrink-0 w-tap h-tap flex items-center justify-center rounded-full
-                           text-ink-tertiary active:text-ink active:bg-glass-pressed"
-              >
-                <X size={17} strokeWidth={2.2} />
-              </button>
-            </li>
-          ))}
-          {!plan?.exercises.length && (
-            <li className="py-lg text-center text-label font-regular text-ink-tertiary">
-              Nothing planned. Add an exercise, or start an empty workout.
-            </li>
-          )}
-        </ul>
-      </BottomSheet>
-
-      <ExercisePickerSheet
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        exercises={exercises}
-        exclude={(plan?.exercises || []).map((x) => x.exercise.id)}
-        splitId={split}
-        title="Add to today"
-        onPick={(ex) => { addToPlan(ex); setPickerOpen(false); setEditOpen(true); }}
-        onCreateExercise={createCustomExercise}
       />
     </div>
   );
