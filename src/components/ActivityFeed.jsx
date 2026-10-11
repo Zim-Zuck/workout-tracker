@@ -34,18 +34,23 @@ export default function ActivityFeed({
   // The user's own achievements ride in the same list, derived from local
   // history, so somebody who has just hit a PR sees it immediately — before any
   // publish has gone out, and even with nobody to see it but them.
+  // On the friends scope the list is deliberately other people only, so no own
+  // rows are synthesised — and the published copies of this user's own events
+  // must then be left alone rather than reconciled against nothing.
+  const includeOwn = variant === 'preview' || scope !== 'friends';
   const mine = useMemo(
-    () => (variant === 'preview' || scope !== 'friends'
-      ? ownAchievements(workouts, exercises || [], profile)
-      : []),
-    [workouts, exercises, profile, variant, scope]
+    () => (includeOwn ? ownAchievements(workouts, exercises || [], profile) : []),
+    [workouts, exercises, profile, includeOwn]
   );
 
   const signedOut = !auth?.signedIn;
 
   const rows = useMemo(
-    () => presentFeed(mergeOwn(feed?.events || [], mine), { exNames, myId: auth?.userId }),
-    [feed?.events, mine, exNames, auth?.userId]
+    () => presentFeed(
+      mergeOwn(feed?.events || [], mine, { localAuthoritative: includeOwn }),
+      { exNames, myId: auth?.userId }
+    ),
+    [feed?.events, mine, includeOwn, exNames, auth?.userId]
   );
 
   const shown = variant === 'preview' ? rows.slice(0, PREVIEW_ROWS) : rows;

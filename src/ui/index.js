@@ -21,3 +21,4 @@ export { default as BodyMap } from './BodyMap.jsx';
 export { default as BodyPair } from './BodyPair.jsx';
 export { default as Porthole } from './Porthole.jsx';
 export { default as MuscleBars } from './MuscleBars.jsx';
+export { default as Ronnie } from './Ronnie.jsx';

@@ -248,18 +248,48 @@ export function presentFeed(events, { exNames, myId } = {}) {
 // Merge server events with the user's own local achievements, newest first,
 // dropping a local row whose server twin has already arrived so a published PR
 // does not appear twice.
-export function mergeOwn(serverEvents, localEvents) {
-  const published = new Set(
-    serverEvents
-      .filter((e) => e.own || e.mine)
-      .map((e) => `${e.event_type}:${e.subject}`)
-  );
+//
+// STREAK, AND WHY THE SERVER COPY LOSES.
+//
+// A server row is a snapshot published through the outbox: `streak:streak_8`
+// carries the weeks that were true when it went out, and it keeps saying them
+// in the present tense forever. That is how Today ended up showing "0w STREAK"
+// in the stats row (live, from computeTotals) beside "is on an 8-week streak"
+// in this feed (stale, from published metadata). Same definition — consecutive
+// weeks with at least one session — two different ages of the same number.
+//
+// The device is the source of truth, exactly as useWorkoutTotals says: it is
+// where the sets were logged. So when `localAuthoritative` is set (the caller
+// did synthesise this user's own rows from local history):
+//
+//   - an own server row that has a local twin keeps its identity and reactions
+//     but takes its numbers from the local twin, and
+//   - an own derived-count row (streak, workout milestone) with NO local twin
+//     is dropped: local history no longer clears that threshold, so the claim
+//     is spent. Nothing is deleted upstream; it just stops being asserted here.
+//
+// Server rows for other people are untouched — their devices are their truth,
+// and the published snapshot is all we will ever have of it.
+const LOCAL_TRUTH_TYPES = new Set(['streak', 'workout_milestone']);
+
+export function mergeOwn(serverEvents, localEvents, { localAuthoritative = false } = {}) {
+  const keyOf = (e) => `${e.event_type}:${e.subject}`;
+  const isMine = (e) => Boolean(e.own || e.mine);
+  const localByKey = new Map(localEvents.map((e) => [keyOf(e), e]));
+
+  const server = serverEvents.flatMap((e) => {
+    if (!localAuthoritative || !isMine(e)) return [e];
+    const twin = localByKey.get(keyOf(e));
+    if (twin) return [{ ...e, metadata: { ...(e.metadata || {}), ...(twin.metadata || {}) } }];
+    return LOCAL_TRUTH_TYPES.has(e.event_type) ? [] : [e];
+  });
+
+  const published = new Set(serverEvents.filter(isMine).map(keyOf));
   return [
-    ...serverEvents,
-    ...localEvents.filter((e) => !published.has(`${e.event_type}:${e.subject}`))
+    ...server,
+    ...localEvents.filter((e) => !published.has(keyOf(e)))
   ];
 }
-
 // A one-line summary for the PR events the presenter produces locally, where
 // metadata carries our own richer shape.
 export function localPrDetail(ev) {

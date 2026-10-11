@@ -160,6 +160,50 @@ body[data-resume="1"] .pb-nav {
 }
 
 /* ---------------------------------------------------------------------------
+   Ronnie. Ported from the SMIL in the design mock (Ronnie.dc.html) to CSS
+   keyframes, which is testable and lets .ronnie-paused stop every layer with
+   one class instead of juggling five separate SMIL elements. Blinks and the
+   snot bubble animate `transform`, never the SVG geometry attributes (ry, r)
+   directly — scaling a shape around its own centre is the portable way to get
+   the same squash, and needs transform-box: fill-box since SVG shapes don't
+   get one by default.
+   --------------------------------------------------------------------------- */
+@keyframes kun-ronnie-bob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-2.5px) } }
+
+@keyframes kun-ronnie-blink-smug      { 0%, 92%, 100% { transform: scaleY(1) } 95% { transform: scaleY(0.107) } }
+@keyframes kun-ronnie-blink-roast     { 0%, 90%, 100% { transform: scaleY(1) } 94% { transform: scaleY(0.13) } }
+@keyframes kun-ronnie-blink-impressed { 0%, 90%, 100% { transform: scaleY(1) } 94% { transform: scaleY(0.13) } }
+@keyframes kun-ronnie-pupil-shrink    { 0%, 90%, 100% { transform: scale(1) } 94% { transform: scale(0) } }
+
+@keyframes kun-ronnie-spark-flicker { 0%, 100% { opacity: 1 } 50% { opacity: 0.2 } }
+@keyframes kun-ronnie-sweat-fall    { 0% { opacity: 1; transform: translateY(0) } 100% { opacity: 0; transform: translateY(10px) } }
+@keyframes kun-ronnie-snot-bubble   { 0%, 100% { transform: scale(0.5) } 50% { transform: scale(1.6) } }
+@keyframes kun-ronnie-z-float       { 0%, 100% { opacity: 0; transform: translate(0, 0) } 50% { opacity: 1; transform: translate(5px, -9px) } }
+
+.ronnie-bob { animation: kun-ronnie-bob 2.8s var(--motion-ease) infinite; }
+.ronnie-blink-smug      { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-blink-smug 5s linear infinite; }
+.ronnie-blink-roast     { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-blink-roast 6s linear infinite; }
+.ronnie-blink-impressed { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-blink-impressed 4.2s linear infinite; }
+.ronnie-pupil-shrink-smug      { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-pupil-shrink 5s linear infinite; }
+.ronnie-pupil-shrink-roast     { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-pupil-shrink 6s linear infinite; }
+.ronnie-pupil-shrink-impressed { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-pupil-shrink 4.2s linear infinite; }
+.ronnie-spark { transform-box: fill-box; animation: kun-ronnie-spark-flicker 0.5s linear infinite; }
+.ronnie-sweat { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-sweat-fall 1.2s linear infinite; }
+.ronnie-snot  { transform-box: fill-box; transform-origin: center; animation: kun-ronnie-snot-bubble 3s ease-in-out infinite; }
+.ronnie-z     { transform-box: fill-box; animation: kun-ronnie-z-float 2.8s linear infinite; }
+.ronnie-z-offset { animation-delay: -1.4s; }
+
+/* One class pauses every layer, for the screen going hidden/unfocused. */
+.ronnie-paused, .ronnie-paused * { animation-play-state: paused !important; }
+
+/* Reduced motion: the generic rule below already zeroes animation-duration,
+   which leaves blinks and the bob at rest — but a 1ms, 1-iteration spark or
+   sweat drop still briefly exists, which is a particle. Hide those outright. */
+@media (prefers-reduced-motion: reduce) {
+  .ronnie-spark, .ronnie-sweat, .ronnie-snot, .ronnie-z { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
    Accessibility fallbacks.
 
    Reduce Motion  → no animation, no transition, crossfades become instant cuts.

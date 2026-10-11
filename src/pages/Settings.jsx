@@ -14,6 +14,20 @@ import { backupNow, fetchBackup, restoreBackup, getBackupInfo } from '../service
 import { deleteMyAccount } from '../services/profileApi.js';
 import { relativeDay } from '../utils/date.js';
 import { MERGE_UNDO_DAYS } from '../services/exerciseReconcile.js';
+import { SegmentedTrack } from '../ui/index.js';
+import { DEFAULT_INTENSITY, normalizeIntensity } from '../services/ronnieLines.js';
+import { RONNIE_BUBBLE, RONNIE_INTENSITY_TEXT } from '../theme/ronnie.js';
+
+// Fixed sample lines for the intensity preview. Deliberately hard-coded rather
+// than drawn from the pool: the preview exists to demonstrate the difference
+// between the three levels, so it has to be the same sentence every time the
+// screen is opened, and the Loud sample shows the shout without needing a
+// Loud-only line to exist.
+const RONNIE_INTENSITY_OPTIONS = [
+  { value: 'cold',     label: 'Cold',     sample: 'You done looking at the screen?' },
+  { value: 'doghouse', label: 'Doghouse', sample: 'You came to train or you came to visit?' },
+  { value: 'loud',     label: 'Loud',     sample: 'YOU CAME TO WORK OR YOU CAME TO WATCH?!' }
+];
 
 export default function SettingsScreen({ settings, updateSettings, workout, auth, onSignIn, reconciliation }) {
   const toast = useToast();
@@ -121,6 +135,26 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
             options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
           />
         </Row>
+        <Row label="Ronnie">
+          <Segmented
+            value={settings.ronnieEnabled ? 'on' : 'off'}
+            onChange={(v) => updateSettings({ ronnieEnabled: v === 'on' })}
+            options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
+          />
+        </Row>
+        {settings.ronnieEnabled !== false && (
+          <div className="py-sm">
+            <span className="text-body font-regular text-ink">Intensity</span>
+            <SegmentedTrack
+              className="mt-sm"
+              ariaLabel="Ronnie intensity"
+              value={normalizeIntensity(settings.ronnieIntensity)}
+              onChange={(v) => updateSettings({ ronnieIntensity: v })}
+              options={RONNIE_INTENSITY_OPTIONS.map(({ value, label }) => ({ value, label }))}
+            />
+            <RonnieIntensityPreview intensity={normalizeIntensity(settings.ronnieIntensity)} />
+          </div>
+        )}
       </Section>
 
       <Section title="Exercises">
@@ -511,6 +545,21 @@ function Section({ title, children }) {
     </section>
   );
 }
+// The chosen level, in Ronnie's own bubble colours, so the weight and colour
+// change is visible rather than described.
+function RonnieIntensityPreview({ intensity }) {
+  const option = RONNIE_INTENSITY_OPTIONS.find((o) => o.value === intensity)
+    || RONNIE_INTENSITY_OPTIONS.find((o) => o.value === DEFAULT_INTENSITY);
+  return (
+    <p
+      className="mt-sm text-label rounded-row px-md py-sm"
+      style={{ background: RONNIE_BUBBLE.background, ...RONNIE_INTENSITY_TEXT[intensity] }}
+    >
+      {option.sample}
+    </p>
+  );
+}
+
 function Row({ label, children }) {
   return (
     <div className="flex items-center justify-between gap-md min-h-tap py-sm">

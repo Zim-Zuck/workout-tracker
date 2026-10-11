@@ -390,6 +390,13 @@ export async function setMeta(key, value) {
   await reqPromise(t.objectStore('meta').put({ key, value }));
 }
 
+// ms this device first opened the app, or null for a device that already had
+// `initialized` set before firstLaunchAt existed (nothing to backfill it from).
+export async function getFirstLaunchAt() {
+  const v = await getMeta('firstLaunchAt');
+  return v ?? null;
+}
+
 // ---- Outbox (pending cloud writes) ----
 export async function getOutbox() {
   const db = await openDB();
@@ -477,6 +484,10 @@ export async function ensureInitialized() {
     await bulkPut('exercises', DEFAULT_EXERCISES);
     await setMeta('initialized', true);
     await setMeta('schemaVersion', SCHEMA_VERSION);
+    // The only record of "how long has this device had the app" — nothing
+    // upstream tracks it. Used to gate Ronnie's roast mood for someone who has
+    // never trained: a brand-new install shouldn't get roasted on day one.
+    await setMeta('firstLaunchAt', Date.now());
     return;
   }
   // Builtins added in a later app update aren't covered by the one-time seed

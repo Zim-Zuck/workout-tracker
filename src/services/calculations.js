@@ -150,13 +150,25 @@ export function buildPrTimeline(workouts) {
   return events.sort((a, b) => b.date - a.date);
 }
 
-// Consecutive ISO weeks (ending the current week) with at least one workout, counting back
-// from `asOf` (defaults to now). Weeks with zero workouts break the streak.
+// Consecutive ISO weeks with at least one workout, counting back from `asOf`
+// (defaults to now). Weeks with zero workouts break the streak.
+//
+// THE CURRENT WEEK IS A GRACE WEEK. It is counted when it already has a
+// session, but an empty one does not end the streak — the count simply runs
+// from last week instead. Without that, eight solid weeks read as "0w" from
+// Monday morning until the next session, which is both wrong and the single
+// most discouraging moment to tell somebody their streak is gone. Two empty
+// weeks in a row is a real break and still returns 0.
+//
+// The grace week is never counted as a week trained, so a streak cannot grow
+// without training: eight weeks ending last week reads 8 today, and becomes 9
+// only once this week has a session in it.
 export function computeStreak(workouts, asOf = Date.now()) {
   if (!workouts.length) return 0;
   const weeks = new Set(workouts.map((w) => startOfWeek(w.date)));
+  const thisWeek = startOfWeek(asOf);
+  let cur = weeks.has(thisWeek) ? thisWeek : thisWeek - 7 * 86400000;
   let count = 0;
-  let cur = startOfWeek(asOf);
   while (weeks.has(cur)) {
     count++;
     cur -= 7 * 86400000;

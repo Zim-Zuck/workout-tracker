@@ -6,7 +6,9 @@ export const DEFAULT_SETTINGS = {
   defaultRepsLow: 8,
   defaultRepsHigh: 10,
   soundEnabled: true,
-  vibrationEnabled: true
+  vibrationEnabled: true,
+  ronnieEnabled: true,
+  ronnieIntensity: 'doghouse'
 };
 
 export function useSettings() {

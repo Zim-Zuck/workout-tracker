@@ -8,6 +8,7 @@ import TrainChoice from './TrainChoice.jsx';
 import PickExercises from './PickExercises.jsx';
 import ActivityFeed from '../components/ActivityFeed.jsx';
 import MergeSuggestionCard from '../components/MergeSuggestionCard.jsx';
+import RonnieBanter from '../components/RonnieBanter.jsx';
 import { SPLITS, splitLabel } from '../services/splits.js';
 import { buildSession, recomputePlan, nextSplitInRotation } from '../services/sessionBuilder.js';
 import { recommend } from '../services/progression.js';
@@ -217,6 +218,21 @@ export default function Today({
           </div>
         )}
       </GlassCard>
+
+      {/* 2b. Ronnie --------------------------------------------------------
+          Right after the hero, closer to it (12px) than the gap Today uses
+          everywhere else (16px) — he's commenting on the card above him, not
+          starting a new section. Off entirely behind its own Settings toggle. */}
+      {settings.ronnieEnabled !== false && (
+        <RonnieBanter
+          className="mt-md"
+          workouts={workouts}
+          totals={totals}
+          workoutName={splitLabel(split)}
+          latestPR={latestPR}
+          intensity={settings.ronnieIntensity}
+        />
+      )}
 
       {/* 3. Merge suggestions ---------------------------------------------
           A Tier-2 reconciliation question: close enough to probably be the same
