@@ -8,6 +8,8 @@ import {
   BottomSheet, SheetAction, useUndoToast, EmptyState, BodyPair
 } from '../ui/index.js';
 import ValuePicker from '../components/ValuePicker.jsx';
+import WorkoutBackdrop from '../components/WorkoutBackdrop.jsx';
+import Ronnie from '../ui/Ronnie.jsx';
 import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { useHaptic } from '../components/Toast.jsx';
@@ -128,6 +130,17 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
 
   return (
     <div className="px-base pb-nav">
+      {/* Ronnie, behind everything ----------------------------------------
+          Atmosphere only: fixed, un-hittable, out of the a11y tree, and
+          mounted on this screen alone. He fades up as the sets get checked.
+          The content below him is wrapped in its own stacking context so the
+          ordering never depends on paint order. */}
+      {/* Not while the session is empty: the empty state below already puts him
+          front and centre, and running both at once reads as a double image. */}
+      {active.exercises.length > 0 && (
+        <WorkoutBackdrop completedSets={completedSets} totalSets={totalSets} />
+      )}
+
       {/* Header.
           Sticky, because it carries the rest countdown and the Finish button —
           the two things you need while your thumb is somewhere down the list of
@@ -280,6 +293,24 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           );
         })}
       </div>
+
+      {/* Empty session ------------------------------------------------------
+          A started workout with nothing in it used to be a page of whitespace
+          above an "Add exercise" button. Ronnie fills it instead — the same
+          flex as the backdrop, brought forward and un-ghosted, with one line
+          in his own voice. He is decorative here too: the heading beside him
+          is the text that carries the meaning. */}
+      {active.exercises.length === 0 && (
+        <div className="mt-lg flex flex-col items-center text-center">
+          <Ronnie variant="full" size={210} />
+          <p className="text-body font-semibold text-ink mt-base">
+            Nothing in here yet.
+          </p>
+          <p className="text-label font-regular text-ink-secondary mt-xs max-w-[32ch]">
+            The weights aren&rsquo;t going to pick themselves. Add your first lift.
+          </p>
+        </div>
+      )}
 
       <SecondaryButton full icon={Plus} className="mt-base" onClick={() => setPickerOpen(true)}>
         Add exercise

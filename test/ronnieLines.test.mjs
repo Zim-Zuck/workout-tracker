@@ -7,6 +7,8 @@ import {
   applyIntensity, normalizeIntensity, RONNIE_INTENSITIES, DEFAULT_INTENSITY
 } from '../src/services/ronnieLines.js';
 import { RONNIE_LINES } from '../src/data/ronnieLines.js';
+import { RONNIE_EXPRESSIONS, RONNIE_EXPRESSION_ART } from '../src/data/ronnieExpressions.js';
+import { existsSync } from 'node:fs';
 
 // Deterministic "random": a counter rather than Math.random, so shuffle order
 // is reproducible across runs.
@@ -225,6 +227,59 @@ test('every shipped line declares at least one valid tier', () => {
     assert.ok(Array.isArray(line.tiers) && line.tiers.length, `${line.id} has no tiers`);
     for (const tier of line.tiers) {
       assert.ok(RONNIE_INTENSITIES.includes(tier), `${line.id} declares unknown tier ${tier}`);
+    }
+  }
+});
+
+// EXPRESSIONS.
+//
+// The face is a property of the line, tagged by hand. These two tests are the
+// whole safety net for that: a new line with no `expression` (or a typo in
+// one) fails here rather than silently falling back to a face that contradicts
+// what Ronnie is saying, and an expression whose artwork was renamed or
+// removed fails before it can render as a blank head.
+test('every line carries a known expression', () => {
+  for (const line of RONNIE_LINES) {
+    assert.ok(
+      RONNIE_EXPRESSIONS.includes(line.expression),
+      `line ${line.id} has expression ${JSON.stringify(line.expression)}, which is not one of ${RONNIE_EXPRESSIONS.join(', ')}`
+    );
+  }
+});
+
+test('every expression has artwork on disk', () => {
+  const dir = new URL('../src/assets/ronnie/', import.meta.url);
+  for (const expression of RONNIE_EXPRESSIONS) {
+    const { file } = RONNIE_EXPRESSION_ART[expression];
+    assert.ok(
+      existsSync(new URL(file, dir)),
+      `expression "${expression}" points at missing artwork src/assets/ronnie/${file}`
+    );
+  }
+});
+
+test('every face is actually used by at least one line', () => {
+  const used = new Set(RONNIE_LINES.map((l) => l.expression));
+  const unused = RONNIE_EXPRESSIONS.filter((e) => !used.has(e));
+  assert.deepEqual(unused, [], `faces shipped but never spoken: ${unused.join(', ')}`);
+});
+
+// The face is only worth having if it actually changes. A mood whose whole
+// eligible pool shares one expression gives a user who taps through every line
+// in it a head that never moves — which is exactly how the first tagging pass
+// shipped: all six `hype` lines wore the hype face, so finishing a workout
+// pinned Ronnie's face for the rest of the day.
+test('no mood is stuck on a single face', () => {
+  const moods = [...new Set(RONNIE_LINES.map((l) => l.mood))];
+  for (const mood of moods) {
+    for (const tier of RONNIE_INTENSITIES) {
+      const pool = RONNIE_LINES.filter((l) => l.mood === mood && (l.tiers || RONNIE_INTENSITIES).includes(tier));
+      if (pool.length < 2) continue; // a one-line pool cannot vary, and does not pretend to
+      const faces = new Set(pool.map((l) => l.expression));
+      assert.ok(
+        faces.size >= 2,
+        `every ${tier} line for mood "${mood}" wears the same face (${[...faces][0]}), so tapping through them never changes it`
+      );
     }
   }
 });

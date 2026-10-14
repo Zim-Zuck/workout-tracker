@@ -22,8 +22,8 @@ function daysBetween(fromMs, toMs) {
   return Math.round((startOfDay(toMs) - startOfDay(fromMs)) / 86400000);
 }
 
-// `?ronnieMood=roast` forces a mood for manual QA across all five faces and
-// their animations. Dev-only — import.meta.env.DEV is stripped by the
+// `?ronnieMood=roast` forces a mood for manual QA across all five line sets.
+// (Ronnie's face follows the intensity setting, not this.) Dev-only — import.meta.env.DEV is stripped by the
 // production Vite build, so this branch (and the URL check) never ships.
 function devMoodOverride() {
   if (!import.meta.env.DEV || typeof window === 'undefined') return null;
@@ -96,14 +96,19 @@ export default function RonnieBanter({ workouts, totals, workoutName, latestPR, 
 
   // Token substitution first, then the intensity transform, so `loud` shouts
   // the resolved text ("IT'S 4AM...") rather than the template.
-  const render = (line) => (line ? { id: line.id, text: applyIntensity(resolveLineText(line, context), tier) } : null);
+  // The face travels with the line, so the bubble and the head always agree.
+  const render = (line) => (line ? {
+    id: line.id,
+    text: applyIntensity(resolveLineText(line, context), tier),
+    expression: line.expression
+  } : null);
 
   const queueRef = useRef([]);
   const lastIdRef = useRef(readLastLineId());
   const prevMoodRef = useRef(mood);
   const prevTierRef = useRef(tier);
   const firstRender = useRef(true);
-  const [currentLine, setCurrentLine] = useState(null); // { id, text } | null
+  const [currentLine, setCurrentLine] = useState(null); // { id, text, expression } | null
   // What the bubble is showing, as a ref rather than read back out of state:
   // the next draw needs it synchronously, and state may not have flushed yet.
   const shownIdRef = useRef(null);
@@ -159,9 +164,9 @@ export default function RonnieBanter({ workouts, totals, workoutName, latestPR, 
 
   return (
     <div className={`flex items-center gap-sm ${className}`}>
-      <Ronnie mood={mood} size={120} onPress={handleTap} />
+      <Ronnie variant="head" expression={currentLine.expression} size={104} onPress={handleTap} />
       <div
-        className="relative flex-1 min-w-0 flex flex-col justify-center gap-xxs transition-[opacity,transform] duration-base ease-out"
+        className="relative flex-1 min-w-0 flex flex-col justify-center gap-xxs transition-[opacity,transform] duration-fast ease-out"
         style={{
           minHeight: 84,
           padding: '12px 16px 14px 16px',

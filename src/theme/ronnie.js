@@ -1,30 +1,12 @@
 // Ronnie-specific colour constants.
 //
-// Everything else in the app pulls from src/theme/tokens.js, but none of its
-// tokens match Ronnie's mockup palette (he is deliberately a cartoon illustration
-// sitting on top of the Ambient Glass system, not a themed UI element), so this
-// is a second, narrowly-scoped constants file rather than new entries in
-// tokens.js. If Ronnie ever needs a second screen with different chrome, this
-// file is the one thing that would need to change.
+// Ronnie himself is now approved bitmap artwork (src/assets/ronnie), so his
+// character palette no longer lives in code. What remains is the chrome around
+// him on the Today screen: the speech bubble and its per-intensity text.
 //
-// The eyelid shapes in Ronnie.jsx are filled with `skin`, not a literal hex, so
-// they stay part of the face if skin ever changes.
-export const RONNIE_COLORS = {
-  outline: '#1B0A14',
-  skin: '#D9A0BC',       // head, ears, shoulders, eyelids
-  nose: '#C58AA7',
-  tankTop: '#FF6B3D',
-  towel: '#F2EEE6',
-  sweatband: '#FF4F8B',
-  sweatbandStripe: '#FFFFFF',
-  goldTooth: '#FFD34E',
-  eyeWhite: '#FFFFFF',
-  mouthInterior: '#4A0D1F',
-  tongue: '#FF6B8A',
-  hypeSpark: '#FFE45E',
-  hypeSweat: '#8FD8FF',
-  sleepyZ: '#F6E7EF'
-};
+// Everything else in the app pulls from src/theme/tokens.js, but these values
+// are mockup-specific rather than themed UI, so they stay here rather than
+// becoming new entries in tokens.js.
 
 // The Today row's speech bubble. Also mockup-specific — close to but distinct
 // from `color.ink` in tokens.js, so kept here rather than borrowed.
