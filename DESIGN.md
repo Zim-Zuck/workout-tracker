@@ -467,6 +467,35 @@ Recorded here rather than raised as questions, per the brief:
     lights an assisting muscle; its bar says "assisted" rather than a count it
     did not earn. This departs from the mock, which shows a single number.
 
+### Decisions from the share-a-few-workouts export
+
+32. **Exporting a selection is a different feature from backing up, and lives
+    somewhere else.** The JSON backup in Settings answers "how do I not lose my
+    data" and is machine-readable on purpose. `ExportSheet` answers "how do I get
+    my last three sessions into a message", so it sits on **History**, where the
+    sessions you are thinking about already are, and produces something a person
+    reads: a titled block per workout, one line of sets per exercise. Neither one
+    is a worse version of the other, so neither was folded into the other.
+33. **"Last N" and ticking individual workouts are one control, not two modes.**
+    The stepper and the Last 1/3/5/10/All chips set the selection to the newest
+    N; ticking a row edits that same selection. "Last N" is then *derived* — it
+    holds when the ticked ids are exactly the newest N — so the label falls back
+    to "hand-picked" on its own and nothing has to remember which control you
+    touched last. Making them separate modes would mean asking, up front, a
+    question the person has not thought about yet.
+34. **The export tells the truth about an unfinished set.** A logged-but-unticked
+    set is printed and marked `(not done)` rather than dropped, because the
+    export has to agree with the screen it came from. The totals line underneath
+    it counts working sets only, on the same definition `workingVolume()` uses
+    everywhere else — one definition, or the number in somebody's message
+    disagrees with the number on their History card.
+35. **A copy that did not happen is never reported as one.** `copyText()` tries
+    the Clipboard API, falls back to the hidden-textarea `execCommand` path that
+    still works in a standalone iOS PWA, and on failure returns `false` — the
+    sheet then reveals the preview, selects it, and says so. Claiming a copy
+    somebody then pastes nothing from is worse than admitting the browser
+    refused.
+
 ---
 
 ## 12. Storage durability

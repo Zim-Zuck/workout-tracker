@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Search, Trash2, SlidersHorizontal, ChevronRight, Share2, Check, X, MoreHorizontal } from 'lucide-react';
+import { Search, Trash2, SlidersHorizontal, ChevronRight, Share2, Check, X, MoreHorizontal, Download } from 'lucide-react';
 import {
   GlassCard, SegmentedTrack, BottomSheet, SheetAction, SetRow, SetRowHeader,
   PrimaryButton, SecondaryButton, TextLink, StatBlock, EmptyState, useUndoToast, Pill,
   BodyPair, MuscleBars
 } from '../ui/index.js';
 import ShareCard from '../components/ShareCard.jsx';
+import ExportSheet from '../components/ExportSheet.jsx';
 import ValuePicker from '../components/ValuePicker.jsx';
 import { orderedSets, setLabels } from '../db/normalize.js';
 import { sessionAnatomy } from '../services/anatomy.js';
@@ -27,6 +28,7 @@ export default function HistoryScreen({ workout }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [shareFor, setShareFor] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const undo = useUndoToast();
 
   const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
@@ -66,23 +68,39 @@ export default function HistoryScreen({ workout }) {
       <div className="flex items-center gap-md pt-base">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-base top-1/2 -translate-y-1/2 text-ink-tertiary" />
+          {/* "Search", not "Search workouts": with Filter and Export alongside
+              it the longer placeholder clipped mid-word on a 375pt phone, and
+              the aria-label carries the full thing anyway. */}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search workouts"
+            placeholder="Search"
             aria-label="Search workouts"
             className="w-full h-tap pl-4xl pr-base rounded-full bg-glass border border-glass-border
                        text-body font-regular text-ink placeholder:text-ink-tertiary outline-none
                        focus:border-focus"
           />
         </div>
+        {/* Filter and Export are both "sm": same 44pt target, smaller type, so
+            two labelled pills and the search field still fit a 375pt phone
+            without anything turning into a bare icon nobody recognises. */}
         <Pill
+          size="sm"
           selected={!!exerciseFilter}
           onClick={() => setFilterOpen(true)}
           aria-label="Filter workouts"
         >
           <SlidersHorizontal size={16} strokeWidth={2.2} />
           Filter
+        </Pill>
+        <Pill
+          size="sm"
+          disabled={!filtered.length}
+          onClick={() => setExportOpen(true)}
+          aria-label="Export workouts"
+        >
+          <Download size={16} strokeWidth={2.2} />
+          Export
         </Pill>
       </div>
 
@@ -176,6 +194,14 @@ export default function HistoryScreen({ workout }) {
           onShare={() => setShareFor(opened)}
         />
       )}
+
+      <ExportSheet
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        items={filtered}
+        exMap={exMap}
+        filtered={!!q.trim() || !!exerciseFilter}
+      />
 
       <ShareCard
         open={!!shareFor}
