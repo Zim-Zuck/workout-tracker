@@ -1,6 +1,9 @@
 // Aggregates existing workout data into the stat pack used by the Progress Share Card.
 // Reuses calculations.js rather than re-deriving PRs/volume/streaks in a second place.
-import { isWorking, workingVolume, estimate1RM, computeStreak } from './calculations.js';
+import {
+  isWorking, workingVolume, estimate1RM, e1rmSeries, muscleVolume, repRangeCounts
+} from './calculations.js';
+import { computeTotals } from '../hooks/useWorkoutTotals.js';
 import { SHARE_WINDOWS, timeframeList, resolveRange } from './timeframes.js';
 
 // The share card's own preset, built from the one timeframe registry rather
@@ -39,11 +42,21 @@ export function periodTitle(timeframeId, start, end) {
   return tf ? tf.label : `${formatShortDate(start)} – ${formatShortDate(end)}`;
 }
 
-// Per-exercise improvement across the period: current best (as of `end`) vs the best
-// achieved strictly before `start`. Every exercise actually trained inside the period is
-// returned (the "exercise picker" needs the full roster) — callers filter down to real
-// improvements themselves when they only want PRs.
-function exerciseProgress(workouts, exerciseMap, start, end) {
+// THIS IS NOT A PR. prs.js is the only authority on that question, and its
+// answer is weight/reps/volume, one per exercise per session, judged against
+// everything that came before.
+//
+// What this measures is PERIOD IMPROVEMENT: current best est. 1RM (as of `end`)
+// against the best achieved strictly before `start`. That is a different and
+// legitimate question — "how much stronger did this period make me" — but it is
+// period-scoped, uncategorised, and would call a lift a record for beating a
+// baseline it had already beaten before the window opened. The share card's
+// "Personal Records" heading is card framing over this number; the summary's
+// `prs` key keeps its name only because the card reads it.
+//
+// Every exercise trained inside the period is returned, because the card's
+// exercise picker needs the full roster; callers filter down themselves.
+function exerciseImprovement(workouts, exerciseMap, start, end) {
   const byExercise = new Map();
   for (const w of workouts) {
     if (w.date > end) continue;
@@ -92,9 +105,9 @@ function exerciseProgress(workouts, exerciseMap, start, end) {
   return results.sort((a, b) => (b.deltaKg - a.deltaKg) || (b.valueKg - a.valueKg));
 }
 
-// The subset of exerciseProgress() that actually represents a "personal record" worth
-// leading with — a real improvement, or brand new to the period with a real value.
-function filterToPRs(exerciseOptions) {
+// The subset of exerciseImprovement() worth leading a card with — a real gain,
+// or brand new to the period with a real value.
+function filterToImprovements(exerciseOptions) {
   return exerciseOptions.filter((r) => (r.isNew ? r.valueKg > 0 : r.improved));
 }
 
@@ -113,49 +126,6 @@ function trainingStats(workouts, start, end) {
   return { workoutCount, volumeKg, perWeek, volumePct, hasPrevPeriodData: prevWorkouts.length > 0 };
 }
 
-// Volume share per muscle group in the period. Each exercise's volume is split evenly
-// across all of its tagged muscle groups (matches the dashboard's muscle-distribution chart).
-function muscleDistribution(workouts, exercises, start, end) {
-  const exMap = new Map(exercises.map((e) => [e.id, e]));
-  const totals = {};
-  let grandTotal = 0;
-  for (const w of workouts) {
-    if (w.date < start || w.date > end) continue;
-    for (const s of w.sets) {
-      if (!isWorking(s)) continue;
-      const ex = exMap.get(s.exerciseId);
-      const groups = ex?.muscleGroups || [];
-      if (!groups.length) continue;
-      const vol = s.weightKg * s.reps;
-      const share = vol / groups.length;
-      for (const g of groups) totals[g] = (totals[g] || 0) + share;
-      grandTotal += vol;
-    }
-  }
-  return Object.entries(totals)
-    .map(([label, kg]) => ({ label, volumeKg: kg, pct: grandTotal ? Math.round((kg / grandTotal) * 100) : 0 }))
-    .sort((a, b) => b.volumeKg - a.volumeKg);
-}
-
-function repRangeDistribution(workouts, start, end) {
-  const buckets = { '1–5': 0, '6–9': 0, '10–14': 0, '15+': 0 };
-  let total = 0;
-  for (const w of workouts) {
-    if (w.date < start || w.date > end) continue;
-    for (const s of w.sets) {
-      if (!isWorking(s)) continue;
-      total++;
-      if (s.reps <= 5) buckets['1–5']++;
-      else if (s.reps <= 9) buckets['6–9']++;
-      else if (s.reps <= 14) buckets['10–14']++;
-      else buckets['15+']++;
-    }
-  }
-  return Object.entries(buckets).map(([label, count]) => ({
-    label, count, pct: total ? Math.round((count / total) * 100) : 0
-  }));
-}
-
 function mostTrainedExerciseId(workouts, start, end) {
   const counts = new Map();
   for (const w of workouts) {
@@ -170,18 +140,10 @@ function mostTrainedExerciseId(workouts, start, end) {
   return best;
 }
 
-// Est. 1RM at each workout date for one exercise, within [start, end] only. Exported so the
-// card can recompute the Strength Progression line for whichever exercise the user picks.
+// SUPERSEDED by calculations.e1rmSeries(), which this was a copy of plus a date
+// filter. Kept as a wrapper because ProgressShareCard calls it positionally.
 export function strengthSeriesFor(workouts, exerciseId, start, end) {
-  const rows = [];
-  for (const w of [...workouts].sort((a, b) => a.date - b.date)) {
-    if (w.date < start || w.date > end) continue;
-    const sets = w.sets.filter((s) => s.exerciseId === exerciseId && isWorking(s));
-    if (!sets.length) continue;
-    const best = sets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0);
-    rows.push({ date: w.date, e1rmKg: best });
-  }
-  return rows;
+  return e1rmSeries(workouts, exerciseId, { start, end });
 }
 
 // Full stat pack for the Progress Share Card, plus per-metric availability flags so the
@@ -190,18 +152,26 @@ export function buildProgressSummary(workouts, exercises, { timeframeId = '6m', 
   const exerciseMap = new Map(exercises.map((e) => [e.id, e]));
   const { start, end } = resolveRange(timeframeId, workouts, custom);
 
-  const exerciseOptions = exerciseProgress(workouts, exerciseMap, start, end);
-  const prs = filterToPRs(exerciseOptions);
+  const exerciseOptions = exerciseImprovement(workouts, exerciseMap, start, end);
+  const prs = filterToImprovements(exerciseOptions);
   const training = trainingStats(workouts, start, end);
-  const streakWeeks = computeStreak(workouts, end);
-  const muscle = muscleDistribution(workouts, exercises, start, end);
-  const repRange = repRangeDistribution(workouts, start, end);
+  // THE STREAK IS AS OF NOW, not as of the period's end (D1). It used to be
+  // computeStreak(workouts, end), which on a custom range ending in the past
+  // printed the streak you had back then under the same word the Progress
+  // header uses for the one you have today. There is no reading of "your streak
+  // during March" a user would guess from "Streak". Reading it off
+  // computeTotals — the app's one totals derivation, which socialSummary and
+  // feedPresenter already use — means there is a single code path rather than
+  // two that have to agree.
+  const streakWeeks = computeTotals(workouts).streakWeeks;
+  const muscle = muscleVolume(workouts, exercises, { start, end });
+  const repRange = repRangeCounts(workouts, { start, end });
 
   // Default headline exercise for the Strength Progression line — the user can override
   // this via the exercise picker; this is just what the card shows before they touch it.
   const headlineExerciseId = prs[0]?.exerciseId || exerciseOptions[0]?.exerciseId || mostTrainedExerciseId(workouts, start, end);
   const headlineExerciseName = headlineExerciseId ? (exerciseMap.get(headlineExerciseId)?.name || 'Exercise') : null;
-  const strengthSeries = headlineExerciseId ? strengthSeriesFor(workouts, headlineExerciseId, start, end) : [];
+  const strengthSeries = headlineExerciseId ? e1rmSeries(workouts, headlineExerciseId, { start, end }) : [];
 
   const firstWorkoutDate = workouts.reduce((m, w) => Math.min(m, w.date), Infinity);
   const spanDays = workouts.length ? Math.max(0, (end - Math.max(start, firstWorkoutDate)) / 86400000) : 0;

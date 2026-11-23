@@ -176,14 +176,101 @@ export function computeStreak(workouts, asOf = Date.now()) {
   return count;
 }
 
-// Est. 1RM at each workout date for one exercise — used to overlay two exercises' trends.
-export function e1rmSeries(workouts, exerciseId) {
+// Est. 1RM at each workout date for one exercise — used to overlay two
+// exercises' trends, to draw the share card's strength line, and to classify a
+// lift's trend.
+//
+// ONE OBSERVATION PER SESSION, not per set. Per-set observations are noisy by
+// construction, because back-off and drop sets are MEANT to be lighter; the
+// session's best working set is the capability the session demonstrated.
+//
+// The optional range is what retired progressSummary.strengthSeriesFor(), which
+// was this function plus a date filter, copied.
+export function e1rmSeries(workouts, exerciseId, { start = -Infinity, end = Infinity } = {}) {
   const rows = [];
   for (const w of [...workouts].sort((a, b) => a.date - b.date)) {
-    const sets = w.sets.filter((s) => s.exerciseId === exerciseId && isWorking(s));
+    if (w.date < start || w.date > end) continue;
+    const sets = (w.sets || []).filter((s) => s.exerciseId === exerciseId && isWorking(s));
     if (!sets.length) continue;
     const best = sets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0);
     rows.push({ date: w.date, e1rmKg: best });
   }
   return rows;
+}
+
+// A Map whether it arrived as one or as the raw exercise array. Progress.jsx
+// already memoizes a Map and should not have to rebuild one per render; the
+// share card holds the array. Cheaper than making one of them convert.
+function asMap(exercises) {
+  if (!exercises) return new Map();
+  return typeof exercises.get === 'function' ? exercises : new Map(exercises.map((e) => [e.id, e]));
+}
+
+// VOLUME SHARE PER MUSCLE GROUP.
+//
+// Each set's volume is split EVENLY across the exercise's tagged muscle groups
+// — not duplicated into each, which would make the percentages sum past 100 and
+// make a multi-tagged compound look like three exercises. Tiers are deliberately
+// not used here: this answers "where did the work go", and a bench press does
+// put real work through the triceps.
+//
+// A set on an exercise with no tags (or on an exercise that no longer exists)
+// contributes to NEITHER the totals nor the denominator — it cannot be
+// attributed, so including it would quietly shrink every real percentage.
+//
+// Sorted by volume. The dashboard's radar re-sorts into anatomical order
+// itself, because the radar is read as a shape; that is presentation and stays
+// in the screen.
+export function muscleVolume(workouts, exercises, { start = -Infinity, end = Infinity } = {}) {
+  const exMap = asMap(exercises);
+  const totals = new Map();
+  let grandTotal = 0;
+  for (const w of workouts || []) {
+    if (w.date < start || w.date > end) continue;
+    for (const s of w.sets || []) {
+      if (!isWorking(s)) continue;
+      const groups = exMap.get(s.exerciseId)?.muscleGroups || [];
+      if (!groups.length) continue;
+      const vol = setVolume(s);
+      const share = vol / groups.length;
+      for (const g of groups) totals.set(g, (totals.get(g) || 0) + share);
+      grandTotal += vol;
+    }
+  }
+  return [...totals.entries()]
+    .map(([label, volumeKg]) => ({
+      label,
+      volumeKg,
+      pct: grandTotal ? Math.round((volumeKg / grandTotal) * 100) : 0
+    }))
+    .sort((a, b) => b.volumeKg - a.volumeKg);
+}
+
+// The rep-range buckets, in one place. Edges and labels are the ones the
+// dashboard's donut and the share card were already using independently.
+export const REP_RANGES = [
+  { label: '1–5', max: 5 },
+  { label: '6–9', max: 9 },
+  { label: '10–14', max: 14 },
+  { label: '15+', max: Infinity }
+];
+
+// Working sets per rep range. Every bucket is returned in fixed order, zeroes
+// included, so a chart's categories do not appear and disappear between windows.
+export function repRangeCounts(workouts, { start = -Infinity, end = Infinity } = {}) {
+  const counts = REP_RANGES.map(() => 0);
+  let total = 0;
+  for (const w of workouts || []) {
+    if (w.date < start || w.date > end) continue;
+    for (const s of w.sets || []) {
+      if (!isWorking(s)) continue;
+      total++;
+      counts[REP_RANGES.findIndex((r) => s.reps <= r.max)]++;
+    }
+  }
+  return REP_RANGES.map((r, i) => ({
+    label: r.label,
+    count: counts[i],
+    pct: total ? Math.round((counts[i] / total) * 100) : 0
+  }));
 }

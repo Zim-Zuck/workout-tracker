@@ -10,7 +10,7 @@ import ProgressShareCard from '../components/ProgressShareCard.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
-import { isWorking, workingVolume } from '../services/calculations.js';
+import { isWorking, workingVolume, muscleVolume, repRangeCounts } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
 import { WINDOWS, dashboardPillOptions, windowDays } from '../services/timeframes.js';
 import { formatWeight } from '../utils/units.js';
@@ -93,43 +93,25 @@ export default function ProgressScreen({ workout }) {
     : `${Math.round(v).toLocaleString()} kg`);
 
   // ---- Muscle groups ----
+  // The split-evenly-across-tags formula lives in calculations.muscleVolume,
+  // shared with the share card. What stays here is presentation: the radar is
+  // read as a SHAPE, so its axes must sit in a fixed anatomical order — sorting
+  // them by size would make a balanced month and a lopsided one draw the same
+  // outline. Biggest eight, put back in body order.
   const muscle = useMemo(() => {
-    const totals = new Map();
-    for (const w of inWindow) {
-      for (const s of w.sets || []) {
-        if (!isWorking(s)) continue;
-        const groups = exMap.get(s.exerciseId)?.muscleGroups || [];
-        if (!groups.length) continue;
-        const share = (s.weightKg * s.reps) / groups.length;
-        for (const g of groups) totals.set(g, (totals.get(g) || 0) + share);
-      }
-    }
-    // The radar is read as a SHAPE, so the axes must sit in a fixed anatomical
-    // order — sorting them by size would make a balanced month and a lopsided
-    // one draw the same outline. Biggest eight, put back in body order.
-    const top = [...totals.entries()]
-      .sort((a, b) => b[1] - a[1])
+    const top = muscleVolume(inWindow, exMap)
       .slice(0, 8)
-      .map(([label, value]) => ({ label, value: Math.round(value) }));
+      .map((m) => ({ label: m.label, value: Math.round(m.volumeKg) }));
     return top.sort((a, b) => MUSCLE_ORDER.indexOf(a.label) - MUSCLE_ORDER.indexOf(b.label));
   }, [inWindow, exMap]);
 
   const muscleTonnes = useMemo(() => Math.max(0, ...muscle.map((d) => d.value)) >= 2000, [muscle]);
 
   // ---- Rep ranges ----
-  const repRange = useMemo(() => {
-    const buckets = { '1–5': 0, '6–9': 0, '10–14': 0, '15+': 0 };
-    for (const w of inWindow) {
-      for (const s of w.sets || []) {
-        if (!isWorking(s)) continue;
-        if (s.reps <= 5) buckets['1–5']++;
-        else if (s.reps <= 9) buckets['6–9']++;
-        else if (s.reps <= 14) buckets['10–14']++;
-        else buckets['15+']++;
-      }
-    }
-    return Object.entries(buckets).map(([label, value]) => ({ label, value }));
-  }, [inWindow]);
+  const repRange = useMemo(
+    () => repRangeCounts(inWindow).map((r) => ({ label: r.label, value: r.count })),
+    [inWindow]
+  );
 
   // ---- Per-exercise roster ----
   const trainedExercises = useMemo(() => {
