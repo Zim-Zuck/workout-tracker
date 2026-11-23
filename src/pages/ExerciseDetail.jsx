@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { GlassCard, SegmentedPills, SegmentedTrack, StatBlock, StatRow, StaticPill, EmptyState, IconButton, Porthole } from '../ui/index.js';
 import { LineChart } from '../components/Chart.jsx';
 import { orderedSets, setLabels } from '../db/normalize.js';
-import { isWorking, estimate1RM } from '../services/calculations.js';
+import { isWorking } from '../services/calculations.js';
 import { prTimeline, bestE1RM } from '../services/prs.js';
 import { workoutTitle } from '../services/splits.js';
 import { anatomyForExercise, tiersFor, tierSource } from '../services/anatomy.js';
@@ -42,6 +42,14 @@ function trendChip(trend) {
   return { text: `${pct} ${over}`, tone: trend.status === 'improving' ? 'pr' : 'neutral' };
 }
 
+// relativeDay() returns "Today", "Yesterday", "4 days ago" or a formatted date.
+// Only the first two need lower-casing to sit inside a sentence; lower-casing
+// the rest turned "Mon, Nov 16" into "mon, nov 16".
+function lastTrainedLine(ts) {
+  const rel = relativeDay(ts);
+  return `Last trained ${rel === 'Today' || rel === 'Yesterday' ? rel.toLowerCase() : rel}.`;
+}
+
 const REGULARITY_COPY = {
   regular: 'regular',
   uneven: 'uneven',
@@ -71,7 +79,6 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
           sets,
           topWeight: sets.reduce((m, s) => Math.max(m, s.weightKg), 0),
           topReps: sets.reduce((m, s) => Math.max(m, s.reps), 0),
-          bestE1rm: sets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0),
           volume: sets.reduce((a, s) => a + s.weightKg * s.reps, 0)
         };
       })
@@ -233,7 +240,7 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
           )}
           {consistency.lastTrainedAt != null && (
             <p className="mt-sm text-label font-regular text-ink-tertiary">
-              Last trained {relativeDay(consistency.lastTrainedAt).toLowerCase()}.
+              {lastTrainedLine(consistency.lastTrainedAt)}
             </p>
           )}
 

@@ -13,7 +13,7 @@ import { SPLITS, splitLabel } from '../services/splits.js';
 import { buildSession, recomputePlan, nextSplitInRotation } from '../services/sessionBuilder.js';
 import { recommend } from '../services/progression.js';
 import { prTimeline } from '../services/prs.js';
-import { workingVolume, computeStreak } from '../services/calculations.js';
+import { workingVolume } from '../services/calculations.js';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { formatWeight, formatVolume } from '../utils/units.js';
 import { formatDuration, startOfWeek, formatDate } from '../utils/date.js';

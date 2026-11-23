@@ -38,6 +38,13 @@ const SORT_MODES = [
   { value: 'progression', label: 'Best progress' }
 ];
 
+// A signed percentage, with no "−0.0%": a change that rounds away is neither a
+// gain nor a loss, and a minus sign in front of a zero reads as one.
+function formatPct(pct) {
+  const shown = Math.abs(pct).toFixed(1);
+  return `${shown === '0.0' ? '' : pct > 0 ? '+' : '−'}${shown}%`;
+}
+
 // Why a lift's trend could not be called, in the fewest words that are still
 // true. Never "no progress" — none of these mean that.
 const WITHHELD_COPY = {
@@ -149,6 +156,22 @@ export default function ProgressScreen({ workout }) {
     () => rankExercises(workouts, exMap, { mode: sortMode, start: since }),
     [workouts, exMap, sortMode, since]
   );
+
+  // GROUPED BY REASON, because the reasons are not interchangeable. A flat list
+  // under one reason read "Pull-Up, Bench Press and 3 more — no load logged",
+  // which was true of the pull-ups and plainly false of a bench press with six
+  // tonnes behind it. Largest group first.
+  const withheldGroups = useMemo(() => {
+    const groups = new Map();
+    for (const row of ranked.withheld) {
+      const key = row.reason || row.status;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row.exercise.name);
+    }
+    return [...groups.entries()]
+      .map(([reason, names]) => ({ reason, names }))
+      .sort((a, b) => b.names.length - a.names.length);
+  }, [ranked]);
 
   if (detailFor) {
     return (
@@ -343,7 +366,7 @@ export default function ProgressScreen({ workout }) {
                   }`}>
                     {sortMode === 'frequency' && `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`}
                     {sortMode === 'volume' && formatVolume(volumeKg)}
-                    {sortMode === 'progression' && `${trend.pctChange >= 0 ? '+' : '−'}${Math.abs(trend.pctChange).toFixed(1)}%`}
+                    {sortMode === 'progression' && formatPct(trend.pctChange)}
                   </span>
                   <ChevronRight size={17} className="text-ink-tertiary shrink-0" />
                 </button>
@@ -351,16 +374,17 @@ export default function ProgressScreen({ workout }) {
             ))}
           </ul>
         )}
-        {/* Named, not hidden. A shorter list with no explanation reads as
-            "these lifts went nowhere", which is not what the data said. */}
-        {sortMode === 'progression' && ranked.withheld.length > 0 && (
-          <p className="mt-md text-label font-regular text-ink-tertiary">
-            {ranked.withheld.slice(0, 3).map((r) => r.exercise.name).join(', ')}
-            {ranked.withheld.length > 3 && ` and ${ranked.withheld.length - 3} more`}
+        {/* Named, not hidden, and named under the right reason. A shorter list
+            with no explanation reads as "these lifts went nowhere", which is
+            not what the data said. */}
+        {sortMode === 'progression' && withheldGroups.map(({ reason, names }) => (
+          <p key={reason} className="mt-md text-label font-regular text-ink-tertiary">
+            {names.slice(0, 3).join(', ')}
+            {names.length > 3 && ` and ${names.length - 3} more`}
             {' — '}
-            {WITHHELD_COPY[ranked.withheld[0].reason || ranked.withheld[0].status] || 'not enough data'}.
+            {WITHHELD_COPY[reason] || 'not enough data'}.
           </p>
-        )}
+        ))}
       </Section>
 
       <div className="mt-xxl flex items-center justify-center gap-md">
