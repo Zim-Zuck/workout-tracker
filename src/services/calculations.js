@@ -147,26 +147,37 @@ export function computeStreak(workouts, asOf = Date.now()) {
   return count;
 }
 
-// Est. 1RM at each workout date for one exercise — used to overlay two
-// exercises' trends, to draw the share card's strength line, and to classify a
-// lift's trend.
+// THE BEST WORKING SET OF EACH SESSION, for one exercise, oldest first.
 //
 // ONE OBSERVATION PER SESSION, not per set. Per-set observations are noisy by
 // construction, because back-off and drop sets are MEANT to be lighter; the
 // session's best working set is the capability the session demonstrated.
 //
-// The optional range is what retired progressSummary.strengthSeriesFor(), which
-// was this function plus a date filter, copied.
-export function e1rmSeries(workouts, exerciseId, { start = -Infinity, end = Infinity } = {}) {
+// Carries the weight and reps alongside the estimate, because a caller that
+// wants to know whether the 12-rep Epley cap is flattening the numbers has to
+// see the reps that produced them.
+export function bestSetSeries(workouts, exerciseId, { start = -Infinity, end = Infinity } = {}) {
   const rows = [];
-  for (const w of [...workouts].sort((a, b) => a.date - b.date)) {
+  for (const w of [...(workouts || [])].sort((a, b) => a.date - b.date)) {
     if (w.date < start || w.date > end) continue;
-    const sets = (w.sets || []).filter((s) => s.exerciseId === exerciseId && isWorking(s));
-    if (!sets.length) continue;
-    const best = sets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0);
-    rows.push({ date: w.date, e1rmKg: best });
+    const sets = (w.sets || []).filter((s) => s.exerciseId === exerciseId);
+    const best = bestWorkingSet(sets);
+    // A session with only warm-ups or unchecked sets is not an observation. A
+    // session logged at zero load IS one, at zero — "trained with no recorded
+    // load" and "never trained" are different facts.
+    if (!best) continue;
+    rows.push({ date: w.date, e1rmKg: best.e1rm, weightKg: best.set.weightKg, reps: best.set.reps });
   }
   return rows;
+}
+
+// Est. 1RM at each workout date for one exercise — used to overlay two
+// exercises' trends and to draw the share card's strength line.
+//
+// The optional range is what retired progressSummary.strengthSeriesFor(), which
+// was this function plus a date filter, copied.
+export function e1rmSeries(workouts, exerciseId, range) {
+  return bestSetSeries(workouts, exerciseId, range).map(({ date, e1rmKg }) => ({ date, e1rmKg }));
 }
 
 // A Map whether it arrived as one or as the raw exercise array. Progress.jsx
