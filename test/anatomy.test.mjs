@@ -225,3 +225,45 @@ test('a capped ring with nothing done draws only the track', () => {
 test('at the cap it is still counting individual sets', () => {
   assert.equal(ringSegments(MAX_SEGMENTS, 4).length, MAX_SEGMENTS);
 });
+
+// WHERE A RANKING CAME FROM.
+//
+// tiersFor always produced a primary/secondary split, including for custom
+// exercises that have no stored ranking — but a caller could not tell the
+// library's judgement apart from "the first tag you picked". tierSource is what
+// lets ExerciseDetail say so rather than imply a ranking it does not have. It
+// sits beside tiersFor rather than inside its return value, so every existing
+// caller and assertion is untouched.
+test('tierSource reports the provenance of a ranking', async () => {
+  const { tierSource, tiersFor } = await import('../src/services/anatomy.js');
+
+  // A shipped exercise the library ranks.
+  const builtin = DEFAULT_EXERCISES.find((e) => Array.isArray(e.primary) && e.primary.length > 0);
+  assert.ok(builtin, 'the library must ship at least one ranked exercise');
+  assert.equal(tierSource({ id: builtin.id, muscleGroups: builtin.muscleGroups }), 'builtin');
+
+  // A row carrying its own ranking is believed over the module.
+  const stored = { id: builtin.id, muscleGroups: ['Chest', 'Triceps'], primary: ['Triceps'], secondary: ['Chest'] };
+  assert.equal(tierSource(stored), 'explicit');
+  assert.deepEqual(tiersFor(stored).primary, ['Triceps']);
+
+  // A custom exercise: first tag is the primary, and it is marked inferred.
+  const custom = { id: 'ex_custom_thing', muscleGroups: ['Back', 'Biceps'] };
+  assert.equal(tierSource(custom), 'inferred');
+  assert.deepEqual(tiersFor(custom), { primary: ['Back'], secondary: ['Biceps'] });
+
+  // A user who retagged a builtin has changed what the exercise is for, so the
+  // library's ranking is about a different exercise and the fallback applies.
+  assert.equal(tierSource({ id: builtin.id, muscleGroups: ['Calves'] }), 'inferred');
+
+  // Nothing usable at all.
+  assert.equal(tierSource({ id: 'x', muscleGroups: [] }), 'none');
+  assert.equal(tierSource({ id: 'x', muscleGroups: ['Nonsense'] }), 'none');
+  assert.equal(tierSource(undefined), 'none');
+});
+
+test('tiersFor still returns exactly two tiers and nothing else', () => {
+  // The provenance deliberately does NOT ride along in here: existing callers
+  // and assertions destructure these two keys.
+  assert.deepEqual(Object.keys(tiersFor({ id: 'x', muscleGroups: ['Chest'] })).sort(), ['primary', 'secondary']);
+});

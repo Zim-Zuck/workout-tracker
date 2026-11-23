@@ -73,28 +73,51 @@ const BUILTIN_TIERS = new Map(
 // muscles, not which matter most, and it is not going to start asking. They fall
 // back to "the first one you picked is the one you meant" — the honest reading of
 // that input, and what the picker's own ordering already implies.
+// tierSource() answers WHERE THE RANKING CAME FROM, beside this rather than
+// inside its return value: every caller of tiersFor() wants the two tiers and
+// nothing else, and the provenance matters to exactly one screen.
 export function tiersFor(exercise) {
+  const { primary, secondary } = resolveTiers(exercise);
+  return { primary, secondary };
+}
+
+// WHERE tiersFor()'s ANSWER CAME FROM, so a screen can tell the reader whether
+// it is the library's judgement or an inference from their own tag order:
+//   'explicit' — the stored row carries its own primary/secondary
+//   'builtin'  — the shipped library ranks this exercise
+//   'inferred' — no ranking exists, so the first tag is taken as the primary
+//   'none'     — no usable muscle groups at all
+//
+// Presenting an inferred ranking as though it were the library's is the thing
+// this exists to prevent: for a custom exercise, "the first one you picked" is
+// an honest reading of the input, but it is not a claim about which muscle does
+// the most work, and a screen should not imply otherwise.
+export function tierSource(exercise) {
+  return resolveTiers(exercise).source;
+}
+
+function resolveTiers(exercise) {
   const groups = Array.isArray(exercise?.muscleGroups) ? exercise.muscleGroups.filter(known) : [];
 
   // A row that carries its own ranking (a future seed, a restored backup taken
   // after this change) is believed over the module.
   const own = Array.isArray(exercise?.primary) ? exercise.primary.filter(known) : [];
-  if (own.length > 0) return tiers(own, exercise.secondary);
+  if (own.length > 0) return tiers(own, exercise.secondary, 'explicit');
 
   const builtin = BUILTIN_TIERS.get(exercise?.id);
   if (builtin && sameGroups(builtin.groups, exercise?.muscleGroups)) {
-    return tiers(builtin.primary.filter(known), builtin.secondary);
+    return tiers(builtin.primary.filter(known), builtin.secondary, 'builtin');
   }
 
-  if (groups.length === 0) return { primary: [], secondary: [] };
-  return { primary: [groups[0]], secondary: unique(groups.slice(1)) };
+  if (groups.length === 0) return { primary: [], secondary: [], source: 'none' };
+  return { primary: [groups[0]], secondary: unique(groups.slice(1)), source: 'inferred' };
 }
 
-function tiers(primaryList, secondaryList) {
+function tiers(primaryList, secondaryList, source) {
   const primary = unique(primaryList);
   const secondary = unique(Array.isArray(secondaryList) ? secondaryList.filter(known) : [])
     .filter((g) => !primary.includes(g));
-  return { primary, secondary };
+  return { primary, secondary, source };
 }
 
 // Set equality, because order is not meaning here — a user who reorders the tags

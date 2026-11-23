@@ -13,7 +13,10 @@ import { prTimeline } from '../services/prs.js';
 import { isWorking, workingVolume, muscleVolume, repRangeCounts } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
 import { WINDOWS, dashboardPillOptions, windowDays } from '../services/timeframes.js';
-import { formatWeight } from '../utils/units.js';
+import {
+  rankExercises, progressionPossible, TREND_MIN_SPAN_DAYS, TREND_MIN_SESSIONS
+} from '../services/exerciseStats.js';
+import { formatWeight, formatVolume } from '../utils/units.js';
 import { startOfWeek, formatDate } from '../utils/date.js';
 
 // Push, pull, then legs. Fixed, so the radar's outline means something.
@@ -28,12 +31,29 @@ const MUSCLE_ORDER = [
 const WINDOW_OPTIONS = dashboardPillOptions();
 const windowLabel = (id) => WINDOWS[id].label.toLowerCase();
 
+// The roster's three orderings. Frequency is what this list has always shown.
+const SORT_MODES = [
+  { value: 'frequency', label: 'Most often' },
+  { value: 'volume', label: 'Most volume' },
+  { value: 'progression', label: 'Best progress' }
+];
+
+// Why a lift's trend could not be called, in the fewest words that are still
+// true. Never "no progress" — none of these mean that.
+const WITHHELD_COPY = {
+  too_few_sessions: `fewer than ${TREND_MIN_SESSIONS} sessions`,
+  span_too_short: `under ${TREND_MIN_SPAN_DAYS} days apart`,
+  no_load: 'no load logged',
+  noisy: 'too variable to call'
+};
+
 export default function ProgressScreen({ workout }) {
   const { workouts, exercises } = workout;
   const toast = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [detailFor, setDetailFor] = useState(null);
   const [win, setWin] = useState('4w');
+  const [sort, setSort] = useState('frequency');
 
   const exMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
   // The ONE totals source. The header used to read workouts.length off the
@@ -114,18 +134,21 @@ export default function ProgressScreen({ workout }) {
   );
 
   // ---- Per-exercise roster ----
-  const trainedExercises = useMemo(() => {
-    const counts = new Map();
-    for (const w of workouts) {
-      for (const id of new Set((w.sets || []).filter(isWorking).map((s) => s.exerciseId))) {
-        counts.set(id, (counts.get(id) || 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .map(([id, n]) => ({ exercise: exMap.get(id), sessions: n }))
-      .filter((r) => r.exercise)
-      .sort((a, b) => b.sessions - a.sessions);
-  }, [workouts, exMap]);
+  // SCOPED TO THE WINDOW (D4). This list used to count all-time sessions while
+  // sitting under a window picker it ignored, so "12 sessions" on a 2-week
+  // window meant twelve sessions ever. It now answers the question the picker
+  // implies.
+  //
+  // Progression needs three weeks of history to say anything, so on the 2-week
+  // window the mode is impossible for every lift by construction: the option is
+  // disabled rather than rendering an empty list, and the effective mode falls
+  // back so a stale selection cannot strand the section.
+  const canProgress = progressionPossible(days);
+  const sortMode = sort === 'progression' && !canProgress ? 'frequency' : sort;
+  const ranked = useMemo(
+    () => rankExercises(workouts, exMap, { mode: sortMode, start: since }),
+    [workouts, exMap, sortMode, since]
+  );
 
   if (detailFor) {
     return (
@@ -275,25 +298,69 @@ export default function ProgressScreen({ workout }) {
       </Section>
 
       {/* Per exercise ------------------------------------------------------ */}
-      <Section title="By exercise">
-        <ul className="flex flex-col">
-          {trainedExercises.slice(0, 12).map(({ exercise, sessions }) => (
-            <li key={exercise.id}>
-              <button
-                type="button"
-                onClick={() => setDetailFor(exercise)}
-                className="w-full min-h-tap py-sm flex items-center gap-md text-left border-b border-hairline
-                           last:border-b-0 transition-colors duration-fast ease-out active:bg-glass-pressed"
-              >
-                <span className="flex-1 min-w-0 text-body font-regular text-ink truncate">{exercise.name}</span>
-                <span className="shrink-0 text-label font-regular text-ink-tertiary tabular">
-                  {sessions} {sessions === 1 ? 'session' : 'sessions'}
-                </span>
-                <ChevronRight size={17} className="text-ink-tertiary shrink-0" />
-              </button>
-            </li>
-          ))}
-        </ul>
+      <Section
+        title="By exercise"
+        right={ranked.withheld.length > 0
+          ? <span className="text-micro font-semibold uppercase text-ink-tertiary tabular">
+              {ranked.withheld.length} need more data
+            </span>
+          : null}
+      >
+        <SegmentedPills
+          ariaLabel="Order exercises by"
+          size="sm"
+          value={sortMode}
+          onChange={setSort}
+          options={SORT_MODES.map((m) => ({
+            ...m,
+            disabled: m.value === 'progression' && !canProgress
+          }))}
+        />
+        {sort === 'progression' && !canProgress && (
+          <p className="mt-md text-label font-regular text-ink-tertiary">
+            Progress needs at least {TREND_MIN_SPAN_DAYS} days of history — pick a longer window.
+          </p>
+        )}
+        {!ranked.rows.length ? (
+          <p className="mt-md text-label font-regular text-ink-tertiary">
+            {sortMode === 'progression'
+              ? 'No lift has enough sessions in this window to call a trend yet.'
+              : `Nothing logged in the last ${windowLabel(win)}.`}
+          </p>
+        ) : (
+          <ul className="mt-md flex flex-col">
+            {ranked.rows.slice(0, 12).map(({ exercise, sessions, volumeKg, trend }) => (
+              <li key={exercise.id}>
+                <button
+                  type="button"
+                  onClick={() => setDetailFor(exercise)}
+                  className="w-full min-h-tap py-sm flex items-center gap-md text-left border-b border-hairline
+                             last:border-b-0 transition-colors duration-fast ease-out active:bg-glass-pressed"
+                >
+                  <span className="flex-1 min-w-0 text-body font-regular text-ink truncate">{exercise.name}</span>
+                  <span className={`shrink-0 text-label font-regular tabular ${
+                    sortMode === 'progression' && trend.status === 'improving' ? 'text-pr' : 'text-ink-tertiary'
+                  }`}>
+                    {sortMode === 'frequency' && `${sessions} ${sessions === 1 ? 'session' : 'sessions'}`}
+                    {sortMode === 'volume' && formatVolume(volumeKg)}
+                    {sortMode === 'progression' && `${trend.pctChange >= 0 ? '+' : '−'}${Math.abs(trend.pctChange).toFixed(1)}%`}
+                  </span>
+                  <ChevronRight size={17} className="text-ink-tertiary shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {/* Named, not hidden. A shorter list with no explanation reads as
+            "these lifts went nowhere", which is not what the data said. */}
+        {sortMode === 'progression' && ranked.withheld.length > 0 && (
+          <p className="mt-md text-label font-regular text-ink-tertiary">
+            {ranked.withheld.slice(0, 3).map((r) => r.exercise.name).join(', ')}
+            {ranked.withheld.length > 3 && ` and ${ranked.withheld.length - 3} more`}
+            {' — '}
+            {WITHHELD_COPY[ranked.withheld[0].reason || ranked.withheld[0].status] || 'not enough data'}.
+          </p>
+        )}
       </Section>
 
       <div className="mt-xxl flex items-center justify-center gap-md">
