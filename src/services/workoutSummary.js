@@ -1,6 +1,7 @@
 // Summaries used by the share card. Reuses existing calculations rather than
 // re-deriving PRs/volume in a second place.
-import { isWorking, workingVolume, detectPRs, bestWorkingSet, estimate1RM, setVolume } from './calculations.js';
+import { isWorking, workingVolume, estimate1RM, setVolume } from './calculations.js';
+import { sessionPRForExercise } from './prs.js';
 import { workoutTitle } from './splits.js';
 
 // Ordered list of "leg-family" muscles used by the split-name heuristic.
@@ -67,34 +68,27 @@ export function dayTitle(workout, exerciseMap) {
   return `${parts[0]}, ${parts[1]} & ${parts[2]} Day`;
 }
 
-// Return PRs achieved in this workout, using the existing detectPRs() over
-// working sets from prior workouts. Result: array of { exerciseName, kinds:{...}, top:{weightKg, reps, e1rm} }.
+// PRs achieved in this workout, from the PR authority (prs.js) — not from raw
+// detectPRs() flags, which is what this did before.
+//
+// WHAT CHANGED, AND WHY (D2). It used to flag a PR when detectPRs() returned
+// weight, reps OR e1rm, and ignored volume entirely. That contradicted prs.js
+// twice over: rule 3 says estimated 1RM is a tiebreaker and never a badge, and
+// the volume kind — the most work ever done on a lift in one session — was
+// simply missing. So a session could show a PR on the share-card image and no
+// PR anywhere else in the app, and vice versa. One authority now answers for
+// both.
+//
+// Result: array of { exerciseId, exerciseName, kind, label, unit, value,
+// previous, delta }, at most one entry per exercise.
 export function workoutPRs(workout, allWorkouts, exerciseMap) {
-  const prior = allWorkouts.filter((w) => w.id !== workout.id && w.date < workout.date);
-  const perExercise = new Map();
-  for (const s of workout.sets) {
-    if (!isWorking(s)) continue;
-    if (!perExercise.has(s.exerciseId)) perExercise.set(s.exerciseId, []);
-    perExercise.get(s.exerciseId).push(s);
-  }
+  const history = allWorkouts.filter((w) => w.id !== workout.id && w.date < workout.date);
+  const exIds = [...new Set((workout.sets || []).filter(isWorking).map((s) => s.exerciseId))];
   const out = [];
-  for (const [exId, currentSets] of perExercise) {
-    const prev = [];
-    for (const w of prior) {
-      for (const s of w.sets) {
-        if (s.exerciseId === exId && isWorking(s)) prev.push(s);
-      }
-    }
-    const pr = detectPRs(prev, currentSets);
-    if (!pr.weight && !pr.reps && !pr.e1rm) continue;
-    const best = bestWorkingSet(currentSets);
-    const ex = exerciseMap.get(exId);
-    out.push({
-      exerciseId: exId,
-      exerciseName: ex?.name || 'Exercise',
-      kinds: pr,
-      top: best ? { weightKg: best.set.weightKg, reps: best.set.reps, e1rm: best.e1rm } : null,
-    });
+  for (const exId of exIds) {
+    const pr = sessionPRForExercise(exId, workout.sets, history);
+    if (!pr) continue;
+    out.push({ ...pr, exerciseName: exerciseMap.get(exId)?.name || 'Exercise' });
   }
   return out;
 }

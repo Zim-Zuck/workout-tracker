@@ -273,9 +273,9 @@ function summariseReps(reps) {
   return reps.join(', ');
 }
 
+// The PR's own label, from prs.js's PR_LABELS. This used to re-derive one from
+// raw flags and led with "New 1RM PR", which prs.js rule 3 says is not a thing
+// you hit.
 function prLabel(pr) {
-  if (pr.kinds.e1rm) return `New 1RM PR`;
-  if (pr.kinds.weight) return `New top weight`;
-  if (pr.kinds.reps) return `Reps PR`;
-  return `PR`;
+  return pr.label || 'PR';
 }

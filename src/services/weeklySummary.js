@@ -11,7 +11,8 @@
 //
 // Every number is derived from calculations.js. There is no second definition
 // of volume or of a PR anywhere in this file.
-import { isWorking, setVolume, estimate1RM, detectPRs } from './calculations.js';
+import { isWorking, setVolume, estimate1RM } from './calculations.js';
+import { prKindFrom } from './prs.js';
 import { isShareableExercise } from './socialSummary.js';
 import { startOfWeek, startOfDay, ymd } from '../utils/date.js';
 
@@ -54,13 +55,23 @@ function sessionMinutes(w) {
 }
 
 // Walks the whole history once, in order, counting how many PRs each workout
-// set. Uses detectPRs() — the app's single definition of a PR — and grows the
-// "everything before this" set list incrementally, so this stays linear in the
-// number of sets rather than quadratic in the number of workouts.
+// set. The DECISION is prs.js's (prKindFrom), so this cannot drift from what
+// the rest of the app calls a PR; what stays here is the incremental
+// bookkeeping, which grows the "everything before this" sets and sessions as it
+// goes so the walk is linear in sets rather than quadratic in workouts.
+//
+// WHAT CHANGED (D2). This used to call detectPRs() directly and count a PR when
+// weight, reps OR e1rm fired, ignoring volume. prs.js says estimated 1RM is a
+// tiebreaker and never a badge (rule 3), and that the volume kind counts. So an
+// e1RM-only session used to add to a week's PR count and no longer does, and a
+// session that set a volume record now does and did not before. Rule 2 — one
+// PR per exercise per session — was already honoured here and still is, now by
+// construction rather than by a comment.
 //
 // Returns Map<workoutId, prCount>.
 function prCountsByWorkout(sortedWorkouts) {
-  const priorByExercise = new Map(); // exerciseId -> sets from earlier workouts
+  const priorSetsByExercise = new Map();     // exerciseId -> flat sets from earlier workouts
+  const priorSessionsByExercise = new Map(); // exerciseId -> those sets, grouped by workout
   const out = new Map();
 
   for (const w of sortedWorkouts) {
@@ -73,19 +84,21 @@ function prCountsByWorkout(sortedWorkouts) {
 
     let count = 0;
     for (const [exId, sets] of current) {
-      const prior = priorByExercise.get(exId) || [];
-      const pr = detectPRs(prior, sets);
-      // One PR per exercise per session. A lift that is simultaneously a new
-      // top weight and a new estimated max is one achievement, not two, and
-      // counting it twice would quietly inflate whoever trains most exercises.
-      if (pr.weight || pr.reps || pr.e1rm) count++;
+      const kind = prKindFrom(
+        priorSetsByExercise.get(exId) || [],
+        priorSessionsByExercise.get(exId) || [],
+        sets
+      );
+      if (kind) count++;
     }
     out.set(w.id, count);
 
     // Only now do this workout's sets become "prior" for the next one.
     for (const [exId, sets] of current) {
-      if (!priorByExercise.has(exId)) priorByExercise.set(exId, []);
-      priorByExercise.get(exId).push(...sets);
+      if (!priorSetsByExercise.has(exId)) priorSetsByExercise.set(exId, []);
+      priorSetsByExercise.get(exId).push(...sets);
+      if (!priorSessionsByExercise.has(exId)) priorSessionsByExercise.set(exId, []);
+      priorSessionsByExercise.get(exId).push(sets);
     }
   }
 

@@ -28,6 +28,24 @@ export const PR_LABELS = {
   volume: 'Volume PR'
 };
 
+// WHICH KIND OF PR, GIVEN HISTORY THAT IS ALREADY GROUPED.
+//
+// The one place rules 1, 2 and 5 are applied. Exposed because not every caller
+// can afford to hand over a whole history array per session: weeklySummary
+// walks every workout ever logged and accumulates prior sets incrementally to
+// stay linear, and re-deriving them per session would make it quadratic. It
+// gets to keep that and still not own the decision.
+//
+//   prevSets     — every working set of this exercise from BEFORE this session
+//   prevSessions — those same sets grouped by session (the volume kind needs it)
+//   currentSets  — this session's working sets for this exercise
+export function prKindFrom(prevSets, prevSessions, currentSets) {
+  if (!prevSets.length || !currentSets.length) return null; // rule 5
+  const flags = detectPRs(prevSets, currentSets, prevSessions);
+  // Rule 2: first match in priority order wins, and we stop looking.
+  return PR_PRIORITY.find((k) => flags[k]) || null;
+}
+
 // The single PR (or null) that one exercise earned in one session.
 //
 // `history` must be every workout BEFORE this one, in any order.
@@ -43,12 +61,7 @@ export function sessionPRForExercise(exerciseId, sessionSets, history) {
     prevSessions.push(rel);
     prevSets.push(...rel);
   }
-  if (!prevSets.length) return null; // rule 5
-
-  const flags = detectPRs(prevSets, current, prevSessions);
-
-  // Rule 2: first match in priority order wins, and we stop looking.
-  const kind = PR_PRIORITY.find((k) => flags[k]);
+  const kind = prKindFrom(prevSets, prevSessions, current);
   if (!kind) return null;
 
   return { exerciseId, kind, label: PR_LABELS[kind], ...describe(kind, current, prevSets, prevSessions) };
