@@ -13,6 +13,7 @@ import { ordinaryHistory, inProgressWorkout, unknownExerciseWorkout, identicalTi
 
 const db = await import('../src/db/database.js');
 const calc = await import('../src/services/calculations.js');
+const prs = await import('../src/services/prs.js');
 const NAME = db.DB_NAME_FOR_TESTS;
 
 // The app's definition of total volume, applied to raw old records — so the
@@ -92,7 +93,9 @@ test('per-workout summaries and PRs compute on migrated data', async () => {
   const series = calc.e1rmSeries(workouts, 'ex_bench_press');
   assert.ok(series.length > 0, 'the 1RM series must have points');
 
-  const timeline = calc.buildPrTimeline(workouts);
+  // prTimeline(), not the retired calc.buildPrTimeline() it replaced: this is
+  // the function the app actually reads, so the assertion is stronger for it.
+  const timeline = prs.prTimeline(workouts);
   assert.ok(Array.isArray(timeline));
 
   const streak = calc.computeStreak(workouts, 1727000000000);

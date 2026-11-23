@@ -95,7 +95,8 @@ export function sessionPRs(workout, history) {
     .filter(Boolean);
 }
 
-// Every PR across all history, newest first. Replaces buildPrTimeline().
+// Every PR across all history, newest first. Replaced calculations.buildPrTimeline(),
+// which has since been deleted.
 //
 // Walks forward in time so each session is judged against only what came before
 // it, which is the only way a PR list can be stable: a record set in March must

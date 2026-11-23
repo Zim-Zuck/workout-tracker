@@ -46,6 +46,10 @@ export function bestWorkingSet(sets) {
 }
 
 // Group sets by exerciseId, ordered by timestamp.
+//
+// No production caller at present — its remaining use is readback.test.mjs,
+// where it proves no set is lost on a workout referencing an unknown exercise.
+// Kept for that: deleting it would delete the coverage, not the risk.
 export function groupSetsByExercise(sets) {
   const map = new Map();
   for (const s of sets) {
@@ -115,39 +119,6 @@ export function detectPRs(prevSets, currentSets, prevSessions = null) {
   // First-ever workout for this exercise: don't flag PRs (nothing to beat).
   if (!prevSets.length) return { weight: false, reps: false, e1rm: false, volume: false };
   return { weight: weightPR, reps: repsPR, e1rm: e1rmPR, volume: volumePR };
-}
-
-// Chronological list of PR-setting workouts across all exercises, newest first.
-// Each event marks a workout where a new best est. 1RM (preferred) or top weight was hit.
-export function buildPrTimeline(workouts) {
-  const sorted = [...workouts].sort((a, b) => a.date - b.date);
-  const events = [];
-  for (let i = 0; i < sorted.length; i++) {
-    const w = sorted[i];
-    const exIds = new Set(w.sets.filter(isWorking).map((s) => s.exerciseId));
-    for (const exId of exIds) {
-      const currentSets = w.sets.filter((s) => s.exerciseId === exId && isWorking(s));
-      const prevSets = [];
-      for (let j = 0; j < i; j++) {
-        for (const s of sorted[j].sets) {
-          if (s.exerciseId === exId && isWorking(s)) prevSets.push(s);
-        }
-      }
-      if (!prevSets.length) continue;
-      const pr = detectPRs(prevSets, currentSets);
-      if (!pr.e1rm && !pr.weight) continue;
-      if (pr.e1rm) {
-        const prevBestE1rm = prevSets.reduce((m, s) => Math.max(m, estimate1RM(s.weightKg, s.reps)), 0);
-        const bestNow = bestWorkingSet(currentSets);
-        events.push({ exerciseId: exId, date: w.date, kind: 'e1rm', valueKg: bestNow.e1rm, deltaKg: bestNow.e1rm - prevBestE1rm });
-      } else {
-        const prevBestWeight = prevSets.reduce((m, s) => Math.max(m, s.weightKg), 0);
-        const topWeightNow = currentSets.reduce((m, s) => Math.max(m, s.weightKg), 0);
-        events.push({ exerciseId: exId, date: w.date, kind: 'weight', valueKg: topWeightNow, deltaKg: topWeightNow - prevBestWeight });
-      }
-    }
-  }
-  return events.sort((a, b) => b.date - a.date);
 }
 
 // Consecutive ISO weeks with at least one workout, counting back from `asOf`

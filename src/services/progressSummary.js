@@ -14,29 +14,22 @@ export const TIMEFRAMES = timeframeList(SHARE_WINDOWS);
 // Re-exported so the card's range maths and this module's cannot diverge.
 export { resolveRange };
 
-// All metrics a card can show, in a sensible default priority order.
-export const METRICS = [
-  { id: 'prs', label: 'Personal Records' },
-  { id: 'workouts', label: 'Workouts' },
-  { id: 'volume', label: 'Volume' },
-  { id: 'streak', label: 'Streak' },
-  { id: 'strength', label: 'Strength Progression' },
-  { id: 'muscle', label: 'Muscle Distribution' },
-  { id: 'repRange', label: 'Rep Ranges' }
-];
-
+// periodLabel/periodTitle are module-private: their output reaches callers as
+// summary.label and summary.title, and nothing imported the functions. The
+// METRICS list that used to sit here was exported and imported by nothing —
+// ProgressShareCard carries its own STYLE_METRICS.
 function formatShortDate(ts) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function periodLabel(timeframeId, start, end) {
+function periodLabel(timeframeId, start, end) {
   const tf = TIMEFRAMES.find((t) => t.id === timeframeId);
   if (timeframeId === 'custom') return `${formatShortDate(start)} — ${formatShortDate(end)}`.toUpperCase();
   return tf ? tf.shortLabel : `${formatShortDate(start)} — ${formatShortDate(end)}`.toUpperCase();
 }
 
 // Human-cased headline, e.g. "6 Months" or "Sep 4 – Sep 18" for a custom range.
-export function periodTitle(timeframeId, start, end) {
+function periodTitle(timeframeId, start, end) {
   if (timeframeId === 'custom') return `${formatShortDate(start)} – ${formatShortDate(end)}`;
   const tf = TIMEFRAMES.find((t) => t.id === timeframeId);
   return tf ? tf.label : `${formatShortDate(start)} – ${formatShortDate(end)}`;
