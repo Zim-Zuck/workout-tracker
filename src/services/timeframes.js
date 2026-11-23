@@ -1,0 +1,92 @@
+// THE TIMEFRAME REGISTRY.
+//
+// There used to be three independent lists of time windows: Progress.jsx's
+// WINDOWS (2w/4w/6w/12w/1y), progressSummary.js's TIMEFRAMES
+// (4w/3m/6m/1y/all/custom) and ExerciseDetail.jsx's RANGES (1m/3m/6m/1y/all).
+// `3m`, `6m`, `1y` and `all` were defined three times over and happened to
+// agree; `4w` (28 days) and `1m` (30 days) were the same question with two
+// different answers and two different labels. Nothing stopped a fourth list
+// appearing, or one of the duplicates drifting.
+//
+// So the DEFINITIONS are consolidated here and the PRESETS are not. Each screen
+// keeps its own list of ids, because the screens ask different questions: the
+// dashboard asks "what has recent training looked like" and wants short
+// windows; the share card asks "what period am I publishing" and wants long
+// ones plus a custom range. Forcing one list on all three would be an
+// abstraction nobody asked for. What matters is that `6m` means 182 days
+// everywhere, exactly once.
+//
+// THREE LABEL FORMS, because three places need different casing and none of
+// them should change: `label` is title case for the share card's headline,
+// `shortLabel` is the card's uppercase period stamp, and `pill` is the compact
+// form ExerciseDetail's range pills use. The dashboard's lowercase pills
+// ("4 weeks", and "last 4 weeks" in a subtitle) are `label.toLowerCase()`.
+export const WINDOWS = {
+  '2w':     { days: 14,   label: '2 Weeks',   shortLabel: '2 WEEKS',   pill: '2W' },
+  '4w':     { days: 28,   label: '4 Weeks',   shortLabel: '4 WEEKS',   pill: '4W' },
+  '6w':     { days: 42,   label: '6 Weeks',   shortLabel: '6 WEEKS',   pill: '6W' },
+  '12w':    { days: 84,   label: '12 Weeks',  shortLabel: '12 WEEKS',  pill: '12W' },
+  '3m':     { days: 90,   label: '3 Months',  shortLabel: '3 MONTHS',  pill: '3M' },
+  '6m':     { days: 182,  label: '6 Months',  shortLabel: '6 MONTHS',  pill: '6M' },
+  '1y':     { days: 365,  label: '1 Year',    shortLabel: '1 YEAR',    pill: '1Y' },
+  'all':    { days: null, label: 'All Time',  shortLabel: 'ALL TIME',  pill: 'All' },
+  'custom': { days: null, label: 'Custom',    shortLabel: 'CUSTOM',    pill: 'Custom' }
+};
+
+// The Progress dashboard: recent training, so short windows.
+export const DASHBOARD_WINDOWS = ['2w', '4w', '6w', '12w', '1y'];
+
+// The Progress Share Card: publishable periods, plus a custom range.
+export const SHARE_WINDOWS = ['4w', '3m', '6m', '1y', 'all', 'custom'];
+
+// One exercise over time. `1m` (30 days) collapsed into `4w` (28) here rather
+// than keeping a near-duplicate definition alive for a two-day difference.
+export const EXERCISE_WINDOWS = ['4w', '3m', '6m', '1y', 'all'];
+
+// When a timeframe id is not in the registry. 6 months, which is what
+// progressSummary's resolveRange already fell back to.
+const FALLBACK_ID = '6m';
+
+// [{ id, days, label, shortLabel, pill }] for a preset, in preset order.
+export function timeframeList(ids) {
+  return ids.map((id) => ({ id, ...WINDOWS[id] }));
+}
+
+// { value, label } pairs for SegmentedPills. `labelKey` picks which of the
+// registry's three label forms the pills show.
+export function pillOptions(ids, labelKey = 'pill') {
+  return ids.map((id) => ({ value: id, label: WINDOWS[id][labelKey] }));
+}
+
+// The dashboard's pills, which read "2 weeks" rather than "2W".
+export function dashboardPillOptions() {
+  return DASHBOARD_WINDOWS.map((id) => ({ value: id, label: WINDOWS[id].label.toLowerCase() }));
+}
+
+export function windowDays(id) {
+  return WINDOWS[id]?.days ?? null;
+}
+
+// [start, end] for a timeframe id. Moved verbatim from progressSummary.js.
+//
+// `all` spans from the first workout to now, falling back to 4 weeks when there
+// is no history at all — a zero-width range would make every percentage NaN.
+export function resolveRange(timeframeId, workouts, custom) {
+  const now = Date.now();
+  if (timeframeId === 'custom' && custom?.from && custom?.to) {
+    return { start: custom.from, end: custom.to };
+  }
+  const tf = WINDOWS[timeframeId] || WINDOWS[FALLBACK_ID];
+  if (tf.days == null) {
+    const first = (workouts || []).reduce((m, w) => Math.min(m, w.date), now);
+    return { start: workouts?.length ? first : now - 28 * 86400000, end: now };
+  }
+  return { start: now - tf.days * 86400000, end: now };
+}
+
+// The simple "last N days up to now" range, for screens with no custom option.
+// `all` and anything unknown resolve to an unbounded start.
+export function rangeFor(timeframeId, asOf = Date.now()) {
+  const days = windowDays(timeframeId);
+  return { start: days == null ? -Infinity : asOf - days * 86400000, end: asOf };
+}

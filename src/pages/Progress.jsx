@@ -12,6 +12,7 @@ import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
 import { isWorking, workingVolume } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
+import { WINDOWS, dashboardPillOptions, windowDays } from '../services/timeframes.js';
 import { formatWeight } from '../utils/units.js';
 import { startOfWeek, formatDate } from '../utils/date.js';
 
@@ -21,13 +22,11 @@ const MUSCLE_ORDER = [
   'Core', 'Forearms', 'Glutes', 'Hamstrings', 'Quads', 'Calves'
 ];
 
-const WINDOWS = [
-  { value: '2w', label: '2 weeks', days: 14 },
-  { value: '4w', label: '4 weeks', days: 28 },
-  { value: '6w', label: '6 weeks', days: 42 },
-  { value: '12w', label: '12 weeks', days: 84 },
-  { value: '1y', label: '1 year', days: 365 }
-];
+// The window pills, their day counts and their labels all come from the one
+// timeframe registry — see services/timeframes.js for why the presets stay
+// per-screen while the definitions do not.
+const WINDOW_OPTIONS = dashboardPillOptions();
+const windowLabel = (id) => WINDOWS[id].label.toLowerCase();
 
 export default function ProgressScreen({ workout }) {
   const { workouts, exercises } = workout;
@@ -41,8 +40,8 @@ export default function ProgressScreen({ workout }) {
   // device while the leaderboard read a cloud snapshot, and the two disagreed.
   const totals = useWorkoutTotals(workouts);
 
-  const windowDays = WINDOWS.find((w) => w.value === win).days;
-  const since = Date.now() - windowDays * 86400000;
+  const days = windowDays(win);
+  const since = Date.now() - days * 86400000;
   const inWindow = useMemo(() => workouts.filter((w) => w.date >= since), [workouts, since]);
 
   // ---- Typed PRs, at most one per exercise per session ----
@@ -57,7 +56,7 @@ export default function ProgressScreen({ workout }) {
       const wk = startOfWeek(w.date);
       map.set(wk, (map.get(wk) || 0) + workingVolume(w.sets));
     }
-    const weeks = Math.ceil(windowDays / 7);
+    const weeks = Math.ceil(days / 7);
     const out = [];
     let cur = startOfWeek(Date.now());
     for (let i = 0; i < weeks; i++) {
@@ -69,7 +68,7 @@ export default function ProgressScreen({ workout }) {
       cur -= 7 * 86400000;
     }
     return out;
-  }, [workouts, windowDays]);
+  }, [workouts, days]);
 
   // Weekly volume passes 2 tonnes often enough that kilograms stop being
   // readable on an axis. Decided once, for the whole chart, so the bars stay
@@ -188,7 +187,7 @@ export default function ProgressScreen({ workout }) {
         size="sm"
         value={win}
         onChange={setWin}
-        options={WINDOWS.map((w) => ({ value: w.value, label: w.label }))}
+        options={WINDOW_OPTIONS}
       />
 
       {/* Personal records -------------------------------------------------- */}
@@ -272,7 +271,7 @@ export default function ProgressScreen({ workout }) {
       </Section>
 
       {/* Muscle balance ---------------------------------------------------- */}
-      <Section title="Muscle balance" subtitle={`Volume by muscle group, last ${WINDOWS.find((w) => w.value === win).label}.`}>
+      <Section title="Muscle balance" subtitle={`Volume by muscle group, last ${windowLabel(win)}.`}>
         <RadarChart
           data={muscle}
           unit={muscleTonnes ? 't' : 'kg'}

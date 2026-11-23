@@ -1,15 +1,15 @@
 // Aggregates existing workout data into the stat pack used by the Progress Share Card.
 // Reuses calculations.js rather than re-deriving PRs/volume/streaks in a second place.
 import { isWorking, workingVolume, estimate1RM, computeStreak } from './calculations.js';
+import { SHARE_WINDOWS, timeframeList, resolveRange } from './timeframes.js';
 
-export const TIMEFRAMES = [
-  { id: '4w', label: '4 Weeks', shortLabel: '4 WEEKS', days: 28 },
-  { id: '3m', label: '3 Months', shortLabel: '3 MONTHS', days: 90 },
-  { id: '6m', label: '6 Months', shortLabel: '6 MONTHS', days: 182 },
-  { id: '1y', label: '1 Year', shortLabel: '1 YEAR', days: 365 },
-  { id: 'all', label: 'All Time', shortLabel: 'ALL TIME', days: null },
-  { id: 'custom', label: 'Custom', shortLabel: 'CUSTOM', days: null }
-];
+// The share card's own preset, built from the one timeframe registry rather
+// than a fourth hand-maintained list. Shape unchanged: ProgressShareCard reads
+// .id and .label off these.
+export const TIMEFRAMES = timeframeList(SHARE_WINDOWS);
+
+// Re-exported so the card's range maths and this module's cannot diverge.
+export { resolveRange };
 
 // All metrics a card can show, in a sensible default priority order.
 export const METRICS = [
@@ -21,19 +21,6 @@ export const METRICS = [
   { id: 'muscle', label: 'Muscle Distribution' },
   { id: 'repRange', label: 'Rep Ranges' }
 ];
-
-export function resolveRange(timeframeId, workouts, custom) {
-  const now = Date.now();
-  if (timeframeId === 'custom' && custom?.from && custom?.to) {
-    return { start: custom.from, end: custom.to };
-  }
-  const tf = TIMEFRAMES.find((t) => t.id === timeframeId) || TIMEFRAMES[2];
-  if (tf.days == null) {
-    const first = workouts.reduce((m, w) => Math.min(m, w.date), now);
-    return { start: workouts.length ? first : now - 28 * 86400000, end: now };
-  }
-  return { start: now - tf.days * 86400000, end: now };
-}
 
 function formatShortDate(ts) {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

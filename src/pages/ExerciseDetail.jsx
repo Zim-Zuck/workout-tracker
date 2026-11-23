@@ -7,16 +7,14 @@ import { isWorking, estimate1RM } from '../services/calculations.js';
 import { prTimeline } from '../services/prs.js';
 import { workoutTitle } from '../services/splits.js';
 import { anatomyForExercise, tiersFor } from '../services/anatomy.js';
+import { EXERCISE_WINDOWS, WINDOWS, pillOptions, rangeFor } from '../services/timeframes.js';
 import { formatWeight, formatVolume, roundDisplay } from '../utils/units.js';
 import { formatDate } from '../utils/date.js';
 
-const RANGES = [
-  { value: '1m', label: '1M', days: 30 },
-  { value: '3m', label: '3M', days: 90 },
-  { value: '6m', label: '6M', days: 182 },
-  { value: '1y', label: '1Y', days: 365 },
-  { value: 'all', label: 'All', days: null }
-];
+// From the shared registry. The old `1M` (30 days) was a near-duplicate of the
+// dashboard's `4W` (28) — same question, two answers — so it collapsed into it.
+const RANGE_OPTIONS = pillOptions(EXERCISE_WINDOWS);
+const rangePill = (id) => WINDOWS[id].pill;
 
 // One exercise, over time.
 //
@@ -28,8 +26,7 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
   const [range, setRange] = useState('3m');
   const [metric, setMetric] = useState('weight');
 
-  const days = RANGES.find((r) => r.value === range)?.days;
-  const since = days ? Date.now() - days * 86400000 : 0;
+  const { start: since } = rangeFor(range);
 
   const sessions = useMemo(() => {
     return workouts
@@ -127,7 +124,7 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
         size="sm"
         value={range}
         onChange={setRange}
-        options={RANGES.map((r) => ({ value: r.value, label: r.label }))}
+        options={RANGE_OPTIONS}
       />
 
       {tab === 'graph' ? (
@@ -190,7 +187,7 @@ export default function ExerciseDetail({ exercise, workouts, exerciseMap, onBack
             <EmptyState
               icon={ArrowLeft}
               title="Nothing in this window"
-              body={`You have not logged ${exercise.name} in the last ${RANGES.find((r) => r.value === range)?.label}.`}
+              body={`You have not logged ${exercise.name} in the last ${rangePill(range)}.`}
             />
           )}
         </ul>
