@@ -60,7 +60,34 @@ Decisions made:
   machine-independent.
 - Placed on **Progress**, one row directly under the four lifetime stat tiles.
   Hides itself entirely when nothing is reached and nothing is in progress.
-### 3a. Performance (lazy-load, memoise, bundle report) — **remaining**
+### 3a. Performance — **done**
+Tests after: 418 total, 417 pass, 1 skipped, 0 fail.
+
+Bundle, initial download:
+
+| | before | after | change |
+|---|---|---|---|
+| main JS | 629.45 kB (gzip 183.24) | 589.53 kB (gzip 172.12) | **−39.92 kB (−11.12 gzip)** |
+| vendor JS | 228.79 kB (gzip 59.36) | unchanged | — |
+| CSS | 34.20 kB (gzip 7.65) | unchanged | — |
+
+Split into three on-demand chunks: `TrainingEvolution` 14.34 kB (gzip 4.55),
+`ProgressShareCard` 21.11 kB (gzip 7.50), `ExerciseDetail` 6.20 kB (gzip 2.46).
+
+Decisions made:
+- The real finding was not the bundle but a **dead memo**: `since` in
+  `Progress.jsx` was a bare `Date.now()` expression recomputed on every render,
+  so every memo keyed on it re-ran every time — including `rankExercises` over
+  all history. Now memoised on the window.
+- Lazy-loaded the three things behind a tap: Evolution, ExerciseDetail and the
+  share card (which carries the whole canvas renderer). Each gets a Suspense
+  fallback; the full-screen ones announce themselves with `role="status"`.
+- **MilestonesRow is deliberately NOT lazy** (a deviation from the brief). It is
+  about a kilobyte, it imports nothing the dashboard does not already hold, and
+  it renders above the fold — splitting it would trade a visible blank row on
+  every open for no measurable saving.
+- Evolution and ExerciseDetail were already thoroughly memoised; nothing there
+  needed adding.
 ### 3b. Accessibility — **remaining**
 ### 3c. Property/fuzz tests — **remaining**
 ### 3d. Consistency audit — **remaining**

@@ -1,14 +1,25 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Share2, ChevronRight, LineChart as LineIcon, GitCompareArrows } from 'lucide-react';
 import {
   GlassCard, StatBlock, PRBadge, SecondaryButton, TextLink, EmptyState, SegmentedPills
 } from '../ui/index.js';
 import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
-import ExerciseDetail from './ExerciseDetail.jsx';
-import TrainingEvolution from './TrainingEvolution.jsx';
 import MilestonesRow from '../components/MilestonesRow.jsx';
-import ProgressShareCard from '../components/ProgressShareCard.jsx';
+
+// THE THREE THINGS BEHIND A TAP ARE SPLIT OUT OF THE DASHBOARD'S BUNDLE.
+//
+// None of them is on screen when Progress opens, and between them they carry
+// the comparison engine, the distribution charts and the whole share-card
+// canvas renderer. Loading that on the way to a volume graph is work nobody
+// asked for.
+//
+// MilestonesRow is deliberately NOT lazy. It is about a kilobyte, it imports
+// nothing the dashboard does not already hold, and it renders above the fold —
+// splitting it would trade a visible blank row on every open for nothing.
+const ExerciseDetail = lazy(() => import('./ExerciseDetail.jsx'));
+const TrainingEvolution = lazy(() => import('./TrainingEvolution.jsx'));
+const ProgressShareCard = lazy(() => import('../components/ProgressShareCard.jsx'));
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
@@ -71,7 +82,11 @@ export default function ProgressScreen({ workout }) {
   const totals = useWorkoutTotals(workouts);
 
   const days = windowDays(win);
-  const since = Date.now() - days * 86400000;
+  // Pinned to the window, not to the render. This used to be a bare
+  // Date.now() expression, so `since` was a new number on every single render
+  // and every memo keyed on it — including rankExercises over all history —
+  // recomputed every time, which is the opposite of what the memo was for.
+  const since = useMemo(() => Date.now() - days * 86400000, [days]);
   const inWindow = useMemo(() => workouts.filter((w) => w.date >= since), [workouts, since]);
 
   // ---- Typed PRs, at most one per exercise per session ----
@@ -176,24 +191,30 @@ export default function ProgressScreen({ workout }) {
       .sort((a, b) => b.names.length - a.names.length);
   }, [ranked]);
 
+  // A drill-down replaces the whole screen, so the fallback is the screen's own
+  // loading shape rather than a spinner dropped into the middle of nothing.
   if (evolutionOpen) {
     return (
-      <TrainingEvolution
-        workouts={workouts}
-        exercises={exercises}
-        onBack={() => setEvolutionOpen(false)}
-      />
+      <Suspense fallback={<DrillDownFallback label="Loading training evolution" />}>
+        <TrainingEvolution
+          workouts={workouts}
+          exercises={exercises}
+          onBack={() => setEvolutionOpen(false)}
+        />
+      </Suspense>
     );
   }
 
   if (detailFor) {
     return (
-      <ExerciseDetail
-        exercise={detailFor}
-        workouts={workouts}
-        exerciseMap={exMap}
-        onBack={() => setDetailFor(null)}
-      />
+      <Suspense fallback={<DrillDownFallback label={`Loading ${detailFor.name}`} />}>
+        <ExerciseDetail
+          exercise={detailFor}
+          workouts={workouts}
+          exerciseMap={exMap}
+          onBack={() => setDetailFor(null)}
+        />
+      </Suspense>
     );
   }
 
@@ -434,12 +455,30 @@ export default function ProgressScreen({ workout }) {
         </TextLink>
       </div>
 
+      {/* Mounted only once it has been opened, so the canvas renderer is never
+          fetched by somebody who only ever looks at charts. */}
+      {shareOpen && (
+      <Suspense fallback={null}>
       <ProgressShareCard
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         workouts={workouts}
         exercises={exercises}
       />
+      </Suspense>
+      )}
+    </div>
+  );
+}
+
+// The placeholder a drill-down shows while its chunk arrives. Announced, so a
+// screen reader is told the screen is loading rather than finding an empty
+// main region; the visible text is the same sentence, because a loading state
+// nobody can see is a loading state that reads as a broken tap.
+function DrillDownFallback({ label }) {
+  return (
+    <div role="status" aria-live="polite" className="px-base pt-base pb-nav">
+      <p className="text-label font-regular text-ink-tertiary">{label}…</p>
     </div>
   );
 }
