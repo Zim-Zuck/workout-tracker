@@ -19,14 +19,25 @@ export function isWorking(set) {
 // the safer direction to be wrong in for a number used to rank people.
 export const E1RM_REP_CAP = 12;
 
+// THE ARITHMETIC IS TOTAL. normalize.js already coerces a non-finite weightKg
+// or reps to 0 on the way out of the database, but that is a different layer and
+// a different file — anything reaching these two functions by another route (an
+// import, a sync payload, a set still being typed) would otherwise carry an
+// Infinity or a NaN straight through volume, e1RM, the trend, the rankings and
+// the period comparison and out onto the screen as "NaN kg". Two guards here
+// make the invariant local to the arithmetic that depends on it.
+const finite = (n) => (typeof n === 'number' && Number.isFinite(n) ? n : 0);
+
 export function estimate1RM(weightKg, reps) {
-  if (!weightKg || !reps) return 0;
-  const r = Math.min(reps, E1RM_REP_CAP);
-  return weightKg * (1 + r / 30);
+  const w = finite(weightKg);
+  const n = finite(reps);
+  if (!w || !n) return 0;
+  const r = Math.min(n, E1RM_REP_CAP);
+  return w * (1 + r / 30);
 }
 
 export function setVolume(set) {
-  return (set.weightKg || 0) * (set.reps || 0);
+  return finite(set.weightKg) * finite(set.reps);
 }
 
 // Volume of working sets only (warm-ups excluded).

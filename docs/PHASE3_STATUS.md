@@ -130,7 +130,34 @@ the page gradient — `#5A1230` top, `#2A0A18` mid, `#0A0507` base):
 The muted decline ink clears AA (4.5:1) and AAA (7:1) at the worst point on the
 page. No change needed — recorded here so the next person does not re-litigate
 it. `ink-tertiary` at 4.72 is the thinnest margin in the app but still passes AA.
-### 3c. Property/fuzz tests — **remaining**
+### 3c. Property/fuzz tests — **done**
+Tests after: 428 total, 427 pass, 1 skipped, 0 fail (+10 fuzz tests, each
+running 100–300 seeded cases).
+
+`test/fuzz.test.mjs` drives `classifyTrend`, `exerciseConsistency`,
+`rankExercises`, `compareTrainingPeriods`, `buildHighlights` and `milestonesFor`
+over randomised histories: empty, huge (3,000 workouts × 12 sets), duplicate and
+same-millisecond dates, zero and negative weights, string weights, `null`,
+`undefined`, `NaN` and `Infinity`, sets pointing at a deleted exercise, zero-width
+and reversed and non-overlapping period ranges, and exercise libraries that are
+empty/null/a Map/mismatched. Seeded PRNG, so a failure is reproducible from the
+seed printed in the message.
+
+**It found a real bug on the first run.** A non-finite `weightKg` flowed through
+`setVolume` and `estimate1RM` unguarded and came out as `Infinity` in
+`classifyTrend().observedBestKg`, `rankExercises().rows[].volumeKg` and
+`compareTrainingPeriods().a.volumeKg` — i.e. on screen as "NaN kg". Fixed at the
+root: the arithmetic in `calculations.js` is now total. `normalize.js` did
+already coerce non-finite values on the way out of the database, but that is a
+different layer, and anything arriving by another route (an import, a sync
+payload, a set mid-edit) bypassed it.
+
+The tests also assert invariants, not just finiteness: rankings are
+deterministic on equal input, `achieved` is always newest-first, every `next`
+entry is genuinely uncrossed with `0 ≤ pct ≤ 100`, `currentStreak` never exceeds
+`bestStreak`, lifetime volume never goes negative, a `new` delta never claims a
+percentage from a zero baseline, and `milestonesFor` agrees exactly with
+`prTimeline` and `computeStreak`.
 ### 3d. Consistency audit — **remaining**
 ### 3e. ARCHITECTURE.md for the Progress area — **remaining**
 ### Browser verification (after steps 1 and 2) — **done, pass with nothing found**
