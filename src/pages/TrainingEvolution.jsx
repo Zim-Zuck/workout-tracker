@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeft, CornerLeftDown } from 'lucide-react';
 import {
-  GlassCard, SegmentedPills, StatBlock, StaticPill, EmptyState, IconButton, SecondaryButton
+  SegmentedPills, StaticPill, EmptyState, IconButton, SecondaryButton
 } from '../ui/index.js';
 import { DistributionBars } from '../components/Chart.jsx';
 import { COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor } from '../services/timeframes.js';
-import { compareTrainingPeriods, precedingRange } from '../services/trainingEvolution.js';
+import { compareTrainingPeriods, precedingRange, customRange } from '../services/trainingEvolution.js';
 import { buildHighlights } from '../services/exerciseStats.js';
 import { formatVolume } from '../utils/units.js';
 
@@ -16,15 +16,8 @@ const RANGE_OPTIONS = pillOptions(COMPARE_WINDOWS);
 // pickers are the same component twice rather than two near-copies.
 const defaultPeriod = (id) => ({ id, from: '', to: '' });
 
-function resolvePeriod(period, fallbackRange) {
-  if (period.id !== 'custom') return rangeFor(period.id);
-  if (!period.from || !period.to) return null;
-  const start = new Date(period.from).getTime();
-  // Inclusive of the whole closing day — a range picked as 1st to 7th should
-  // contain the 7th's session, which a midnight boundary would drop.
-  const end = new Date(period.to).getTime() + 86399000;
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return null;
-  return { start, end };
+function resolvePeriod(period) {
+  return period.id === 'custom' ? customRange(period.from, period.to) : rangeFor(period.id);
 }
 
 const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -56,17 +49,28 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
   // comparison people actually mean by "am I training more than I was".
   const [matchPreceding, setMatchPreceding] = useState(true);
 
-  const rangeB = resolvePeriod(periodB);
-  const rangeA = matchPreceding && rangeB ? precedingRange(rangeB) : resolvePeriod(periodA);
+  // THE RANGES ARE MEMOIZED, NOT JUST THE COMPARISON. rangeFor() reads
+  // Date.now() for a preset, so resolving on every render moves both ends by a
+  // few milliseconds each time — which changes the memo keys below and makes
+  // them recompute the whole comparison on every render. Resolving once per
+  // period change pins the window instead.
+  const rangeB = useMemo(
+    () => resolvePeriod(periodB),
+    [periodB.id, periodB.from, periodB.to]
+  );
+  const rangeA = useMemo(
+    () => (matchPreceding ? (rangeB ? precedingRange(rangeB) : null) : resolvePeriod(periodA)),
+    [matchPreceding, rangeB, periodA.id, periodA.from, periodA.to]
+  );
 
   const result = useMemo(
     () => (rangeA && rangeB ? compareTrainingPeriods(workouts, exercises, rangeA, rangeB) : null),
-    [workouts, exercises, rangeA?.start, rangeA?.end, rangeB?.start, rangeB?.end]
+    [workouts, exercises, rangeA, rangeB]
   );
 
   const highlights = useMemo(
     () => (rangeB ? buildHighlights(workouts, exercises, rangeB) : null),
-    [workouts, exercises, rangeB?.start, rangeB?.end]
+    [workouts, exercises, rangeB]
   );
 
   return (
@@ -231,7 +235,15 @@ function Comparison({ result, highlights, titleA, titleB }) {
 
       {muscle.length > 0 && (
         <Block title="Muscle split" subtitle="Share of working volume in each period.">
-          <MixBars rows={muscle.slice(0, 8)} valueKey="volumeKg" unit="" format={formatVolume} />
+          {/* Biggest share in either period first. pairDistribution keeps the
+              order it met the labels in, which is period A's — so without this
+              the group that dominated B could sit halfway down the list. Rep
+              ranges deliberately keep their fixed bucket order instead. */}
+          <MixBars
+            rows={[...muscle].sort((x, y) => Math.max(y.a.pct, y.b.pct) - Math.max(x.a.pct, x.b.pct)).slice(0, 8)}
+            valueKey="volumeKg"
+            format={formatVolume}
+          />
         </Block>
       )}
 
@@ -273,7 +285,19 @@ function Row({ label, a, b, delta, muted = false }) {
 
 // Two bars per label, A above B, so the shift is read as a shape rather than
 // from a signed number.
-function MixBars({ rows, valueKey, unit, format }) {
+// A SHARE CAN FALL WHILE THE WORK RISES, and that pairing is the most
+// confusing thing on this screen without a word of explanation: training the
+// same triceps volume alongside a new leg day drops their share by thirty
+// points while the kilograms go up. The bare "−36 pts" reads as a collapse.
+function shareNote(row) {
+  const grew = row.value.kind === 'new' || row.value.abs > 0;
+  const shrank = row.value.kind === 'gone' || row.value.abs < 0;
+  if (row.pctPointDelta < 0 && grew) return 'smaller share of more work';
+  if (row.pctPointDelta > 0 && shrank) return 'bigger share of less work';
+  return null;
+}
+
+function MixBars({ rows, valueKey, unit = '', format }) {
   const withAny = rows.filter((r) => r.a[valueKey] > 0 || r.b[valueKey] > 0);
   if (!withAny.length) return <p className="text-label font-regular text-ink-tertiary">Nothing logged in either period.</p>;
 
@@ -302,6 +326,7 @@ function MixBars({ rows, valueKey, unit, format }) {
             {format ? format(row.a[valueKey]) : `${Math.round(row.a[valueKey])} ${unit}`}
             {' → '}
             {format ? format(row.b[valueKey]) : `${Math.round(row.b[valueKey])} ${unit}`}
+            {shareNote(row) && <span className="not-tabular"> · {shareNote(row)}</span>}
           </p>
         </div>
       ))}

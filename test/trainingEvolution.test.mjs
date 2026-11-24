@@ -8,7 +8,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compareTrainingPeriods, change, precedingRange, rangeDays, EQUAL_LENGTH_TOLERANCE_DAYS
+  compareTrainingPeriods, change, precedingRange, rangeDays,
+  localDayBounds, customRange, EQUAL_LENGTH_TOLERANCE_DAYS
 } from '../src/services/trainingEvolution.js';
 import { muscleVolume, repRangeCounts } from '../src/services/calculations.js';
 
@@ -340,4 +341,64 @@ test('distribution deltas are percentage POINTS, not a percentage of a percentag
 test('every rep-range bucket is present for both periods, in fixed order', () => {
   const r = compare();
   assert.deepEqual(r.repRange.map((x) => x.label), ['1–5', '6–9', '10–14', '15+']);
+});
+
+// ----------------------------------------------------- custom date ranges ----
+//
+// Found in the browser: a range picked as Feb 1 resolved to Feb 2, because
+// new Date("2026-02-01") is UTC midnight while every workout date in this app
+// is a local timestamp. These pin the offset-proof version.
+
+test('a date string becomes the local day, not the UTC one', () => {
+  const { start, end } = localDayBounds('2026-02-01');
+  const s = new Date(start);
+  const e = new Date(end);
+  assert.equal(s.getFullYear(), 2026);
+  assert.equal(s.getMonth(), 1);
+  assert.equal(s.getDate(), 1);
+  assert.equal(s.getHours(), 0);
+  assert.equal(s.getMinutes(), 0);
+  // The closing instant is the same calendar day, never the next one.
+  assert.equal(e.getDate(), 1);
+  assert.equal(e.getMonth(), 1);
+  assert.equal(e.getHours(), 23);
+  assert.equal(e.getMinutes(), 59);
+});
+
+test('a custom range covers whole local days at both ends', () => {
+  const r = customRange('2026-02-01', '2026-02-07');
+  assert.equal(new Date(r.start).getDate(), 1);
+  assert.equal(new Date(r.end).getDate(), 7);
+  assert.equal(new Date(r.end).getHours(), 23);
+  // Seven whole days, give or take a daylight-saving hour.
+  const days = (r.end - r.start) / DAY;
+  assert.ok(days > 6.9 && days < 7.1, `${days} days`);
+});
+
+test('a session logged early on the opening day is inside the range', () => {
+  // The bug this replaces excluded everything before the timezone offset on
+  // day one — an 00:30 session on the 1st fell outside a range starting on it.
+  const r = customRange('2026-02-01', '2026-02-07');
+  const early = new Date(2026, 1, 1, 0, 30).getTime();
+  const late = new Date(2026, 1, 7, 22, 45).getTime();
+  assert.ok(early >= r.start && early <= r.end, 'an early session on day one must count');
+  assert.ok(late >= r.start && late <= r.end, 'a late session on the closing day must count');
+});
+
+test('a single-day custom range is one whole day, not an empty instant', () => {
+  const r = customRange('2026-02-01', '2026-02-01');
+  assert.ok(r.end > r.start);
+  assert.ok((r.end - r.start) / DAY > 0.99);
+});
+
+test('missing, malformed and out-of-order dates give null, not a broken range', () => {
+  assert.equal(customRange('', '2026-02-07'), null);
+  assert.equal(customRange('2026-02-01', ''), null);
+  assert.equal(customRange(undefined, undefined), null);
+  assert.equal(customRange('not-a-date', '2026-02-07'), null);
+  // Out of order.
+  assert.equal(customRange('2026-02-07', '2026-02-01'), null);
+  // A date that does not exist must be rejected, not rolled into March.
+  assert.equal(localDayBounds('2026-02-31'), null);
+  assert.equal(localDayBounds('2026-13-01'), null);
 });
