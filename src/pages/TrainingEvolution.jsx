@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Pencil, RotateCcw, Info } from 'lucide-react';
 import {
-  SegmentedPills, StaticPill, EmptyState, IconButton, GlassCard
+  SegmentedPills, StaticPill, EmptyState, IconButton, GlassCard, BodyPair
 } from '../ui/index.js';
 import { PairedBars } from '../components/Chart.jsx';
 import { color } from '../theme/tokens.js';
@@ -10,6 +10,7 @@ import {
 } from '../services/timeframes.js';
 import { compareTrainingPeriods, precedingRange } from '../services/trainingEvolution.js';
 import { buildHighlights } from '../services/exerciseStats.js';
+import { regionsFor } from '../services/anatomy.js';
 import { formatVolume } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
@@ -117,8 +118,8 @@ function metricsFor(a, b, delta, equalLength) {
 // A drill-down, not a dashboard section: this is a question you go and ask, not
 // one the Progress page should answer at you every time it opens.
 export default function TrainingEvolution({ workouts, exercises, onBack }) {
-  const [periodB, setPeriodB] = useState(defaultPeriod('4w'));
-  const [periodA, setPeriodA] = useState(defaultPeriod('4w'));
+  const [periodB, setPeriodB] = useState(defaultPeriod('1w'));
+  const [periodA, setPeriodA] = useState(defaultPeriod('1w'));
   // Period A defaults to the block immediately before B, which is the
   // comparison people actually mean by "am I training more than I was".
   const [matchPreceding, setMatchPreceding] = useState(true);
@@ -351,7 +352,12 @@ function Comparison({ result, highlights, titleA, titleB }) {
       </Block>
 
       {muscle.length > 0 && (
-        <Block title="Muscle split" subtitle="Share of working volume in each period.">
+        <Block
+          title="Muscle split"
+          subtitle="Share of working volume in each period."
+          info={`"pts" is how many percentage points of your total training volume a muscle group gained or lost — not a score. If chest went from 20% of your volume to 27%, that's "+7 pts", even when the kilograms barely moved: it just means a bigger slice of the same pie.`}
+        >
+          <MuscleMap rows={muscle} title={titleB} />
           {/* Biggest share in either period first. pairDistribution keeps the
               order it met the labels in, which is period A's — so without this
               the group that dominated B could sit halfway down the list. Rep
@@ -473,13 +479,66 @@ function MixBars({ rows, valueKey, format, titleA, titleB }) {
   );
 }
 
-function Block({ title, subtitle, children }) {
+// THE SECTION HEADER CARRIES ITS OWN EXPLANATION. A tooltip would hide the
+// "pts" explainer behind a hover that a touch screen cannot do; a modal would
+// be a whole sheet for two sentences. An inline disclosure is the plainest
+// thing that works on both.
+function Block({ title, subtitle, info, children }) {
+  const [showInfo, setShowInfo] = useState(false);
   return (
     <section className="mt-xxl">
-      <h2 className="text-micro font-semibold uppercase text-ink-tertiary">{title}</h2>
+      <div className="flex items-center gap-xxs">
+        <h2 className="text-micro font-semibold uppercase text-ink-tertiary">{title}</h2>
+        {info && (
+          <IconButton
+            icon={Info}
+            size={13}
+            className="-m-sm"
+            label={showInfo ? `Hide what "pts" means` : `What does "pts" mean?`}
+            aria-pressed={showInfo}
+            onClick={() => setShowInfo((v) => !v)}
+          />
+        )}
+      </div>
       {subtitle && <p className="text-label font-regular text-ink-tertiary mt-xs">{subtitle}</p>}
+      {info && showInfo && (
+        <p className="mt-xs text-label font-regular text-ink-secondary">{info}</p>
+      )}
       <div className="mt-md">{children}</div>
     </section>
+  );
+}
+
+// THE BODY, NOT THE NAME. A reader scanning eight rows of muscle-group text
+// has to translate every label into a mental picture anyway — the figure
+// already used on Today and the live header does that translation for them,
+// at a glance, before the exact numbers in the bars below.
+//
+// Tiers are relative to this period alone: a group holding half of the top
+// group's share or more reads as primary, the rest as secondary, the same
+// split the live session figure draws between a lift's main muscle and the
+// ones it only assists.
+function MuscleMap({ rows, title }) {
+  const withVolume = rows
+    .map((r) => ({ label: r.label, volumeKg: r.b.volumeKg, pct: r.b.pct }))
+    .filter((r) => r.volumeKg > 0);
+  if (!withVolume.length) return null;
+
+  const maxPct = Math.max(...withVolume.map((r) => r.pct));
+  const primary = withVolume.filter((r) => r.pct >= maxPct / 2).map((r) => r.label);
+  const secondary = withVolume.filter((r) => r.pct < maxPct / 2).map((r) => r.label);
+
+  return (
+    <div className="mb-lg flex flex-col items-center gap-sm">
+      <BodyPair
+        front={{ primary: regionsFor(primary, 'front'), secondary: regionsFor(secondary, 'front') }}
+        back={{ primary: regionsFor(primary, 'back'), secondary: regionsFor(secondary, 'back') }}
+        intensity={1}
+        height={200}
+        label={`${title}: ${withVolume.map((r) => r.label).join(', ')}`}
+      />
+      <p className="text-label font-regular text-ink-tertiary">Where this period's volume went.</p>
+    </div>
   );
 }
 

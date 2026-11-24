@@ -22,6 +22,7 @@
 // form ExerciseDetail's range pills use. The dashboard's lowercase pills
 // ("4 weeks", and "last 4 weeks" in a subtitle) are `label.toLowerCase()`.
 export const WINDOWS = {
+  '1w':     { days: 7,    label: '1 Week',    shortLabel: '1 WEEK',    pill: '1W' },
   '2w':     { days: 14,   label: '2 Weeks',   shortLabel: '2 WEEKS',   pill: '2W' },
   '4w':     { days: 28,   label: '4 Weeks',   shortLabel: '4 WEEKS',   pill: '4W' },
   '6w':     { days: 42,   label: '6 Weeks',   shortLabel: '6 WEEKS',   pill: '6W' },
@@ -143,4 +144,4 @@ export function formatDayRange(start, end, { year = false, dash = '–' } = {}) 
 // first workout ever is not a comparison. `custom` stays, because picking an
 // arbitrary block — a training camp, the months either side of an injury — is
 // most of the point of comparing periods at all.
-export const COMPARE_WINDOWS = ['4w', '6w', '12w', '3m', '6m', '1y', 'custom'];
+export const COMPARE_WINDOWS = ['1w', '2w', '4w', '6w', '12w', '3m', '6m', '1y', 'custom'];
