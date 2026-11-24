@@ -31,7 +31,35 @@ Decisions made:
   Both `type="date"` input pairs in the app (share card, Evolution screen) now go
   through `customRange`.
 
-### 2. Milestones — **remaining**
+### 2. Milestones — **done**
+Tests after: 418 total, 417 pass, 1 skipped, 0 fail. Bundle: main JS 629.45 kB
+(gzip 183.24 kB), +3.66 kB over baseline.
+
+Spec: `docs/phase-3-milestones.md`. New files: `src/services/milestones.js`,
+`src/components/MilestonesRow.jsx`, `test/milestones.test.mjs` (22 tests).
+
+Decisions made:
+- **Signature deviation**: `milestonesFor(workouts, { asOf })` — the `exercises`
+  argument the brief specified is not taken, because nothing in the function
+  needs it (count, volume, streak and PR count all come from workouts and their
+  sets). Keeping it would mean an argument that exists only to be ignored, and
+  dropping it is what makes the merged/deleted-exercise edge case free.
+- **Per-lift e1RM thresholds deliberately NOT built** — they cannot be done
+  without noise (one ladder cannot span a bench and a leg press; keying to named
+  lifts duplicates `achievements.js` and breaks on user-created exercises; and
+  e1RM is an estimate a rep-capped set can push across a line). Reasoning in
+  full in the spec. Four categories shipped: workouts, streak, volume, PRs.
+- Milestones are **not** folded into `achievements.js`: that file's own rule is
+  that an achievement must be decidable from the published `stats`+`lifts`
+  summary so a friend's profile can be evaluated, and a date-reached needs the
+  raw history. Three subjects overlap (50 workouts, 8-week streak, 100 t) and are
+  kept apart by screen and shape; spec says why merging would cost either the
+  dates or friends' profiles.
+- The service returns raw timestamps and locale-free labels; the component
+  formats dates. Same split `progressSummary.js` uses, and it keeps the tests
+  machine-independent.
+- Placed on **Progress**, one row directly under the four lifetime stat tiles.
+  Hides itself entirely when nothing is reached and nothing is in progress.
 ### 3a. Performance (lazy-load, memoise, bundle report) — **remaining**
 ### 3b. Accessibility — **remaining**
 ### 3c. Property/fuzz tests — **remaining**

@@ -7,6 +7,7 @@ import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
 import ExerciseDetail from './ExerciseDetail.jsx';
 import TrainingEvolution from './TrainingEvolution.jsx';
+import MilestonesRow from '../components/MilestonesRow.jsx';
 import ProgressShareCard from '../components/ProgressShareCard.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
@@ -220,6 +221,11 @@ export default function ProgressScreen({ workout }) {
         <StatBlock value={`${totals.streakWeeks}w`} label="Streak" align="center" className="whitespace-nowrap" />
         <StatBlock value={totals.total} label="Total" align="center" className="whitespace-nowrap" />
       </div>
+
+      {/* Lifetime milestones sit with the lifetime tiles, because they answer
+          the same question with a date attached. One row, no heading of its
+          own beyond a label; it hides itself when there is nothing to say. */}
+      <MilestonesRow workouts={workouts} />
 
       <SegmentedPills
         className="mt-lg"
