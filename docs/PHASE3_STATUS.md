@@ -203,7 +203,7 @@ withheld, so a screen grouping them never falls back to the status — and the
 rep-capped case, which has an ordinary status and no trend reason, has somewhere
 to go. The test's actual subject (`status === 'noisy'`) is untouched, and three
 new tests pin the new contract.
-### 3e. ARCHITECTURE.md for the Progress area — **remaining**
+### 3e. ARCHITECTURE.md for the Progress area — **done** (`docs/ARCHITECTURE.md`, b7042ec)
 ### Browser verification (after steps 1 and 2) — **done, pass with nothing found**
 - Dev origin `:5173`, REAL data, read-only. Integrity snapshot taken before and
   to be re-checked at the end: 12 workouts, 72 exercises, 132 sets, 57,212 kg.
@@ -222,4 +222,20 @@ new tests pin the new contract.
   states: one session → row shows only "Next: 4-week streak — 3 more weeks";
   empty history → row hidden entirely and Progress shows its own empty state.
   One-session fixture restored afterwards.
-### Final report — **remaining**
+### Final report — **done**
+Published to the Phase 0–2 report page, now Phases 0–3:
+https://claude.ai/code/artifact/f86bde61-fce4-46b2-b3a0-7e92dbaf83b3
+
+**Phase 3 is complete.** Final: 431 tests, 430 pass, 1 skipped (predates this
+work), 0 fail. Initial JS 625.79 kB → 590.59 kB. Real IndexedDB on :5173
+confirmed byte-identical to the opening snapshot: 12 workouts, 72 exercises,
+132 sets, 57,212 kg.
+
+Deliberately left alone, for whoever picks this up next:
+- `median` is duplicated in `exerciseStats.js` and `weeklyRecap.js`; `csvField`
+  in `dataManager.js` and `workoutExport.js`. Both pairs predate Phase 3 and sit
+  in the recap and export paths, outside the Progress area.
+- The Milestones / Achievements subject overlap (50 workouts, 8-week streak,
+  100 t). Not merged — see `docs/phase-3-milestones.md` for why.
+- Vite's 500 kB chunk warning still fires; the remaining weight is React,
+  Recharts and the app itself.
