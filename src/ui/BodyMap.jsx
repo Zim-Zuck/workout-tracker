@@ -32,6 +32,17 @@ export default function BodyMap({
   height = 64,
   treatment = 'engraved',   // engraved | flat | wire
   accent = color.ink,
+  // TAP-TO-HIGHLIGHT, OPTIONAL AND OFF BY DEFAULT. Every existing caller (the
+  // live header, the finish plate, a workout row in History) renders exactly
+  // as before, because a figure that is just a picture has nothing to call.
+  // Passing onRegionClick turns every drawn region into a real 44pt-adjacent
+  // target; `selected` draws a focus ring under one or more regions, so a tap
+  // on the figure and a tap on the list row it names read as the same
+  // gesture. A single id or an array both work — a muscle group can own more
+  // than one region on a view (Back is `lats` and `rhomboids` on the back).
+  onRegionClick,
+  selected,
+  regionLabel = (id) => id,
   className,
   style
 }) {
@@ -72,6 +83,8 @@ export default function BodyMap({
   }
 
   const sil = silhouettePaint(treatment);
+  const selectedIds = selected == null ? [] : Array.isArray(selected) ? selected : [selected];
+  const selectedPaths = selectedIds.map((id) => src[id]).filter(Boolean);
 
   return (
     <svg
@@ -80,7 +93,7 @@ export default function BodyMap({
       height={height}
       className={className}
       style={{ display: 'block', overflow: 'visible', flex: 'none', ...style }}
-      aria-hidden="true"
+      aria-hidden={onRegionClick ? undefined : 'true'}
       focusable="false"
     >
       <defs>
@@ -130,12 +143,40 @@ export default function BodyMap({
           strokeLinejoin="round"
           // 250ms on opacity and fill only, per the design system's motion rule,
           // and the global prefers-reduced-motion rule in index.css collapses it.
-          style={{ transition: `opacity var(--motion-slow) var(--motion-ease), fill-opacity var(--motion-slow) var(--motion-ease)` }}
+          style={{
+            transition: `opacity var(--motion-slow) var(--motion-ease), fill-opacity var(--motion-slow) var(--motion-ease)`,
+            cursor: onRegionClick ? 'pointer' : undefined
+          }}
+          role={onRegionClick ? 'button' : undefined}
+          tabIndex={onRegionClick ? 0 : undefined}
+          aria-label={onRegionClick ? regionLabel(m.id) : undefined}
+          aria-pressed={onRegionClick ? selectedIds.includes(m.id) : undefined}
+          onClick={onRegionClick ? () => onRegionClick(m.id) : undefined}
+          onKeyDown={onRegionClick ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRegionClick(m.id); }
+          } : undefined}
         />
       ))}
 
       {hatches.map((h) => (
         <path key={`hatch-${h.id}`} d={h.d} fill={`url(#${ids.hatch})`} opacity={h.opacity} />
+      ))}
+
+      {/* THE SELECTION RING. A stroke on top of everything else, in the same
+          accent a tap on a list row already uses — the figure and the row name
+          one muscle with the same colour, never with colour alone (the row it
+          came from still carries the text). */}
+      {selectedPaths.map((d, i) => (
+        <path
+          key={`sel-${i}`}
+          d={d}
+          fill="none"
+          stroke={color.pr}
+          strokeWidth="2.4"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          opacity="0.95"
+        />
       ))}
     </svg>
   );

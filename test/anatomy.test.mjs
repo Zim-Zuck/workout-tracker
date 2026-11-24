@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const { DEFAULT_EXERCISES, MUSCLE_GROUPS } = await import('../src/data/defaultExercises.js');
-const { MUSCLE_ANATOMY, tiersFor, anatomyForExercise, regionsFor, sessionAnatomy } =
+const { MUSCLE_ANATOMY, tiersFor, anatomyForExercise, regionsFor, groupForRegion, sessionAnatomy } =
   await import('../src/services/anatomy.js');
 
 const byId = new Map(DEFAULT_EXERCISES.map((e) => [e.id, e]));
@@ -106,6 +106,21 @@ test('a group contributes nothing to a view it does not appear on', () => {
 test('Core spans both views', () => {
   assert.ok(regionsFor(['Core'], 'front').includes('abs'));
   assert.ok(regionsFor(['Core'], 'back').includes('lower_back'));
+});
+
+// ---- groupForRegion is the exact reverse of regionsFor --------------------
+
+test('every region regionsFor() can produce maps back to the group that produced it', () => {
+  for (const [group, entry] of Object.entries(MUSCLE_ANATOMY)) {
+    for (const id of [...entry.front, ...entry.back]) {
+      assert.equal(groupForRegion(id), group, `${id} should map back to ${group}`);
+    }
+  }
+});
+
+test('an unknown region resolves to null, not a guess', () => {
+  assert.equal(groupForRegion('not_a_region'), null);
+  assert.equal(groupForRegion(undefined), null);
 });
 
 // ---- Sessions -------------------------------------------------------------

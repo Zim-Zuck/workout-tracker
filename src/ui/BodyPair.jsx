@@ -20,15 +20,24 @@ export default function BodyPair({
   gap = 4,
   stage = false,
   label,
-  className
+  className,
+  // Forwarded to both figures, see BodyMap — off by default everywhere this
+  // was already in use.
+  onRegionClick,
+  selected,
+  regionLabel
 }) {
   const stageSize = height * 1.15;
 
   return (
     <div
       className={className}
-      role="img"
-      aria-label={label || undefined}
+      // A static pair is one picture, named by `label`. An interactive one
+      // hands each region its own role="button" and label instead — role="img"
+      // on the wrapper would tell assistive tech this is a single flat image
+      // with focusable things improperly nested inside it.
+      role={onRegionClick ? undefined : 'img'}
+      aria-label={onRegionClick ? undefined : (label || undefined)}
       style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', gap }}
     >
       {stage && (
@@ -43,8 +52,16 @@ export default function BodyPair({
           }}
         />
       )}
-      <BodyMap view="front" box={FULL_BOX} height={height} intensity={intensity} {...front} />
-      <BodyMap view="back" box={FULL_BOX} height={height} intensity={intensity} {...back} />
+      <BodyMap
+        view="front" box={FULL_BOX} height={height} intensity={intensity}
+        onRegionClick={onRegionClick} selected={selected} regionLabel={regionLabel}
+        {...front}
+      />
+      <BodyMap
+        view="back" box={FULL_BOX} height={height} intensity={intensity}
+        onRegionClick={onRegionClick} selected={selected} regionLabel={regionLabel}
+        {...back}
+      />
     </div>
   );
 }
