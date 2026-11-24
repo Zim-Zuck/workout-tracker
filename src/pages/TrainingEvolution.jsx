@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ArrowLeft, Pencil, RotateCcw, TrendingUp, Minus, ChevronDown
+  ArrowLeft, Pencil, RotateCcw, TrendingUp, Minus, ChevronDown, Shuffle
 } from 'lucide-react';
 import {
   SegmentedPills, SegmentedTrack, StaticPill, EmptyState, IconButton, GlassCard, BodyPair,
@@ -14,6 +14,7 @@ import { compareTrainingPeriods, precedingRange } from '../services/trainingEvol
 import { buildHighlights } from '../services/exerciseStats.js';
 import { regionsFor, groupForRegion } from '../services/anatomy.js';
 import { buildVerdict, classifyVolumeTrend, summarizeDataGaps } from '../services/evolutionNarrative.js';
+import { buildFunFacts } from '../services/funFacts.js';
 import { formatVolume } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
@@ -210,6 +211,8 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
         <Comparison
           result={result}
           highlights={highlights}
+          workouts={workouts}
+          exerciseLibrary={exercises}
           titleA={matchPreceding ? 'The period before' : periodTitle(periodA, rangeA)}
           titleB={periodTitle(periodB, rangeB)}
         />
@@ -283,7 +286,7 @@ function DateFields({ period, onChange }) {
   );
 }
 
-function Comparison({ result, highlights, titleA, titleB }) {
+function Comparison({ result, highlights, workouts, exerciseLibrary, titleA, titleB }) {
   const { a, b, delta, flags, shape, repRange, muscle, exercises } = result;
 
   if (flags.emptyBoth) {
@@ -338,7 +341,14 @@ function Comparison({ result, highlights, titleA, titleB }) {
         titleB={titleB}
       />
 
-      <VerdictStrip result={result} />
+      {/* Keyed by the compared ranges so a fresh period starts back on the
+          verdict (fact #1) rather than wherever the tap cycle had landed. */}
+      <FunFactCard
+        key={`${result.a.start}-${result.a.end}-${result.b.start}-${result.b.end}`}
+        result={result}
+        workouts={workouts}
+        exerciseLibrary={exerciseLibrary}
+      />
 
       <RepRangesCard repRange={repRange} titleA={titleA} titleB={titleB} />
 
@@ -415,13 +425,36 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// ONE OR TWO SENTENCES, directly under the summary card. Everything it says
-// is a reformulation of numbers that card and the sections below it already
-// show in full — this is the "so what", not a new claim.
-function VerdictStrip({ result }) {
+// FUN FACT, directly under the summary card. The first fact is always the
+// plain-English verdict for whichever two periods are on screen (the "so
+// what" of everything above it); tapping cycles into all-time trivia that no
+// chart on this screen could show at a glance — a heaviest set, a streak, a
+// weekday you've never once trained on. The index resets to the verdict
+// whenever the compared periods change, because this component gets a fresh
+// `key` from them (see Comparison) and mounts clean.
+function FunFactCard({ result, workouts, exerciseLibrary }) {
+  const [index, setIndex] = useState(0);
+  const facts = useMemo(() => buildFunFacts(workouts, exerciseLibrary), [workouts, exerciseLibrary]);
+  const items = useMemo(() => [buildVerdict(result), ...facts], [result, facts]);
+  const current = items[index % items.length];
+
   return (
-    <GlassCard className="mt-lg p-lg">
-      <p className="text-body font-regular text-ink">{buildVerdict(result)}</p>
+    <GlassCard
+      as="button"
+      type="button"
+      interactive
+      onClick={() => setIndex((i) => (i + 1) % items.length)}
+      aria-label={`Fun fact, ${(index % items.length) + 1} of ${items.length}. Tap for another.`}
+      className="mt-lg p-lg text-left w-full"
+    >
+      <div className="flex items-center justify-between gap-sm">
+        <span className="text-micro font-semibold uppercase text-ink-tertiary">Fun fact</span>
+        <Shuffle size={14} strokeWidth={2.4} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
+      </div>
+      {/* Keying the paragraph by index restarts the rise animation on every
+          tap, which is the only confirmation a reader gets that the tap
+          landed — the text itself can look similar fact to fact. */}
+      <p key={index} className="mt-sm text-body font-regular text-ink anim-rise">{current}</p>
     </GlassCard>
   );
 }
