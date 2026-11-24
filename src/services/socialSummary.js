@@ -59,6 +59,20 @@ export function buildStatsSummary(workouts, asOf = Date.now()) {
 // "Best" is the heaviest weight actually lifted, because that is the headline
 // the product shows everywhere. Estimated 1RM rides along as a tiebreaker for
 // the leaderboard, never as the number on the profile.
+//
+// WHY THIS DOES NOT DEFER TO prs.js, WHICH IS THE PR AUTHORITY EVERYWHERE ELSE.
+// prs.js answers "did this session set a record?" — a question about one
+// lifter's own history, with three kinds in priority order and at most one per
+// exercise per session. This answers a different question: "what is the single
+// number that represents this lifter's bench press to everybody else?" Those
+// are not the same, and a session-scoped, kind-categorised answer cannot be
+// compared across two people.
+//
+// It is also the local→cloud boundary. These rows are published to a schema
+// other clients read, so the rule has to stay stable independently of how the
+// app happens to categorise a PR today; moving it behind prs.js would mean a
+// change to PR priority silently rewriting everybody's leaderboard. Heaviest
+// weight wins, ties broken on reps, and that is deliberately dull.
 export function buildLiftsSummary(workouts) {
   const best = new Map(); // exerciseId -> row
 

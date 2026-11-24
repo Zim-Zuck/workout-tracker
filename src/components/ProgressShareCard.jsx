@@ -9,16 +9,24 @@ import {
 
 // Metric catalogue per style. Minimal deliberately excludes the distribution charts —
 // those are "dashboard" content, not something you'd post as a hero stat.
+//
+// `prs` KEEPS ITS ID AND ITS SUMMARY KEY, AND LOSES ITS NAME. What it holds is
+// progressSummary's period improvement — current best estimated 1RM against the
+// best before the period opened — which is not the app's definition of a
+// personal record (prs.js: weight, reps or volume, one per exercise per
+// session, judged against all history). It would call a lift a record for
+// beating a baseline it had already beaten before the window opened. The label
+// now says what the number is; the id stays so nothing downstream moves.
 const STYLE_METRICS = {
   minimal: [
-    { id: 'prs', label: 'Personal records' },
+    { id: 'prs', label: 'Biggest improvements' },
     { id: 'workouts', label: 'Workouts' },
     { id: 'volume', label: 'Volume' },
     { id: 'streak', label: 'Streak' },
     { id: 'strength', label: 'Strength line' }
   ],
   detailed: [
-    { id: 'prs', label: 'Personal records' },
+    { id: 'prs', label: 'Biggest improvements' },
     { id: 'strength', label: 'Strength progression' },
     { id: 'workouts', label: 'Workouts' },
     { id: 'volume', label: 'Volume' },
@@ -46,7 +54,7 @@ const MUSCLE_CHART_H = 210;
 const MINIMAL_WEIGHT = { prs: 3, workouts: 1, volume: 1, streak: 1, strength: 1 };
 const MINIMAL_BUDGET = 5;
 
-// How many exercises each style's Personal Records / Strength section can hold before
+// How many exercises each style's Biggest Improvements / Strength section can hold before
 // it starts feeling crowded — mirrors the metric-crowding cap-and-warn pattern above.
 const EXERCISE_CAP = { minimal: 2, detailed: 3 };
 
@@ -188,7 +196,7 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
     return buildProgressSummary(workouts, exercises, { timeframeId, custom });
   }, [open, workouts, exercises, timeframeId, custom]);
 
-  // Exercise picker: which lifts show up in Personal Records / drive the Strength line.
+  // Exercise picker: which lifts show up in Biggest Improvements / drive the Strength line.
   // Defaults to the top improvers this period (or, failing that, whatever was trained).
   const exerciseOptions = summary?.exerciseOptions || [];
   const defaultExerciseIds = summary
@@ -589,7 +597,9 @@ function buildTiles(summary, renderedSet, renderedExercises, volumeMode) {
   const tiles = [];
   if (renderedSet.has('prs')) {
     for (const pr of renderedExercises) {
-      tiles.push({ value: formatWeight(pr.valueKg), label: `${pr.exerciseName.toUpperCase()} PR` });
+      // Was "<NAME> PR" over a number that is an estimated 1RM, which rule 3
+      // in prs.js says is never a thing you hit. Same figure, honest label.
+      tiles.push({ value: formatWeight(pr.valueKg), label: `${pr.exerciseName.toUpperCase()} EST. 1RM` });
     }
   }
   if (renderedSet.has('workouts') && summary.training.workoutCount > 0) {
@@ -701,7 +711,7 @@ function drawDetailed(ctx, W, H, M, summary, renderedSet, renderedExercises, str
   if (renderedSet.has('prs') && prCount > 0 && y + 44 + prCount * 48 + 56 <= maxY) {
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `600 20px ${FONT_TEXT}`;
-    ctx.fillText('PERSONAL RECORDS', M, y);
+    ctx.fillText('BIGGEST IMPROVEMENTS', M, y);
     y += 44;
     for (const pr of renderedExercises.slice(0, 3)) {
       ctx.fillStyle = PALETTE.text;

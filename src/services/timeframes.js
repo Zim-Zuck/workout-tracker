@@ -90,3 +90,9 @@ export function rangeFor(timeframeId, asOf = Date.now()) {
   const days = windowDays(timeframeId);
   return { start: days == null ? -Infinity : asOf - days * 86400000, end: asOf };
 }
+
+// The Training Evolution comparison. No `all`: two periods both running to the
+// first workout ever is not a comparison. `custom` stays, because picking an
+// arbitrary block — a training camp, the months either side of an injury — is
+// most of the point of comparing periods at all.
+export const COMPARE_WINDOWS = ['4w', '6w', '12w', '3m', '6m', '1y', 'custom'];

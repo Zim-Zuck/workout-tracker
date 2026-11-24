@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Share2, ChevronRight, LineChart as LineIcon } from 'lucide-react';
+import { Share2, ChevronRight, LineChart as LineIcon, GitCompareArrows } from 'lucide-react';
 import {
   GlassCard, StatBlock, PRBadge, SecondaryButton, TextLink, EmptyState, SegmentedPills
 } from '../ui/index.js';
 import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
 import ExerciseDetail from './ExerciseDetail.jsx';
+import TrainingEvolution from './TrainingEvolution.jsx';
 import ProgressShareCard from '../components/ProgressShareCard.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
@@ -59,6 +60,7 @@ export default function ProgressScreen({ workout }) {
   const toast = useToast();
   const [shareOpen, setShareOpen] = useState(false);
   const [detailFor, setDetailFor] = useState(null);
+  const [evolutionOpen, setEvolutionOpen] = useState(false);
   const [win, setWin] = useState('4w');
   const [sort, setSort] = useState('frequency');
 
@@ -172,6 +174,16 @@ export default function ProgressScreen({ workout }) {
       .map(([reason, names]) => ({ reason, names }))
       .sort((a, b) => b.names.length - a.names.length);
   }, [ranked]);
+
+  if (evolutionOpen) {
+    return (
+      <TrainingEvolution
+        workouts={workouts}
+        exercises={exercises}
+        onBack={() => setEvolutionOpen(false)}
+      />
+    );
+  }
 
   if (detailFor) {
     return (
@@ -386,6 +398,28 @@ export default function ProgressScreen({ workout }) {
           </p>
         ))}
       </Section>
+
+      {/* ONE CARD, NOT A SECTION. Comparing two periods is a question you go
+          and ask, not one the dashboard should answer at you every time it
+          opens — so it is a drill-down behind a single row, the same shape as
+          an exercise row above it. */}
+      <GlassCard className="mt-xxl p-0 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setEvolutionOpen(true)}
+          className="w-full min-h-tap p-base flex items-center gap-md text-left
+                     transition-colors duration-fast ease-out active:bg-glass-pressed"
+        >
+          <GitCompareArrows size={20} className="text-ink-secondary shrink-0" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-body font-regular text-ink">Training evolution</span>
+            <span className="block text-label font-regular text-ink-tertiary mt-xxs">
+              Compare two periods, and see what changed.
+            </span>
+          </span>
+          <ChevronRight size={17} className="text-ink-tertiary shrink-0" />
+        </button>
+      </GlassCard>
 
       <div className="mt-xxl flex items-center justify-center gap-md">
         <SecondaryButton icon={Share2} onClick={() => setShareOpen(true)}>Share progress</SecondaryButton>
