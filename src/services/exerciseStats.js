@@ -314,3 +314,89 @@ export function rankExercises(workouts, exercises, { mode = 'frequency', start =
 export function progressionPossible(windowDays) {
   return windowDays == null || windowDays >= TREND_MIN_SPAN_DAYS;
 }
+
+// ---------------------------------------------------------------------------
+// HIGHLIGHTS — Training Intelligence v1
+// ---------------------------------------------------------------------------
+//
+// Deterministic templates over numbers that have already been computed. No
+// model, no API, no new thresholds: improving, steady, noisy and insufficient
+// mean exactly what classifyTrend decided they mean, and every sentence states
+// the figures it rests on so a reader can check it against the graph.
+//
+// "Too little data" counts ONLY status 'insufficient'. A noisy lift has plenty
+// of data; its numbers just jump around. Folding the two together would tell
+// somebody to train more when the actual answer is that their lifts are
+// inconsistent — different problem, different advice.
+
+export const HIGHLIGHT_LIMIT = 3;
+
+// "3 weeks" reads better than "21 days" and the trend minimum guarantees at
+// least three whole weeks, so there is no sub-week case to handle.
+function weeksPhrase(spanDays) {
+  const weeks = Math.max(1, Math.round(spanDays / 7));
+  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
+}
+
+function sessionsPhrase(n) {
+  return `${n} ${n === 1 ? 'session' : 'sessions'}`;
+}
+
+function improvingSentence(name, trend) {
+  const sign = trend.pctChange > 0 ? '+' : '−';
+  return `${name}: ${sign}${Math.abs(trend.pctChange).toFixed(1)}% over ${weeksPhrase(trend.spanDays)}, ${sessionsPhrase(trend.sessions)}`;
+}
+
+// Names the threshold rather than restating its value, so tuning
+// TREND_FLAT_PCT cannot leave this sentence lying.
+function steadySentence(name, trend) {
+  return `${name}: within ${TREND_FLAT_PCT}% over ${weeksPhrase(trend.spanDays)}, ${sessionsPhrase(trend.sessions)}`;
+}
+
+const REASON_PHRASE = {
+  too_few_sessions: (n) => `${n} under ${TREND_MIN_SESSIONS} sessions`,
+  span_too_short: (n) => `${n} trained over less than ${TREND_MIN_SPAN_DAYS} days`,
+  no_load: (n) => `${n} with no load logged`
+};
+
+export function buildHighlights(workouts, exercises, range) {
+  const { rows, withheld } = rankExercises(workouts, exercises, { ...range, mode: 'progression' });
+
+  // rows arrive sorted by percentage gained, so the top improvers are the head
+  // of the list and need no second sort.
+  const improving = rows
+    .filter((r) => r.trend.status === 'improving')
+    .slice(0, HIGHLIGHT_LIMIT)
+    .map((r) => ({ exercise: r.exercise, trend: r.trend, sentence: improvingSentence(r.exercise.name, r.trend) }));
+
+  const steady = rows
+    .filter((r) => r.trend.status === 'steady')
+    .slice(0, HIGHLIGHT_LIMIT)
+    .map((r) => ({ exercise: r.exercise, trend: r.trend, sentence: steadySentence(r.exercise.name, r.trend) }));
+
+  const noisy = withheld.filter((r) => r.status === 'noisy');
+  const insufficient = withheld.filter((r) => r.status === 'insufficient');
+
+  const byReason = {};
+  for (const row of insufficient) byReason[row.reason] = (byReason[row.reason] || 0) + 1;
+
+  const reasonParts = Object.entries(byReason)
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => (REASON_PHRASE[reason] ? REASON_PHRASE[reason](n) : `${n} for another reason`));
+
+  return {
+    improving,
+    steady,
+    steadyTotal: rows.filter((r) => r.trend.status === 'steady').length,
+    tooVariable: { count: noisy.length, names: noisy.map((r) => r.exercise.name) },
+    needMoreData: { count: insufficient.length, byReason },
+    sentences: {
+      needMoreData: insufficient.length
+        ? `${insufficient.length} ${insufficient.length === 1 ? 'lift needs' : 'lifts need'} more data: ${reasonParts.join(', ')}`
+        : null,
+      tooVariable: noisy.length
+        ? `${noisy.length} ${noisy.length === 1 ? 'lift is' : 'lifts are'} too variable to call: ${noisy.map((r) => r.exercise.name).join(', ')}`
+        : null
+    }
+  };
+}
