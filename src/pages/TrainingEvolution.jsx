@@ -4,8 +4,8 @@ import {
   SegmentedPills, StaticPill, EmptyState, IconButton, SecondaryButton
 } from '../ui/index.js';
 import { DistributionBars } from '../components/Chart.jsx';
-import { COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor } from '../services/timeframes.js';
-import { compareTrainingPeriods, precedingRange, customRange } from '../services/trainingEvolution.js';
+import { COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor, customRange } from '../services/timeframes.js';
+import { compareTrainingPeriods, precedingRange } from '../services/trainingEvolution.js';
 import { buildHighlights } from '../services/exerciseStats.js';
 import { formatVolume } from '../utils/units.js';
 

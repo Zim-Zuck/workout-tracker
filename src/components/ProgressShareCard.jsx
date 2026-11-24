@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Share2, Download, X, Check, Search, Star } from 'lucide-react';
 import { buildProgressSummary, strengthSeriesFor, TIMEFRAMES } from '../services/progressSummary.js';
+import { customRange } from '../services/timeframes.js';
 import { formatWeight } from '../utils/units.js';
 import {
   PALETTE, FONT_DISPLAY, FONT_TEXT,
@@ -182,13 +183,12 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
     setVolumeMode('pct');
   }, [open]);
 
-  const custom = useMemo(() => {
-    if (!customFrom || !customTo) return null;
-    const from = new Date(customFrom).getTime();
-    const to = new Date(customTo).getTime() + 86399000;
-    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) return null;
-    return { from, to };
-  }, [customFrom, customTo]);
+  // customRange() is the one place a pair of "YYYY-MM-DD" date inputs becomes a
+  // pair of timestamps, so the card's custom window and the Training Evolution
+  // screen's are the same window to the millisecond. This used to parse the
+  // strings with new Date(), which reads them as UTC midnight and shifted both
+  // ends by the timezone offset.
+  const custom = useMemo(() => customRange(customFrom, customTo), [customFrom, customTo]);
 
   const summary = useMemo(() => {
     if (!open) return null;

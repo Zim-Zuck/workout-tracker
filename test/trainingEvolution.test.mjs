@@ -9,8 +9,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   compareTrainingPeriods, change, precedingRange, rangeDays,
-  localDayBounds, customRange, EQUAL_LENGTH_TOLERANCE_DAYS
+  EQUAL_LENGTH_TOLERANCE_DAYS
 } from '../src/services/trainingEvolution.js';
+import { localDayBounds, customRange } from '../src/services/timeframes.js';
 import { muscleVolume, repRangeCounts } from '../src/services/calculations.js';
 
 const DAY = 86400000;

@@ -250,7 +250,7 @@ test("D1: a custom range ending in the past still shows today's streak", () => {
   const history = recentHistory();
   const summary = buildProgressSummary(history, EXERCISES, {
     timeframeId: 'custom',
-    custom: { from: Date.now() - 200 * DAY, to: Date.now() - 120 * DAY }
+    custom: { start: Date.now() - 200 * DAY, end: Date.now() - 120 * DAY }
   });
   assert.equal(summary.streakWeeks, computeTotals(history).streakWeeks);
   assert.ok(summary.streakWeeks > 0);

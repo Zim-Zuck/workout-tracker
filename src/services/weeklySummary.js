@@ -15,6 +15,7 @@ import { isWorking, setVolume, estimate1RM } from './calculations.js';
 import { prKindFrom } from './prs.js';
 import { isShareableExercise } from './socialSummary.js';
 import { startOfWeek, startOfDay, ymd } from '../utils/date.js';
+import { localDayBounds } from './timeframes.js';
 
 export const WEEK_MS = 7 * 86400000;
 
@@ -311,10 +312,10 @@ export function currentWeekKey(asOf = Date.now()) {
   return ymd(startOfWeek(asOf));
 }
 
-// Parses a YYYY-MM-DD week key back to local midnight. Deliberately not
-// new Date(key), which parses a bare date string as UTC and can land on the
-// previous day for anyone west of Greenwich.
+// Parses a YYYY-MM-DD week key back to local midnight, through the same helper
+// the custom date pickers use. Deliberately not new Date(key), which parses a
+// bare date string as UTC and can land on the previous day for anyone west of
+// Greenwich. A malformed key gives NaN, as it did before.
 export function weekKeyToMs(key) {
-  const [y, m, d] = String(key).split('-').map(Number);
-  return new Date(y, m - 1, d).getTime();
+  return localDayBounds(key)?.start ?? NaN;
 }

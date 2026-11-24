@@ -7,7 +7,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   WINDOWS, DASHBOARD_WINDOWS, SHARE_WINDOWS, EXERCISE_WINDOWS,
-  timeframeList, pillOptions, dashboardPillOptions, windowDays, resolveRange, rangeFor
+  timeframeList, pillOptions, dashboardPillOptions, windowDays, resolveRange, rangeFor,
+  customRange, localDayBounds
 } from '../src/services/timeframes.js';
 import { TIMEFRAMES } from '../src/services/progressSummary.js';
 
@@ -115,10 +116,10 @@ test('resolveRange on `all` with no history falls back to 4 weeks, not a zero ra
 test('resolveRange honours a custom range, and ignores a half-filled one', () => {
   const from = Date.now() - 50 * DAY;
   const to = Date.now() - 20 * DAY;
-  assert.deepEqual(resolveRange('custom', [], { from, to }), { start: from, end: to });
+  assert.deepEqual(resolveRange('custom', [], { start: from, end: to }), { start: from, end: to });
   // A custom id with no usable dates must not produce a broken range; it falls
   // through to the preset path, as it always did.
-  const partial = resolveRange('custom', [], { from });
+  const partial = resolveRange('custom', [], { start: from });
   assert.ok(partial.end > partial.start);
 });
 
@@ -126,4 +127,45 @@ test('rangeFor is unbounded below for `all`', () => {
   const asOf = 1_700_000_000_000;
   assert.deepEqual(rangeFor('all', asOf), { start: -Infinity, end: asOf });
   assert.deepEqual(rangeFor('4w', asOf), { start: asOf - 28 * DAY, end: asOf });
+});
+
+// THE SHARE CARD AND THE EVOLUTION SCREEN PICK THE SAME DAYS.
+//
+// Both screens offer a custom range through a pair of "YYYY-MM-DD" date inputs.
+// They used to parse those strings separately — the Evolution screen through
+// customRange(), the share card through new Date(), which reads a bare date as
+// UTC midnight. In UTC+2 the card's window therefore opened at 02:00 on its
+// first day (missing an early session) and ran two hours into the day after its
+// last. Both now go through customRange(), and resolveRange() takes the range
+// it returns unchanged, so these tests pin the two paths to one answer.
+test('the share card and the Evolution screen resolve a custom range identically', () => {
+  // What TrainingEvolution.jsx computes for a custom period.
+  const evolution = customRange('2026-02-01', '2026-02-07');
+  // What ProgressShareCard.jsx hands buildProgressSummary, which resolves it
+  // through resolveRange exactly as below.
+  const shareCard = resolveRange('custom', [], customRange('2026-02-01', '2026-02-07'));
+  assert.deepEqual(shareCard, evolution);
+});
+
+test('a custom share-card range opens at local midnight and closes at local end of day', () => {
+  const range = resolveRange('custom', [], customRange('2026-02-01', '2026-02-07'));
+  const open = new Date(range.start);
+  const close = new Date(range.end);
+  assert.equal(open.getHours(), 0);
+  assert.equal(open.getMinutes(), 0);
+  assert.equal(open.getDate(), 1);
+  assert.equal(close.getDate(), 7);
+  assert.equal(close.getHours(), 23);
+  assert.equal(close.getMinutes(), 59);
+});
+
+test('a session logged in the first hour of a custom range is inside it', () => {
+  // The exact case the UTC parsing lost: 00:30 local on the opening day.
+  const range = resolveRange('custom', [], customRange('2026-02-01', '2026-02-07'));
+  const earlySession = new Date(2026, 1, 1, 0, 30).getTime();
+  const lateSession = new Date(2026, 1, 7, 22, 45).getTime();
+  assert.ok(earlySession >= range.start && earlySession <= range.end);
+  assert.ok(lateSession >= range.start && lateSession <= range.end);
+  // And the day after the closing day is still outside.
+  assert.ok(new Date(2026, 1, 8, 0, 30).getTime() > range.end);
 });

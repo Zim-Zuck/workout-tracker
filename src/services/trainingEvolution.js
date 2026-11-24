@@ -49,33 +49,6 @@ export function precedingRange(range) {
   return { start: range.start - duration - 1, end: range.start - 1 };
 }
 
-// A DATE INPUT'S "YYYY-MM-DD" AS A LOCAL DAY, NOT A UTC ONE.
-//
-// new Date("2026-02-01") parses as UTC midnight, but every workout date in this
-// app is a local timestamp. Taking the UTC instant shifts both ends of a custom
-// range by the timezone offset: in UTC+2 a range picked as Feb 1 ran to Feb 2
-// and excluded anything logged before 02:00 on its opening day. Splitting the
-// string and building local midnight and local end-of-day is offset-proof.
-export function localDayBounds(value) {
-  const [y, m, d] = String(value || '').split('-').map(Number);
-  if (!y || !m || !d) return null;
-  const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-  // Round-trips back to the same calendar day, so "2026-02-31" is rejected
-  // rather than silently becoming March 3rd.
-  if (start.getFullYear() !== y || start.getMonth() !== m - 1 || start.getDate() !== d) return null;
-  return { start: start.getTime(), end: new Date(y, m - 1, d, 23, 59, 59, 999).getTime() };
-}
-
-// A custom range from two date-input strings, inclusive of the whole closing
-// day — a range picked as the 1st to the 7th has to contain the 7th's evening
-// session. Null when either date is missing, malformed, or out of order.
-export function customRange(fromValue, toValue) {
-  const from = localDayBounds(fromValue);
-  const to = localDayBounds(toValue);
-  if (!from || !to) return null;
-  return from.start < to.end ? { start: from.start, end: to.end } : null;
-}
-
 // Days a range covers, floored at 1 so a per-week rate can never divide by zero
 // — a range of a single instant is still "one day" for rate purposes.
 export function rangeDays(range) {
