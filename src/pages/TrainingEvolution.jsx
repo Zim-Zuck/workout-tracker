@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Pencil, RotateCcw, Info } from 'lucide-react';
 import {
-  SegmentedPills, StaticPill, EmptyState, IconButton, GlassCard, BodyPair
+  ArrowLeft, Pencil, RotateCcw, TrendingUp, Minus, ChevronDown, Shuffle
+} from 'lucide-react';
+import {
+  SegmentedPills, SegmentedTrack, StaticPill, EmptyState, IconButton, GlassCard, BodyPair,
+  SectionCard, CompareLegend, ChangeChip, StackedBar, ExpandableList
 } from '../ui/index.js';
-import { PairedBars } from '../components/Chart.jsx';
 import { color } from '../theme/tokens.js';
 import {
   COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor, customRange, formatDayRange
 } from '../services/timeframes.js';
 import { compareTrainingPeriods, precedingRange } from '../services/trainingEvolution.js';
 import { buildHighlights } from '../services/exerciseStats.js';
-import { regionsFor } from '../services/anatomy.js';
+import { regionsFor, groupForRegion } from '../services/anatomy.js';
+import { buildVerdict, classifyVolumeTrend, summarizeDataGaps } from '../services/evolutionNarrative.js';
+import { buildFunFacts } from '../services/funFacts.js';
 import { formatVolume } from '../utils/units.js';
 import { formatDuration } from '../utils/date.js';
 
@@ -48,18 +52,6 @@ function chipDates(range) {
   const crossesYears = new Date(range.start).getFullYear() !== thisYear
     || new Date(range.end).getFullYear() !== thisYear;
   return formatDayRange(range.start, range.end, { year: crossesYears });
-}
-
-// Declines read in plain ink. Only a gain takes the accent — a drop in volume
-// after a deload block is information, not something to alarm somebody about.
-function deltaText(c, format = (n) => String(Math.round(n))) {
-  if (c.kind === 'new') return { text: 'new', tone: 'pr' };
-  if (c.kind === 'none') return { text: '—', tone: 'flat' };
-  if (c.kind === 'gone') return { text: 'none in B', tone: 'flat' };
-  const sign = c.pct > 0 ? '+' : '−';
-  const pct = Math.abs(c.pct).toFixed(0);
-  if (pct === '0') return { text: 'no change', tone: 'flat' };
-  return { text: `${sign}${pct}% (${sign}${format(Math.abs(c.abs))})`, tone: c.pct > 0 ? 'pr' : 'flat' };
 }
 
 // The percentage ALONE, for the headline card. The absolute belongs in the
@@ -219,6 +211,8 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
         <Comparison
           result={result}
           highlights={highlights}
+          workouts={workouts}
+          exerciseLibrary={exercises}
           titleA={matchPreceding ? 'The period before' : periodTitle(periodA, rangeA)}
           titleB={periodTitle(periodB, rangeB)}
         />
@@ -292,7 +286,7 @@ function DateFields({ period, onChange }) {
   );
 }
 
-function Comparison({ result, highlights, titleA, titleB }) {
+function Comparison({ result, highlights, workouts, exerciseLibrary, titleA, titleB }) {
   const { a, b, delta, flags, shape, repRange, muscle, exercises } = result;
 
   if (flags.emptyBoth) {
@@ -347,38 +341,24 @@ function Comparison({ result, highlights, titleA, titleB }) {
         titleB={titleB}
       />
 
-      <Block title="Rep ranges" subtitle="Share of working sets in each period.">
-        <MixBars rows={repRange} valueKey="count" titleA={titleA} titleB={titleB} />
-      </Block>
+      {/* Keyed by the compared ranges so a fresh period starts back on the
+          verdict (fact #1) rather than wherever the tap cycle had landed. */}
+      <FunFactCard
+        key={`${result.a.start}-${result.a.end}-${result.b.start}-${result.b.end}`}
+        result={result}
+        workouts={workouts}
+        exerciseLibrary={exerciseLibrary}
+      />
+
+      <RepRangesCard repRange={repRange} titleA={titleA} titleB={titleB} />
 
       {muscle.length > 0 && (
-        <Block
-          title="Muscle split"
-          subtitle="Share of working volume in each period."
-          info={`"pts" is how many percentage points of your total training volume a muscle group gained or lost — not a score. If chest went from 20% of your volume to 27%, that's "+7 pts", even when the kilograms barely moved: it just means a bigger slice of the same pie.`}
-        >
-          <MuscleMap rows={muscle} title={titleB} />
-          {/* Biggest share in either period first. pairDistribution keeps the
-              order it met the labels in, which is period A's — so without this
-              the group that dominated B could sit halfway down the list. Rep
-              ranges deliberately keep their fixed bucket order instead. */}
-          <MixBars
-            rows={[...muscle].sort((x, y) => Math.max(y.a.pct, y.b.pct) - Math.max(x.a.pct, x.b.pct)).slice(0, 8)}
-            valueKey="volumeKg"
-            format={formatVolume}
-            titleA={titleA}
-            titleB={titleB}
-          />
-        </Block>
+        <MuscleSplitCard muscle={muscle} titleA={titleA} titleB={titleB} />
       )}
 
-      <Block title="What you trained">
-        <Churn title="Started" rows={exercises.introduced} empty="Nothing new in period B." />
-        <Churn title="Stopped" rows={exercises.dropped} empty="Nothing from period A was dropped." className="mt-lg" />
-        <KeptList rows={exercises.kept} className="mt-lg" />
-      </Block>
+      <WhatYouTrainedCard exercises={exercises} />
 
-      {highlights && <Highlights highlights={highlights} titleB={titleB} />}
+      {highlights && <HighlightsCard highlights={highlights} delta={delta} titleB={titleB} />}
     </>
   );
 }
@@ -431,209 +411,457 @@ function Metric({ metric, first, titleA, titleB }) {
   );
 }
 
-// A SHARE CAN FALL WHILE THE WORK RISES, and that pairing is the most
-// confusing thing on this screen without a word of explanation: training the
-// same triceps volume alongside a new leg day drops their share by thirty
-// points while the kilograms go up. The bare "−36 pts" reads as a collapse.
-function shareNote(row) {
-  const grew = row.value.kind === 'new' || row.value.abs > 0;
-  const shrank = row.value.kind === 'gone' || row.value.abs < 0;
-  if (row.pctPointDelta < 0 && grew) return 'smaller share of more work';
-  if (row.pctPointDelta > 0 && shrank) return 'bigger share of less work';
-  return null;
+// A hex colour at a given opacity, as an rgba() string. The rep-range and
+// muscle-split bars need several DISTINCT shades of the same two colours
+// (muted ink for "before", warm accent for "now") rather than several
+// different hues — varying lightness instead of hue is what keeps four
+// adjacent segments tellable apart for a colour-blind reader, not just for
+// everyone else.
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// Two bars per label, A above B, so the shift is read as a shape rather than
-// from a signed number — and on ONE scale across the whole list, so the row
-// that holds most of the training is the longest bar on screen.
-function MixBars({ rows, valueKey, format, titleA, titleB }) {
-  const withAny = rows.filter((r) => r.a[valueKey] > 0 || r.b[valueKey] > 0);
-  if (!withAny.length) return <p className="text-label font-regular text-ink-tertiary">Nothing logged in either period.</p>;
-
-  const barRows = withAny.map((row) => {
-    const pts = Math.round(row.pctPointDelta);
-    const note = shareNote(row);
-    return {
-      key: row.label,
-      label: row.label,
-      a: row.a.pct,
-      b: row.b.pct,
-      right: pts === 0 ? 'same' : `${pts > 0 ? '+' : '−'}${Math.abs(pts)} pts`,
-      tone: pts > 0 ? 'pr' : 'flat',
-      // The rep-range buckets carry no caption: the share and the change are
-      // the whole story and "412 sets → 486 sets" under every row is the noise
-      // this redesign exists to remove. The muscle split keeps one, because
-      // there the share and the volume can and do move in opposite directions.
-      note: format
-        ? `${format(row.a[valueKey])} → ${format(row.b[valueKey])}${note ? ` · ${note}` : ''}`
-        : note
-    };
-  });
+// FUN FACT, directly under the summary card. The first fact is always the
+// plain-English verdict for whichever two periods are on screen (the "so
+// what" of everything above it); tapping cycles into all-time trivia that no
+// chart on this screen could show at a glance — a heaviest set, a streak, a
+// weekday you've never once trained on. The index resets to the verdict
+// whenever the compared periods change, because this component gets a fresh
+// `key` from them (see Comparison) and mounts clean.
+function FunFactCard({ result, workouts, exerciseLibrary }) {
+  const [index, setIndex] = useState(0);
+  const facts = useMemo(() => buildFunFacts(workouts, exerciseLibrary), [workouts, exerciseLibrary]);
+  const items = useMemo(() => [buildVerdict(result), ...facts], [result, facts]);
+  const current = items[index % items.length];
 
   return (
-    <PairedBars
-      rows={barRows}
-      ariaLabel="Share of each period"
-      srLabel={(r) => `${r.label}, ${titleA} ${Math.round(r.a)}% to ${titleB} ${Math.round(r.b)}%`}
-    />
-  );
-}
-
-// THE SECTION HEADER CARRIES ITS OWN EXPLANATION. A tooltip would hide the
-// "pts" explainer behind a hover that a touch screen cannot do; a modal would
-// be a whole sheet for two sentences. An inline disclosure is the plainest
-// thing that works on both.
-function Block({ title, subtitle, info, children }) {
-  const [showInfo, setShowInfo] = useState(false);
-  return (
-    <section className="mt-xxl">
-      <div className="flex items-center gap-xxs">
-        <h2 className="text-micro font-semibold uppercase text-ink-tertiary">{title}</h2>
-        {info && (
-          <IconButton
-            icon={Info}
-            size={13}
-            className="-m-sm"
-            label={showInfo ? `Hide what "pts" means` : `What does "pts" mean?`}
-            aria-pressed={showInfo}
-            onClick={() => setShowInfo((v) => !v)}
-          />
-        )}
+    <GlassCard
+      as="button"
+      type="button"
+      interactive
+      onClick={() => setIndex((i) => (i + 1) % items.length)}
+      aria-label={`Fun fact, ${(index % items.length) + 1} of ${items.length}. Tap for another.`}
+      className="mt-lg p-lg text-left w-full"
+    >
+      <div className="flex items-center justify-between gap-sm">
+        <span className="text-micro font-semibold uppercase text-ink-tertiary">Fun fact</span>
+        <Shuffle size={14} strokeWidth={2.4} className="shrink-0 text-ink-tertiary" aria-hidden="true" />
       </div>
-      {subtitle && <p className="text-label font-regular text-ink-tertiary mt-xs">{subtitle}</p>}
-      {info && showInfo && (
-        <p className="mt-xs text-label font-regular text-ink-secondary">{info}</p>
-      )}
-      <div className="mt-md">{children}</div>
-    </section>
+      {/* Keying the paragraph by index restarts the rise animation on every
+          tap, which is the only confirmation a reader gets that the tap
+          landed — the text itself can look similar fact to fact. */}
+      <p key={index} className="mt-sm text-body font-regular text-ink anim-rise">{current}</p>
+    </GlassCard>
   );
 }
 
-// THE BODY, NOT THE NAME. A reader scanning eight rows of muscle-group text
+const REP_RANGE_BEFORE_ALPHA = [0.82, 0.58, 0.38, 0.22];
+const REP_RANGE_NOW_ALPHA = [1, 0.78, 0.56, 0.36];
+
+// TWO STACKED BARS, ONE SCALE EACH. Each bar is its own period's working sets
+// at 100%, split into the four rep-range buckets — the shape of the split is
+// the point, not how the two periods' totals compare (the summary card
+// already covers totals). Tapping a bucket, on the bar or in the legend row
+// below, pins the exact numbers in a small readout rather than making anyone
+// eyeball two bar lengths against each other.
+function RepRangesCard({ repRange, titleA, titleB }) {
+  const [focused, setFocused] = useState(null);
+  const totalA = repRange.reduce((s, r) => s + r.a.count, 0);
+  const totalB = repRange.reduce((s, r) => s + r.b.count, 0);
+
+  const toggle = (label) => setFocused((cur) => (cur === label ? null : label));
+
+  const beforeSegments = repRange.map((r, i) => ({
+    key: r.label, label: r.label, value: r.a.pct,
+    color: hexToRgba(color.ink, REP_RANGE_BEFORE_ALPHA[i]),
+    srLabel: `${titleA}, ${r.label} reps, ${r.a.pct}%`
+  }));
+  const nowSegments = repRange.map((r, i) => ({
+    key: r.label, label: r.label, value: r.b.pct,
+    color: hexToRgba(color.pr, REP_RANGE_NOW_ALPHA[i]),
+    srLabel: `${titleB}, ${r.label} reps, ${r.b.pct}%`
+  }));
+
+  const focusedRow = repRange.find((r) => r.label === focused);
+
+  return (
+    <SectionCard
+      title="Rep ranges"
+      subtitle="How your working sets split across rep ranges."
+      legend={<CompareLegend labelBefore={titleA} labelNow={titleB} />}
+    >
+      {totalA === 0 && totalB === 0 ? (
+        <p className="text-label font-regular text-ink-secondary">Nothing logged in either period.</p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-sm">
+            <StackedBar
+              segments={beforeSegments}
+              ariaLabel={`Rep range split, ${titleA}`}
+              selectedKey={focused}
+              onSegmentClick={(s) => toggle(s.key)}
+            />
+            <StackedBar
+              segments={nowSegments}
+              ariaLabel={`Rep range split, ${titleB}`}
+              selectedKey={focused}
+              onSegmentClick={(s) => toggle(s.key)}
+            />
+          </div>
+
+          <div className="mt-base grid grid-cols-4 gap-xs">
+            {repRange.map((r) => {
+              const pts = Math.round(r.pctPointDelta);
+              const selected = focused === r.label;
+              return (
+                <button
+                  key={r.label}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => toggle(r.label)}
+                  className={`flex flex-col items-center gap-xxs py-sm rounded-control text-center
+                              transition-colors duration-fast ease-out
+                              ${selected ? 'bg-glass-pressed' : 'active:bg-glass-pressed'}`}
+                >
+                  <span className="text-micro font-semibold uppercase text-ink-tertiary">{r.label} reps</span>
+                  <span className="text-heading font-semibold text-ink tabular">{r.b.pct}%</span>
+                  <ChangeChip kind={pts === 0 ? 'none' : 'change'} pct={pts} size="sm" />
+                </button>
+              );
+            })}
+          </div>
+
+          {focusedRow && (
+            <p className="mt-sm text-label font-regular text-ink-secondary anim-rise">
+              {focusedRow.label} reps — {titleA} {focusedRow.a.pct}% → {titleB} {focusedRow.b.pct}%
+            </p>
+          )}
+        </>
+      )}
+    </SectionCard>
+  );
+}
+
+// THE BODY, NOT THE NAME. A reader scanning a dozen rows of muscle-group text
 // has to translate every label into a mental picture anyway — the figure
 // already used on Today and the live header does that translation for them,
-// at a glance, before the exact numbers in the bars below.
+// at a glance, before the exact numbers in the list below. Tapping a region
+// here or a row below highlights both, through the same group name.
 //
 // Tiers are relative to this period alone: a group holding half of the top
 // group's share or more reads as primary, the rest as secondary, the same
 // split the live session figure draws between a lift's main muscle and the
 // ones it only assists.
-function MuscleMap({ rows, title }) {
-  const withVolume = rows
-    .map((r) => ({ label: r.label, volumeKg: r.b.volumeKg, pct: r.b.pct }))
-    .filter((r) => r.volumeKg > 0);
-  if (!withVolume.length) return null;
+function MuscleSplitCard({ muscle, titleA, titleB }) {
+  const [mode, setMode] = useState('volume');
+  const [focusedGroup, setFocusedGroup] = useState(null);
 
-  const maxPct = Math.max(...withVolume.map((r) => r.pct));
-  const primary = withVolume.filter((r) => r.pct >= maxPct / 2).map((r) => r.label);
-  const secondary = withVolume.filter((r) => r.pct < maxPct / 2).map((r) => r.label);
+  const withVolume = muscle.filter((r) => r.a.volumeKg > 0 || r.b.volumeKg > 0);
+  const nowRows = withVolume.filter((r) => r.b.volumeKg > 0);
+  const maxPct = nowRows.length ? Math.max(...nowRows.map((r) => r.b.pct)) : 0;
+  const primaryGroups = nowRows.filter((r) => r.b.pct >= maxPct / 2).map((r) => r.label);
+  const secondaryGroups = nowRows.filter((r) => r.b.pct < maxPct / 2).map((r) => r.label);
+
+  const focusedRegions = useMemo(
+    () => (focusedGroup ? [...regionsFor([focusedGroup], 'front'), ...regionsFor([focusedGroup], 'back')] : null),
+    [focusedGroup]
+  );
+
+  const toggleGroup = (group) => setFocusedGroup((g) => (g === group ? null : group));
+  const handleRegionClick = (regionId) => {
+    const group = groupForRegion(regionId);
+    if (group) toggleGroup(group);
+  };
+
+  const sorted = [...withVolume].sort((x, y) => y.b.volumeKg - x.b.volumeKg);
+  // Scaled to the biggest bar EITHER period needs, not just "now" — a muscle
+  // trained hard before and dropped since still has a real "before" bar to
+  // draw, and scaling only to current volumes would blow it past 100% width.
+  const maxVolume = Math.max(...sorted.flatMap((r) => [r.a.volumeKg, r.b.volumeKg]), 1);
 
   return (
-    <div className="mb-lg flex flex-col items-center gap-sm">
-      <BodyPair
-        front={{ primary: regionsFor(primary, 'front'), secondary: regionsFor(secondary, 'front') }}
-        back={{ primary: regionsFor(primary, 'back'), secondary: regionsFor(secondary, 'back') }}
-        intensity={1}
-        height={200}
-        label={`${title}: ${withVolume.map((r) => r.label).join(', ')}`}
+    <SectionCard
+      title="Muscle split"
+      subtitle={mode === 'volume' ? 'Where your training volume went.' : 'How your total volume is divided up by muscle group.'}
+      info={mode === 'volume'
+        ? 'Volume is the weight actually moved for this muscle group.'
+        : `Share is how much of your total training volume a muscle group makes up, not the weight moved. Chest going from 20% to 27% is written as "20% → 27% of your volume" even when the kilograms barely changed.`}
+    >
+      <div className="mb-base flex flex-col items-center gap-sm">
+        <BodyPair
+          front={{ primary: regionsFor(primaryGroups, 'front'), secondary: regionsFor(secondaryGroups, 'front') }}
+          back={{ primary: regionsFor(primaryGroups, 'back'), secondary: regionsFor(secondaryGroups, 'back') }}
+          intensity={1}
+          height={224}
+          onRegionClick={handleRegionClick}
+          selected={focusedRegions}
+          regionLabel={(id) => groupForRegion(id) || 'Muscle'}
+        />
+        <p className="text-label font-regular text-ink-secondary">Tap a muscle to find it in the list below.</p>
+      </div>
+
+      <SegmentedTrack
+        ariaLabel="Muscle split, shown as"
+        value={mode}
+        onChange={setMode}
+        options={[{ value: 'volume', label: 'Volume' }, { value: 'share', label: 'Share' }]}
+        className="mb-base"
       />
-      <p className="text-label font-regular text-ink-tertiary">Where this period's volume went.</p>
-    </div>
+
+      <ExpandableList
+        items={sorted}
+        visibleCount={4}
+        keyFor={(r) => r.label}
+        showAllLabel={(n) => `Show all muscles (${n})`}
+        emptyMessage="Nothing logged in either period."
+        // A tap on the body map can select a muscle ranked 5th or lower —
+        // this opens the list so the highlighted row is actually visible,
+        // the other half of "tap the map, see it in the list".
+        revealKey={focusedGroup && !sorted.slice(0, 4).some((r) => r.label === focusedGroup) ? focusedGroup : null}
+        renderItem={(row) => (
+          <MuscleRow
+            row={row}
+            mode={mode}
+            maxVolume={maxVolume}
+            focused={focusedGroup === row.label}
+            onFocus={() => toggleGroup(row.label)}
+          />
+        )}
+      />
+    </SectionCard>
   );
 }
 
-function Churn({ title, rows, empty, className = '' }) {
+function MuscleRow({ row, mode, maxVolume, focused, onFocus }) {
+  const { label, a, b, value, pctPointDelta } = row;
+  const widthA = Math.max(a.volumeKg > 0 ? 1.5 : 0, (a.volumeKg / maxVolume) * 100);
+  const widthB = Math.max(b.volumeKg > 0 ? 1.5 : 0, (b.volumeKg / maxVolume) * 100);
+  const pts = Math.round(pctPointDelta);
+
   return (
-    <div className={className}>
-      <h3 className="text-label font-semibold text-ink">{title}</h3>
-      {!rows.length ? (
-        <p className="mt-xs text-label font-regular text-ink-tertiary">{empty}</p>
-      ) : (
-        <ul className="mt-xs flex flex-col">
-          {rows.slice(0, 8).map((row) => (
-            <li key={row.exercise.id} className="py-xs flex items-center gap-md border-b border-hairline last:border-b-0">
-              <span className="flex-1 min-w-0 text-label font-regular text-ink truncate">{row.exercise.name}</span>
-              <span className="shrink-0 text-label font-regular text-ink-tertiary tabular">
-                {row.sessions} {row.sessions === 1 ? 'session' : 'sessions'}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <button
+      type="button"
+      onClick={onFocus}
+      aria-pressed={focused}
+      className={`w-full flex items-center gap-md py-sm px-xs -mx-xs rounded-control border-b border-hairline
+                  last:border-b-0 text-left transition-colors duration-fast ease-out
+                  ${focused ? 'bg-glass-pressed' : 'active:bg-glass-pressed'}`}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline justify-between gap-sm">
+          <span className="text-body font-regular text-ink truncate">{label}</span>
+          <span className="shrink-0 text-body font-semibold text-ink tabular">
+            {mode === 'volume' ? formatVolume(b.volumeKg) : `${b.pct}%`}
+          </span>
+        </div>
+        {mode === 'volume' ? (
+          <div aria-hidden="true" className="mt-xs flex flex-col gap-xxs">
+            <span className="block h-1.5 rounded-full bg-data" style={{ width: `${widthA}%` }} />
+            <span className="block h-1.5 rounded-full bg-pr" style={{ width: `${widthB}%` }} />
+          </div>
+        ) : (
+          <p className="mt-xxs text-label font-regular text-ink-secondary tabular">
+            {a.pct}% → {b.pct}% of your volume
+          </p>
+        )}
+      </div>
+      <div className="shrink-0 w-[60px] text-right">
+        {mode === 'volume'
+          ? <ChangeChip kind={value.kind} pct={value.pct} size="sm" className="justify-end" />
+          : <ChangeChip kind={pts === 0 ? 'none' : 'change'} pct={pts} size="sm" className="justify-end" />}
+      </div>
+    </button>
+  );
+}
+
+function WhatYouTrainedCard({ exercises }) {
+  const [tab, setTab] = useState('kept');
+  const { introduced, dropped, kept } = exercises;
+
+  return (
+    <SectionCard title="What you trained" subtitle="Which lifts you kept, started and stopped between the two periods.">
+      <SegmentedTrack
+        ariaLabel="What you trained"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'kept', label: `Kept (${kept.length})` },
+          { value: 'started', label: `Started (${introduced.length})` },
+          { value: 'stopped', label: `Stopped (${dropped.length})` }
+        ]}
+        className="mb-base"
+      />
+
+      {tab === 'kept' && (
+        <ExpandableList
+          items={kept}
+          visibleCount={5}
+          keyFor={(r) => r.exerciseId}
+          emptyMessage="No lift appears in both periods."
+          renderItem={(row) => <KeptRow row={row} />}
+        />
       )}
-    </div>
-  );
-}
-
-function KeptList({ rows, className = '' }) {
-  return (
-    <div className={className}>
-      <h3 className="text-label font-semibold text-ink">Kept</h3>
-      {!rows.length ? (
-        <p className="mt-xs text-label font-regular text-ink-tertiary">No lift appears in both periods.</p>
-      ) : (
-        <ul className="mt-xs flex flex-col">
-          {rows.slice(0, 10).map((row) => {
-            const d = deltaText(row.volumeKg, formatVolume);
-            return (
-              <li key={row.exercise.id} className="py-xs flex items-center gap-md border-b border-hairline last:border-b-0">
-                <span className="flex-1 min-w-0 text-label font-regular text-ink truncate">{row.exercise.name}</span>
-                <span className="shrink-0 text-label font-regular text-ink-tertiary tabular">
-                  {row.sessions.from} → {row.sessions.to}
-                </span>
-                <span className={`shrink-0 w-[108px] text-right text-label font-regular tabular ${toneClass(d.tone)}`}>
-                  {d.text}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+      {tab === 'started' && (
+        <ChurnChips rows={introduced} tone="pr" empty="Nothing new this period." />
       )}
+      {tab === 'stopped' && (
+        <ChurnChips rows={dropped} tone="muted" empty="Nothing from before was dropped." />
+      )}
+    </SectionCard>
+  );
+}
+
+function KeptRow({ row }) {
+  const { exercise, sessions, volumeKg } = row;
+  const sign = volumeKg.abs > 0 ? '+' : volumeKg.abs < 0 ? '−' : '';
+
+  return (
+    <div className="flex items-center gap-md py-sm border-b border-hairline last:border-b-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-body font-regular text-ink truncate">{exercise.name}</p>
+        <p className="mt-xxs text-label font-regular text-ink-secondary tabular">
+          {sessions.from} → {sessions.to} {sessions.to === 1 ? 'session' : 'sessions'}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <ChangeChip kind={volumeKg.kind} pct={volumeKg.pct} size="base" className="justify-end" />
+        {volumeKg.kind === 'change' && (
+          <p className="mt-xxs text-label font-regular text-ink-tertiary tabular">
+            {sign}{formatVolume(Math.abs(volumeKg.abs))}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-// TRAINING INTELLIGENCE v1. Every line is a sentence the service generated from
-// numbers it computed, and each one says what it is based on.
-function Highlights({ highlights, titleB }) {
-  const { improving, steady, sentences } = highlights;
-  const nothing = !improving.length && !steady.length && !sentences.needMoreData && !sentences.tooVariable;
+// STARTED AND STOPPED are tags, not ranked rows — there is no "biggest" new
+// lift, only ones that exist or do not. Chips wrap neatly at any width a list
+// of row-cards would not.
+function ChurnChips({ rows, tone, empty }) {
+  return (
+    <ExpandableList
+      items={rows}
+      visibleCount={6}
+      keyFor={(r) => r.exerciseId}
+      listClassName="flex flex-wrap gap-sm"
+      showAllLabel={(n) => `Show all (${n})`}
+      emptyMessage={empty}
+      renderItem={(row) => (
+        <span
+          className={`inline-flex items-center gap-xs rounded-full border px-md h-9 text-label font-semibold
+                      ${tone === 'pr' ? 'bg-pr-soft text-pr border-pr-border' : 'bg-glass-inset text-ink-secondary border-glass-inset-border'}`}
+        >
+          <span className="truncate max-w-[180px]">{row.exercise.name}</span>
+          <span className="text-ink-tertiary font-regular">
+            {row.sessions} {row.sessions === 1 ? 'session' : 'sessions'}
+          </span>
+        </span>
+      )}
+    />
+  );
+}
+
+function InsightRow({ icon: Icon, tone, sentence }) {
+  // The lead (the exercise name) is bold; the rest is the sentence
+  // buildHighlights() already composed and already has its own tests — this
+  // only styles it, never rewords it.
+  const sep = sentence.indexOf(': ');
+  const lead = sep === -1 ? sentence : sentence.slice(0, sep);
+  const rest = sep === -1 ? '' : sentence.slice(sep + 1);
 
   return (
-    <Block title="Highlights" subtitle={`Strength trends across period B — ${titleB}.`}>
+    <div className="flex items-start gap-sm py-xs">
+      <span
+        aria-hidden="true"
+        className={`mt-xxs shrink-0 w-7 h-7 rounded-full flex items-center justify-center
+                    ${tone === 'pr' ? 'bg-pr-soft text-pr' : 'bg-glass-inset text-ink-secondary'}`}
+      >
+        <Icon size={14} strokeWidth={2.4} />
+      </span>
+      <p className="text-body">
+        <span className="font-semibold text-ink">{lead}</span>
+        {rest && <span className="font-regular text-ink-secondary">{rest}</span>}
+      </p>
+    </div>
+  );
+}
+
+// TRAINING INTELLIGENCE v1. Every line is a sentence the service generated
+// from numbers it computed, and each one says what it is based on.
+function HighlightsCard({ highlights, delta, titleB }) {
+  const [gapsOpen, setGapsOpen] = useState(false);
+  const { improving, steady } = highlights;
+
+  const trend = classifyVolumeTrend(delta.volumeKg.pct);
+  const trendLabel = trend === 'improving' ? 'Improving' : trend === 'declining' ? 'Declining' : 'Steady';
+  const rows = [
+    ...improving.map((h) => ({ ...h, tone: 'pr', icon: TrendingUp })),
+    ...steady.map((h) => ({ ...h, tone: 'flat', icon: Minus }))
+  ];
+  const gaps = summarizeDataGaps(highlights);
+  const nothing = rows.length === 0 && gaps.total === 0;
+
+  return (
+    <SectionCard
+      title="Highlights"
+      subtitle={`Strength trends across ${titleB}.`}
+      legend={<StaticPill tone={trend === 'improving' ? 'pr' : 'neutral'}>{trendLabel}</StaticPill>}
+    >
       {nothing ? (
-        <p className="text-label font-regular text-ink-tertiary">
+        <p className="text-label font-regular text-ink-secondary">
           No lift in this period has enough sessions to call a trend yet.
         </p>
       ) : (
-        <div className="flex flex-col gap-md">
-          {improving.length > 0 && (
-            <div>
-              <StaticPill tone="pr">Improving</StaticPill>
-              <ul className="mt-sm flex flex-col gap-xs">
-                {improving.map((h) => (
-                  <li key={h.exercise.id} className="text-label font-regular text-ink tabular">{h.sentence}</li>
-                ))}
-              </ul>
+        <>
+          {rows.length > 0 && (
+            <ExpandableList
+              items={rows}
+              visibleCount={3}
+              keyFor={(h) => h.exercise.id}
+              showAllLabel={(n) => `Show all (${n})`}
+              renderItem={(h) => <InsightRow icon={h.icon} tone={h.tone} sentence={h.sentence} />}
+            />
+          )}
+
+          {gaps.total > 0 && (
+            <div className={rows.length > 0 ? 'mt-base pt-base border-t border-hairline' : ''}>
+              <button
+                type="button"
+                aria-expanded={gapsOpen}
+                onClick={() => setGapsOpen((v) => !v)}
+                className="w-full flex items-center justify-between gap-sm h-tap -mx-sm px-sm rounded-control
+                           active:bg-glass-pressed transition-colors duration-fast ease-out"
+              >
+                <span className="text-body font-regular text-ink-secondary">
+                  Not enough data for {gaps.total} {gaps.total === 1 ? 'lift' : 'lifts'}
+                </span>
+                <ChevronDown
+                  size={16}
+                  strokeWidth={2.4}
+                  style={{
+                    transform: gapsOpen ? 'rotate(180deg)' : 'none',
+                    transition: 'transform var(--motion-base) var(--motion-ease)'
+                  }}
+                />
+              </button>
+              {gapsOpen && (
+                <ul className="mt-sm flex flex-col gap-xs anim-rise">
+                  {gaps.reasons.map((r) => (
+                    <li key={r.reason} className="pl-base text-label font-regular text-ink-secondary">
+                      {r.count} {r.count === 1 ? 'lift' : 'lifts'}: {r.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
-          {steady.length > 0 && (
-            <div>
-              <StaticPill>Holding steady</StaticPill>
-              <ul className="mt-sm flex flex-col gap-xs">
-                {steady.map((h) => (
-                  <li key={h.exercise.id} className="text-label font-regular text-ink-secondary tabular">{h.sentence}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {sentences.tooVariable && (
-            <p className="text-label font-regular text-ink-tertiary">{sentences.tooVariable}</p>
-          )}
-          {sentences.needMoreData && (
-            <p className="text-label font-regular text-ink-tertiary">{sentences.needMoreData}</p>
-          )}
-        </div>
+        </>
       )}
-    </Block>
+    </SectionCard>
   );
 }

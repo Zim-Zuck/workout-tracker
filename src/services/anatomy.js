@@ -159,6 +159,24 @@ export function regionsFor(groups, view) {
   return out;
 }
 
+// THE REVERSE OF regionsFor() — which group owns a region a tap landed on.
+//
+// No region is shared between two groups on the same view (a shoulder tap can
+// only mean Shoulders), so this is a lookup, not a judgement call. Built once
+// per module load rather than scanned per tap, since BodyMap re-renders on
+// every highlight change and a tap has to feel instant.
+const REGION_TO_GROUP = (() => {
+  const map = new Map();
+  for (const [group, entry] of Object.entries(MUSCLE_ANATOMY)) {
+    for (const id of [...entry.front, ...entry.back]) map.set(id, group);
+  }
+  return map;
+})();
+
+export function groupForRegion(regionId) {
+  return REGION_TO_GROUP.get(regionId) || null;
+}
+
 // WHAT A WHOLE SESSION LIT UP.
 //
 // Both figures, both tiers, plus sets per muscle group for the finish plate's

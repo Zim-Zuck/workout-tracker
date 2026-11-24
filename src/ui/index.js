@@ -22,3 +22,7 @@ export { default as BodyPair } from './BodyPair.jsx';
 export { default as Porthole } from './Porthole.jsx';
 export { default as MuscleBars } from './MuscleBars.jsx';
 export { default as Ronnie } from './Ronnie.jsx';
+export { default as SectionCard, CompareLegend } from './SectionCard.jsx';
+export { default as ChangeChip } from './ChangeChip.jsx';
+export { default as StackedBar } from './StackedBar.jsx';
+export { default as ExpandableList } from './ExpandableList.jsx';

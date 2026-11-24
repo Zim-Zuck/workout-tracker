@@ -81,11 +81,11 @@ export const color = {
 };
 
 // ---------------------------------------------------------------------------
-// Type — Inter Tight, two weights, five sizes.
+// Type — Inter Tight, two weights, six sizes.
 //
-// A screen may use at most three of {title, body, label, micro} plus `display`.
-// Sizes are absolute px because this is a fixed-scale phone UI; they are never
-// written in a component, only referenced as `text-body` etc.
+// A screen may use at most three of {title, heading, body, label, micro} plus
+// `display`. Sizes are absolute px because this is a fixed-scale phone UI;
+// they are never written in a component, only referenced as `text-body` etc.
 // ---------------------------------------------------------------------------
 export const font = {
   family: "'Inter Tight', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
@@ -97,6 +97,10 @@ export const text = {
   display: { size: 56, lineHeight: 1.0,  tracking: '-0.035em', weight: 600 },
   // Screen headlines and big stat values.
   title:   { size: 32, lineHeight: 1.1,  tracking: '-0.025em', weight: 600 },
+  // A card's own title — the one size between a stat value and a sentence.
+  // Introduced for the Evolution redesign's section cards, which needed a
+  // heading that reads as a title without competing with the big numbers.
+  heading: { size: 20, lineHeight: 1.25, tracking: '-0.015em', weight: 600 },
   // Default reading size: list rows, buttons, sentences.
   body:    { size: 17, lineHeight: 1.35, tracking: '-0.01em',  weight: 400 },
   // Secondary lines, metadata, targets.
