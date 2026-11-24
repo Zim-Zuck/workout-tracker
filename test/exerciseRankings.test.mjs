@@ -7,7 +7,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  rankExercises, progressionPossible, RANKING_MODES, TREND_MIN_SPAN_DAYS, TREND_MIN_SESSIONS
+  rankExercises, progressionPossible, RANKING_MODES, TREND_MIN_SPAN_DAYS, TREND_MIN_SESSIONS,
+  classifyTrend, isRankableTrend, trendWithholdReason, buildHighlights
 } from '../src/services/exerciseStats.js';
 import { windowDays } from '../src/services/timeframes.js';
 
@@ -29,6 +30,13 @@ const weekly = (exerciseId, weights) => weights.map((weightKg, i) => ({
   id: `${exerciseId}${i}`,
   date: NOW - (weights.length - 1 - i) * 7 * DAY,
   sets: [set(exerciseId, weightKg, 5, i)]
+}));
+
+// The same, with the reps given per session — the rep-capped cases need them.
+const weeklyWithReps = (exerciseId, pairs) => pairs.map(([weightKg, reps], i) => ({
+  id: `${exerciseId}${i}`,
+  date: NOW - (pairs.length - 1 - i) * 7 * DAY,
+  sets: [set(exerciseId, weightKg, reps, i)]
 }));
 
 // Merges several per-exercise histories onto shared dates.
@@ -245,7 +253,12 @@ test('a noisy lift is withheld from the ranking but not called insufficient', ()
   assert.deepEqual(rows, []);
   assert.equal(withheld.length, 1);
   assert.equal(withheld[0].status, 'noisy');
-  assert.equal(withheld[0].reason, null);
+  // `reason` used to be null here, carried straight off the trend. Every
+  // withheld row now names WHY it was withheld, so a screen grouping them never
+  // has to fall back to the status to find a key — and the rep-capped case,
+  // which has an ordinary status and no trend reason at all, has somewhere to
+  // go. The status assertion above is the one this test is really about.
+  assert.equal(withheld[0].reason, 'noisy');
 });
 
 test('withheld rows are ordered by how much data they do have', () => {
@@ -295,4 +308,52 @@ test('asked anyway on a 2-week window, it withholds everything rather than inven
   assert.equal(denseResult.withheld.length, 1);
   assert.ok(denseResult.withheld[0].trend.sessions >= TREND_MIN_SESSIONS);
   assert.equal(denseResult.withheld[0].reason, 'span_too_short');
+});
+
+// ONE ANSWER ABOUT WHAT A TREND LICENSES A SCREEN TO SAY.
+//
+// ExerciseDetail's chip checked `repCapped` before the direction and said
+// "High-rep work — est. 1RM can't track this". The Best-progress ranking and
+// the Evolution highlights looked only at `status`, so the same lift was ranked
+// and printed as a percentage on one screen and declared untrackable on
+// another. trendWithholdReason is now the single answer all three ask.
+test('a rep-capped lift is withheld from the ranking, not printed as a percentage', () => {
+  // Fixed weight, reps climbing past the 12-rep cap: the estimate stops
+  // responding, so the fitted line is an artefact of the formula.
+  const sessions = [[50, 13], [50, 15], [50, 17], [50, 19], [50, 20], [50, 22]];
+  const workouts = merge(weeklyWithReps('a', sessions));
+  const trend = classifyTrend(workouts, 'a', { start: -Infinity, end: Infinity });
+  // The classification itself is unchanged — the line really is steady.
+  assert.equal(trend.repCapped, true);
+  assert.equal(trend.status, 'steady');
+  // What changed is what the screens are allowed to do with it.
+  assert.equal(trendWithholdReason(trend), 'rep_capped');
+  assert.equal(isRankableTrend(trend), false);
+
+  const { rows, withheld } = rankExercises(workouts, EXERCISES, { mode: 'progression' });
+  assert.deepEqual(rows.map((r) => r.exercise.id), [], 'a rep-capped lift must not be ranked');
+  assert.equal(withheld.length, 1);
+  assert.equal(withheld[0].reason, 'rep_capped');
+});
+
+test('trendWithholdReason gives every unreportable trend a key, and reportable ones none', () => {
+  const rankable = classifyTrend(merge(weekly('a', [100, 104, 108, 112])), 'a', { start: -Infinity, end: Infinity });
+  assert.equal(trendWithholdReason(rankable), null);
+  assert.equal(isRankableTrend(rankable), true);
+
+  const tooFew = classifyTrend(merge(weekly('a', [100, 105])), 'a', { start: -Infinity, end: Infinity });
+  assert.equal(trendWithholdReason(tooFew), 'too_few_sessions');
+
+  const noisy = classifyTrend(merge(weekly('a', [100, 140, 95, 145, 105, 150, 100, 155])), 'a', { start: -Infinity, end: Infinity });
+  assert.equal(trendWithholdReason(noisy), 'noisy');
+});
+
+test('a rep-capped lift is reported as needing data in the highlights, not dropped silently', () => {
+  const workouts = merge(weeklyWithReps('a', [[50, 13], [50, 15], [50, 17], [50, 19], [50, 20], [50, 22]]));
+  const h = buildHighlights(workouts, EXERCISES, { start: -Infinity, end: Infinity });
+  assert.deepEqual(h.improving, []);
+  assert.deepEqual(h.steady, []);
+  assert.equal(h.needMoreData.count, 1);
+  assert.equal(h.needMoreData.byReason.rep_capped, 1);
+  assert.match(h.sentences.needMoreData, /est\. 1RM stops tracking/);
 });

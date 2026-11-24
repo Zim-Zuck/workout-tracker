@@ -4,7 +4,7 @@ import {
   isWorking, workingVolume, estimate1RM, e1rmSeries, muscleVolume, repRangeCounts
 } from './calculations.js';
 import { computeTotals } from '../hooks/useWorkoutTotals.js';
-import { SHARE_WINDOWS, timeframeList, resolveRange } from './timeframes.js';
+import { SHARE_WINDOWS, timeframeList, resolveRange, formatDayRange } from './timeframes.js';
 
 // The share card's own preset, built from the one timeframe registry rather
 // than a fourth hand-maintained list. Shape unchanged: ProgressShareCard reads
@@ -18,21 +18,20 @@ export { resolveRange };
 // summary.label and summary.title, and nothing imported the functions. The
 // METRICS list that used to sit here was exported and imported by nothing —
 // ProgressShareCard carries its own STYLE_METRICS.
-function formatShortDate(ts) {
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+// No year: the card's period stamp has a fixed width on a 1080px image.
+const dayRange = (start, end, dash) => formatDayRange(start, end, { dash });
 
 function periodLabel(timeframeId, start, end) {
   const tf = TIMEFRAMES.find((t) => t.id === timeframeId);
-  if (timeframeId === 'custom') return `${formatShortDate(start)} — ${formatShortDate(end)}`.toUpperCase();
-  return tf ? tf.shortLabel : `${formatShortDate(start)} — ${formatShortDate(end)}`.toUpperCase();
+  if (timeframeId === 'custom' || !tf) return dayRange(start, end, '—').toUpperCase();
+  return tf.shortLabel;
 }
 
 // Human-cased headline, e.g. "6 Months" or "Sep 4 – Sep 18" for a custom range.
 function periodTitle(timeframeId, start, end) {
-  if (timeframeId === 'custom') return `${formatShortDate(start)} – ${formatShortDate(end)}`;
   const tf = TIMEFRAMES.find((t) => t.id === timeframeId);
-  return tf ? tf.label : `${formatShortDate(start)} – ${formatShortDate(end)}`;
+  if (timeframeId === 'custom' || !tf) return dayRange(start, end, '–');
+  return tf.label;
 }
 
 // THIS IS NOT A PR. prs.js is the only authority on that question, and its

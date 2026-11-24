@@ -151,9 +151,31 @@ export function classifyTrend(workouts, exerciseId, range) {
   return { ...base, status: pctChange > 0 ? 'improving' : 'declining' };
 }
 
-// A trend whose direction is reportable — the three states a ranking can order.
+// WHY A TREND'S DIRECTION CANNOT BE REPORTED — or null when it can be.
+//
+// ONE ANSWER, because the screens disagreed. ExerciseDetail's chip checked
+// `repCapped` before the direction and said "High-rep work — est. 1RM can't
+// track this"; the Best-progress ranking on Progress and the Evolution
+// highlights looked only at `status`, so the same lift was ranked and printed
+// as "+8.2%" on one screen and declared untrackable on another. The code
+// already knew the number was an artefact; only one screen acted on it.
+//
+// `status` stays exactly as classifyTrend sets it — the fitted line really is
+// steady — because the classification is not what was wrong. What was wrong was
+// three screens each deciding for themselves what a classification licensed
+// them to say. They now ask this.
+export function trendWithholdReason(trend) {
+  // The cap first: above 12 reps the estimate stops responding, so whatever
+  // direction the fit reports is an artefact of the formula, not of training.
+  if (trend.repCapped) return 'rep_capped';
+  if (trend.status === 'noisy') return 'noisy';
+  if (trend.status === 'insufficient') return trend.reason || 'too_few_sessions';
+  return null;
+}
+
+// A trend whose direction is reportable — the states a ranking can order.
 export function isRankableTrend(trend) {
-  return trend.status === 'improving' || trend.status === 'steady' || trend.status === 'declining';
+  return trendWithholdReason(trend) == null;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +323,11 @@ export function rankExercises(workouts, exercises, { mode = 'frequency', start =
   const withheld = [];
   for (const row of counted) {
     const trend = classifyTrend(workouts, row.exerciseId, { start, end });
-    if (isRankableTrend(trend)) rows.push({ ...row, trend });
-    else withheld.push({ ...row, trend, status: trend.status, reason: trend.reason });
+    const reason = trendWithholdReason(trend);
+    // `reason` is always set on a withheld row now, so a screen never has to
+    // fall back to the status to find a grouping key.
+    if (reason == null) rows.push({ ...row, trend });
+    else withheld.push({ ...row, trend, status: trend.status, reason });
   }
   withheld.sort((a, b) => b.sessions - a.sessions || byName(a, b));
   return { rows: rows.sort(COMPARATORS.progression), withheld };
@@ -356,7 +381,8 @@ function steadySentence(name, trend) {
 const REASON_PHRASE = {
   too_few_sessions: (n) => `${n} under ${TREND_MIN_SESSIONS} sessions`,
   span_too_short: (n) => `${n} trained over less than ${TREND_MIN_SPAN_DAYS} days`,
-  no_load: (n) => `${n} with no load logged`
+  no_load: (n) => `${n} with no load logged`,
+  rep_capped: (n) => `${n} trained above ${E1RM_REP_CAP} reps, where est. 1RM stops tracking`
 };
 
 export function buildHighlights(workouts, exercises, range) {
@@ -374,8 +400,11 @@ export function buildHighlights(workouts, exercises, range) {
     .slice(0, HIGHLIGHT_LIMIT)
     .map((r) => ({ exercise: r.exercise, trend: r.trend, sentence: steadySentence(r.exercise.name, r.trend) }));
 
-  const noisy = withheld.filter((r) => r.status === 'noisy');
-  const insufficient = withheld.filter((r) => r.status === 'insufficient');
+  // Grouped by the withhold REASON, not by the status — a rep-capped lift has a
+  // perfectly ordinary status and still cannot be reported on, so it belongs
+  // with the lifts that need more data rather than silently vanishing.
+  const noisy = withheld.filter((r) => r.reason === 'noisy');
+  const insufficient = withheld.filter((r) => r.reason !== 'noisy');
 
   const byReason = {};
   for (const row of insufficient) byReason[row.reason] = (byReason[row.reason] || 0) + 1;

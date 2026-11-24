@@ -158,7 +158,51 @@ entry is genuinely uncrossed with `0 ≤ pct ≤ 100`, `currentStreak` never exc
 `bestStreak`, lifetime volume never goes negative, a `new` delta never claims a
 percentage from a zero baseline, and `milestonesFor` agrees exactly with
 `prTimeline` and `computeStreak`.
-### 3d. Consistency audit — **remaining**
+### 3d. Consistency audit — **done**
+Tests after: 431 total, 430 pass, 1 skipped, 0 fail.
+
+**Streak — already clean.** Every local streak goes through `computeStreak`:
+`useWorkoutTotals` (Today, Progress, Ronnie, the feed), `progressSummary` via
+`computeTotals`, `socialSummary`, and now `milestones`. The `streak_weeks` field
+on Profile / UserProfile / Leaderboard / Friends / communityWeek is the **cloud**
+value for somebody else's profile, which cannot come from local history.
+
+**PR count — already clean.** `prTimeline`, `sessionPRForExercise` and
+`prKindFrom` are the only ways anything decides a PR. `detectPRs` in
+`calculations.js` is called by `prs.js` and by nothing else, which is the
+intended shape — not dead code.
+
+**Trend label — FOUND AND FIXED.** ExerciseDetail's chip checked `repCapped`
+*before* the direction and said "High-rep work — est. 1RM can't track this". The
+Best-progress ranking on Progress and the Evolution highlights looked only at
+`status`, so the same lift was ranked and printed as "+8.2%" on one screen and
+declared untrackable on another. The code already knew the number was an
+artefact; only one screen acted on it. New canonical predicate
+`trendWithholdReason(trend)` — one answer about what a classification licenses a
+screen to say; `isRankableTrend` is now defined in terms of it. `classifyTrend`'s
+own output is unchanged (the fitted line really is steady). Verified on the real
+data: four lifts moved out of the ranking into "Leg Curl, Standing Calf Raise,
+Lateral Raise and 1 more — trained above 12 reps, where est. 1RM stops
+tracking".
+
+**Date range — two findings, both fixed.**
+- `Progress.jsx` built its window by hand (`Date.now() - days * 86400000`) while
+  ExerciseDetail used `rangeFor(id)`. Progress now uses `rangeFor` too. Same
+  value, one function.
+- The custom-range title sentence was built twice — `progressSummary.js` for the
+  share card's stamp, `TrainingEvolution.jsx` for its period headings — and the
+  two copies had quietly disagreed about the year for as long as both existed.
+  One `formatDayRange(start, end, { year, dash })` in `timeframes.js`; the year
+  difference is now a deliberate parameter (the card's stamp has a fixed width
+  on a 1080px image; the Evolution screen needs the year to compare across
+  years) rather than an accident. No visual change on either screen.
+
+One existing assertion was updated, not weakened: `withheld[0].reason` was
+pinned to `null` for a noisy lift. Every withheld row now names why it was
+withheld, so a screen grouping them never falls back to the status — and the
+rep-capped case, which has an ordinary status and no trend reason, has somewhere
+to go. The test's actual subject (`status === 'noisy'`) is untouched, and three
+new tests pin the new contract.
 ### 3e. ARCHITECTURE.md for the Progress area — **remaining**
 ### Browser verification (after steps 1 and 2) — **done, pass with nothing found**
 - Dev origin `:5173`, REAL data, read-only. Integrity snapshot taken before and

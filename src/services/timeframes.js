@@ -121,6 +121,24 @@ export function customRange(fromValue, toValue) {
   return from.start < to.end ? { start: from.start, end: to.end } : null;
 }
 
+// A CUSTOM RANGE, WRITTEN OUT. One function, because this sentence was being
+// built twice — progressSummary.js for the share card's period stamp and
+// TrainingEvolution.jsx for its period headings — and the two copies had
+// quietly disagreed about the year for as long as both existed.
+//
+// The disagreement is now a PARAMETER rather than an accident. The share card
+// omits the year because its stamp has a fixed width on a 1080px image and
+// "NOV 1, 2026 — NOV 15, 2026" does not fit it; the Evolution screen shows the
+// year because comparing a block of last year with one from this year is most
+// of what that screen is for.
+export function formatDayRange(start, end, { year = false, dash = '–' } = {}) {
+  const fmt = (ts) => new Date(ts).toLocaleDateString(
+    undefined,
+    year ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' }
+  );
+  return `${fmt(start)} ${dash} ${fmt(end)}`;
+}
+
 // The Training Evolution comparison. No `all`: two periods both running to the
 // first workout ever is not a comparison. `custom` stays, because picking an
 // arbitrary block — a training camp, the months either side of an injury — is

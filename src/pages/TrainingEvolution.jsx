@@ -4,7 +4,9 @@ import {
   SegmentedPills, StaticPill, EmptyState, IconButton, SecondaryButton
 } from '../ui/index.js';
 import { DistributionBars } from '../components/Chart.jsx';
-import { COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor, customRange } from '../services/timeframes.js';
+import {
+  COMPARE_WINDOWS, WINDOWS, pillOptions, rangeFor, customRange, formatDayRange
+} from '../services/timeframes.js';
 import { compareTrainingPeriods, precedingRange } from '../services/trainingEvolution.js';
 import { buildHighlights } from '../services/exerciseStats.js';
 import { formatVolume } from '../utils/units.js';
@@ -20,9 +22,11 @@ function resolvePeriod(period) {
   return period.id === 'custom' ? customRange(period.from, period.to) : rangeFor(period.id);
 }
 
-const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+// With the year: comparing a block of last year against one from this year is
+// most of what this screen is for, so the stamp has to say which year.
+const dayRange = (range) => formatDayRange(range.start, range.end, { year: true });
 const periodTitle = (period, range) =>
-  period.id === 'custom' ? `${fmtDate(range.start)} – ${fmtDate(range.end)}` : WINDOWS[period.id].label;
+  period.id === 'custom' ? dayRange(range) : WINDOWS[period.id].label;
 
 // Declines read in plain ink. Only a gain takes the accent — a drop in volume
 // after a deload block is information, not something to alarm somebody about.
@@ -102,7 +106,7 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
       {matchPreceding ? (
         <p className="mt-sm text-label font-regular text-ink-tertiary">
           {rangeB
-            ? `The ${Math.round((rangeB.end - rangeB.start) / DAY)} days immediately before period B — ${fmtDate(rangeA.start)} to ${fmtDate(rangeA.end)}.`
+            ? `The ${Math.round((rangeB.end - rangeB.start) / DAY)} days immediately before period B — ${formatDayRange(rangeA.start, rangeA.end, { year: true, dash: 'to' })}.`
             : 'Pick period B first.'}
         </p>
       ) : (
@@ -163,7 +167,7 @@ function PeriodPicker({ label, period, onChange, range }) {
       )}
       {range && period.id !== 'custom' && (
         <p className="mt-sm text-label font-regular text-ink-tertiary tabular">
-          {fmtDate(range.start)} – {fmtDate(range.end)}
+          {dayRange(range)}
         </p>
       )}
     </section>

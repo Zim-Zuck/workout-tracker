@@ -23,9 +23,9 @@ const ProgressShareCard = lazy(() => import('../components/ProgressShareCard.jsx
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
-import { isWorking, workingVolume, muscleVolume, repRangeCounts } from '../services/calculations.js';
+import { isWorking, workingVolume, muscleVolume, repRangeCounts, E1RM_REP_CAP } from '../services/calculations.js';
 import { downloadSetsCSV } from '../services/dataManager.js';
-import { WINDOWS, dashboardPillOptions, windowDays } from '../services/timeframes.js';
+import { WINDOWS, dashboardPillOptions, windowDays, rangeFor } from '../services/timeframes.js';
 import {
   rankExercises, progressionPossible, TREND_MIN_SPAN_DAYS, TREND_MIN_SESSIONS
 } from '../services/exerciseStats.js';
@@ -64,6 +64,10 @@ const WITHHELD_COPY = {
   too_few_sessions: `fewer than ${TREND_MIN_SESSIONS} sessions`,
   span_too_short: `under ${TREND_MIN_SPAN_DAYS} days apart`,
   no_load: 'no load logged',
+  // The one the screens used to disagree about: these lifts rank and read as
+  // ordinary trends to the maths, but the estimate behind the number has
+  // stopped responding, so no direction is claimed for them here either.
+  rep_capped: `trained above ${E1RM_REP_CAP} reps, where est. 1RM stops tracking`,
   noisy: 'too variable to call'
 };
 
@@ -82,11 +86,13 @@ export default function ProgressScreen({ workout }) {
   const totals = useWorkoutTotals(workouts);
 
   const days = windowDays(win);
-  // Pinned to the window, not to the render. This used to be a bare
+  // rangeFor() is the one function that turns a timeframe id into a window;
+  // ExerciseDetail already used it while this screen did the subtraction by
+  // hand. Pinned to the window, not to the render: this used to be a bare
   // Date.now() expression, so `since` was a new number on every single render
   // and every memo keyed on it — including rankExercises over all history —
   // recomputed every time, which is the opposite of what the memo was for.
-  const since = useMemo(() => Date.now() - days * 86400000, [days]);
+  const since = useMemo(() => rangeFor(win).start, [win]);
   const inWindow = useMemo(() => workouts.filter((w) => w.date >= since), [workouts, since]);
 
   // ---- Typed PRs, at most one per exercise per session ----
