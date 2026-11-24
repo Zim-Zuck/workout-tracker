@@ -11,7 +11,7 @@
 //
 // Every number is derived from calculations.js. There is no second definition
 // of volume or of a PR anywhere in this file.
-import { isWorking, setVolume, estimate1RM } from './calculations.js';
+import { isWorking, setVolume, estimate1RM, sessionMinutes } from './calculations.js';
 import { prKindFrom } from './prs.js';
 import { isShareableExercise } from './socialSummary.js';
 import { startOfWeek, startOfDay, ymd } from '../utils/date.js';
@@ -41,18 +41,6 @@ function clamp(n, max) {
 
 function round1(n) {
   return Math.round(n * 10) / 10;
-}
-
-// A session longer than this was almost certainly left running — the phone was
-// pocketed and the workout finished the next morning. Counting it would make
-// "most time training" a prize for forgetting to press stop.
-const MAX_PLAUSIBLE_SESSION_MIN = 300;
-
-function sessionMinutes(w) {
-  if (!w.startTime || !w.endTime) return null;
-  const min = Math.round((w.endTime - w.startTime) / 60000);
-  if (min <= 0 || min > MAX_PLAUSIBLE_SESSION_MIN) return null;
-  return min;
 }
 
 // Walks the whole history once, in order, counting how many PRs each workout

@@ -186,6 +186,55 @@ export function DistributionBars({
   );
 }
 
+// TWO BARS PER ROW, SCALED ACROSS THE WHOLE GROUP.
+//
+// This is the shape the Evolution screen compares periods in: the earlier
+// period dim on top, the later one bright underneath, so the change reads as
+// two bar ends that do or do not line up rather than as a signed number you
+// have to believe.
+//
+// THE SCALE IS SHARED BY EVERY ROW, which is the whole reason this exists
+// alongside DistributionBars. DistributionBars normalises each row against its
+// own maximum, so every row ends up with one full-width bar and the rows cannot
+// be compared with each other — fine for a single distribution, wrong for a
+// list of shares where "6–8 is where most of the work went" is the point.
+//
+// `a` and `b` are plain numbers in whatever unit the caller is comparing; the
+// caller owns the text on both sides, because the number worth printing on the
+// right is a percentage-point delta in one case and a volume in another.
+export function PairedBars({ rows, ariaLabel, srLabel }) {
+  if (!rows.length) return null;
+  const max = Math.max(...rows.flatMap((r) => [r.a, r.b]), 1);
+  // A real but tiny value still gets a visible sliver: a bar of zero width and
+  // an absent bar look identical, and "trained a little" is not "not trained".
+  const width = (v) => (v > 0 ? `${Math.max(1.5, (v / max) * 100)}%` : '0%');
+
+  return (
+    <ul className="flex flex-col gap-md" aria-label={ariaLabel}>
+      {rows.map((row) => (
+        <li key={row.key ?? row.label} className="flex items-center gap-md">
+          <span aria-hidden="true" className="w-[76px] shrink-0 text-label font-regular text-ink truncate">
+            {row.label}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span aria-hidden="true" className="flex flex-col gap-xxs">
+              <span className="block h-1.5 rounded-full" style={{ width: width(row.a), background: color.data }} />
+              <span className="block h-1.5 rounded-full" style={{ width: width(row.b), background: color.dataStrong }} />
+            </span>
+            {row.note && (
+              <span className="block mt-xs text-micro font-regular text-ink-tertiary tabular">{row.note}</span>
+            )}
+          </span>
+          <span className={`shrink-0 text-label font-regular tabular text-right min-w-[64px] ${row.tone === 'pr' ? 'text-pr' : 'text-ink-secondary'}`}>
+            {srLabel && <span className="sr-only">{srLabel(row)}: </span>}
+            {row.right}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Empty({ message, height }) {
   return (
     <div

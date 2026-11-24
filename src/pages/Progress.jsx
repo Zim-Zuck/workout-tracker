@@ -5,7 +5,7 @@ import {
 } from '../ui/index.js';
 import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
-import MilestonesRow from '../components/MilestonesRow.jsx';
+import MilestonesSection from '../components/MilestonesSection.jsx';
 
 // THE THREE THINGS BEHIND A TAP ARE SPLIT OUT OF THE DASHBOARD'S BUNDLE.
 //
@@ -14,9 +14,9 @@ import MilestonesRow from '../components/MilestonesRow.jsx';
 // canvas renderer. Loading that on the way to a volume graph is work nobody
 // asked for.
 //
-// MilestonesRow is deliberately NOT lazy. It is about a kilobyte, it imports
-// nothing the dashboard does not already hold, and it renders above the fold —
-// splitting it would trade a visible blank row on every open for nothing.
+// MilestonesSection is deliberately NOT lazy. It imports nothing the dashboard
+// does not already hold, and it renders above the fold — splitting it would
+// trade a visible blank gap on every open for nothing.
 const ExerciseDetail = lazy(() => import('./ExerciseDetail.jsx'));
 const TrainingEvolution = lazy(() => import('./TrainingEvolution.jsx'));
 const ProgressShareCard = lazy(() => import('../components/ProgressShareCard.jsx'));
@@ -250,9 +250,9 @@ export default function ProgressScreen({ workout }) {
       </div>
 
       {/* Lifetime milestones sit with the lifetime tiles, because they answer
-          the same question with a date attached. One row, no heading of its
-          own beyond a label; it hides itself when there is nothing to say. */}
-      <MilestonesRow workouts={workouts} />
+          the same question with a date attached. It hides itself when there is
+          nothing to say. */}
+      <MilestonesSection workouts={workouts} />
 
       <SegmentedPills
         className="mt-lg"

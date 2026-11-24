@@ -36,7 +36,8 @@ Tests after: 418 total, 417 pass, 1 skipped, 0 fail. Bundle: main JS 629.45 kB
 (gzip 183.24 kB), +3.66 kB over baseline.
 
 Spec: `docs/phase-3-milestones.md`. New files: `src/services/milestones.js`,
-`src/components/MilestonesRow.jsx`, `test/milestones.test.mjs` (22 tests).
+`src/components/MilestonesSection.jsx` (originally `MilestonesRow.jsx`; see the
+Progress redesign note below), `test/milestones.test.mjs` (29 tests).
 
 Decisions made:
 - **Signature deviation**: `milestonesFor(workouts, { asOf })` — the `exercises`
@@ -82,10 +83,16 @@ Decisions made:
 - Lazy-loaded the three things behind a tap: Evolution, ExerciseDetail and the
   share card (which carries the whole canvas renderer). Each gets a Suspense
   fallback; the full-screen ones announce themselves with `role="status"`.
-- **MilestonesRow is deliberately NOT lazy** (a deviation from the brief). It is
-  about a kilobyte, it imports nothing the dashboard does not already hold, and
-  it renders above the fold — splitting it would trade a visible blank row on
-  every open for no measurable saving.
+- **MilestonesSection is deliberately NOT lazy** (a deviation from the brief).
+  It imports nothing the dashboard does not already hold, and it renders above
+  the fold — splitting it would trade a visible blank gap on every open for no
+  measurable saving.
+- **The compact row became a section** in the Progress redesign (designs 1b/1c).
+  The three-line "label · date" row was replaced by a next-milestone card, a
+  shelf of tiles for what has been reached, and a quiet list of what is ahead.
+  This overrides the earlier "the dashboard stays compact" rule for milestones
+  specifically: the row answered the one question that matters — how far away
+  the next one is — worst of all, by burying it mid-sentence at 13px.
 - Evolution and ExerciseDetail were already thoroughly memoised; nothing there
   needed adding.
 ### 3b. Accessibility — **done**

@@ -80,6 +80,40 @@ function label(category, threshold) {
   }
 }
 
+// THE TILE FORM: a value short enough to set at 32px, and the subject it
+// counts, as two pieces rather than one sentence.
+//
+// `label` stays the sentence form ("100 workouts") because the Ahead list and
+// the next-milestone headline both read as sentences. The shelf does not: a
+// tile is a number with a word under it, and splitting "100 workouts" in the
+// component would mean a regex over a string this module is free to change.
+//
+// The unit rides on the VALUE, not the subject — "4w", "50t" — so the subject
+// line stays the same word whatever the magnitude, and a tile never prints its
+// unit twice.
+function shortValue(category, threshold) {
+  switch (category) {
+    case 'streak': return `${threshold}w`;
+    case 'volume': {
+      const { value, unit } = compactVolume(threshold);
+      return `${value}${unit}`;
+    }
+    default: return threshold.toLocaleString();
+  }
+}
+
+function subject(category, threshold) {
+  switch (category) {
+    case 'workouts': return 'Workouts';
+    case 'streak': return 'Streak';
+    case 'volume': return 'Volume';
+    // The first PR is the tile a new user sees before any other, so it says
+    // what it is rather than reading as a count of one.
+    case 'prs': return threshold === 1 ? 'First PR' : 'Personal records';
+    default: return '';
+  }
+}
+
 function remainingLabel(category, remaining) {
   switch (category) {
     case 'streak': return `${remaining} more ${remaining === 1 ? 'week' : 'weeks'}`;
@@ -148,15 +182,53 @@ function streakCrossings(ordered) {
   return { achieved, best };
 }
 
+// HOW FAR AHEAD THE NEXT MILESTONE IS, at the rate of the last PACE_WEEKS.
+//
+// Eight weeks is long enough that one missed week does not double the estimate
+// and short enough that it describes how you are training now rather than how
+// you trained last winter. A longer baseline would tell a returning lifter
+// their next hundred workouts are two years away because of a layoff.
+//
+// ALWAYS "about", and never a date. The honest precision here is low: this is
+// a rate extrapolated from two months, and printing "14 March" would claim a
+// certainty the arithmetic does not have.
+const PACE_WEEKS = 8;
+
+// Past this the estimate stops being information. "About 7 years" is not
+// encouragement and it is not a plan; no line at all is better.
+const MAX_ETA_WEEKS = 260;
+
+const WEEKS_PER_MONTH = 52 / 12;
+
+function etaLabel(weeks) {
+  if (weeks <= 1) return 'about a week';
+  if (weeks <= 8) return `about ${weeks} weeks`;
+  const months = Math.round(weeks / WEEKS_PER_MONTH);
+  if (months < 18) return `about ${months} months`;
+  const years = Math.round(months / 12);
+  return years === 1 ? 'about a year' : `about ${years} years`;
+}
+
+// Weeks until `remaining` is covered at `perWeek`, or null when there is no
+// rate to extrapolate from — a user who logged nothing in the last eight weeks
+// has no pace, and dividing by zero to get Infinity is not an estimate.
+function etaFor(remaining, perWeek) {
+  if (!Number.isFinite(perWeek) || perWeek <= 0) return null;
+  const weeks = Math.ceil(remaining / perWeek);
+  if (!Number.isFinite(weeks) || weeks <= 0 || weeks > MAX_ETA_WEEKS) return null;
+  return { weeks, label: etaLabel(weeks) };
+}
+
 // The nearest threshold still ahead of `current`, or null when the ladder is
 // finished. Deliberately measured against the CURRENT value, not the best ever:
 // after a break, the next streak milestone has to be something reachable rather
 // than the 52 weeks you were heading for.
-function nextFor(category, current) {
+function nextFor(category, current, perWeek) {
   const threshold = THRESHOLDS[category].find((t) => t > current);
   if (threshold == null) return null;
   const remaining = threshold - current;
   const pct = Math.min(100, Math.max(0, (current / threshold) * 100));
+  const eta = etaFor(remaining, perWeek);
   return {
     category,
     threshold,
@@ -164,7 +236,13 @@ function nextFor(category, current) {
     remaining,
     pct: Number.isFinite(pct) ? pct : 0,
     label: label(category, threshold),
+    shortValue: shortValue(category, threshold),
+    subject: subject(category, threshold),
     progressLabel: remainingLabel(category, remaining),
+    // null when there is no rate to go on. The caller drops the clause rather
+    // than printing a hedge about not knowing.
+    etaWeeks: eta ? eta.weeks : null,
+    etaLabel: eta ? eta.label : null,
     lapsed: false
   };
 }
@@ -205,13 +283,30 @@ export function milestonesFor(workouts, { asOf = Date.now() } = {}) {
   const achieved = [
     ...counts.achieved, ...volume.achieved, ...prCrossings.achieved, ...streak.achieved
   ].sort((a, b) => b.date - a.date || b.threshold - a.threshold)
-    .map((m) => ({ ...m, label: label(m.category, m.threshold) }));
+    .map((m) => ({
+      ...m,
+      label: label(m.category, m.threshold),
+      shortValue: shortValue(m.category, m.threshold),
+      subject: subject(m.category, m.threshold)
+    }));
+
+  // THE RECENT RATE, for the "about N weeks at your pace" estimate. Measured
+  // off the SAME event arrays the crossings walked, so the pace cannot drift
+  // from the totals it is extrapolating — a second pass over `workouts` with
+  // its own filter is how those two come to disagree.
+  //
+  // A streak advances exactly one week per week by definition, so its rate is
+  // 1 and its estimate is just the weeks remaining. That is the one category
+  // here where "at your pace" is arithmetic rather than extrapolation.
+  const since = asOf - PACE_WEEKS * WEEK;
+  const ratePerWeek = (events) =>
+    events.reduce((t, e) => t + (e.date >= since ? e.amount : 0), 0) / PACE_WEEKS;
 
   const next = [
-    nextFor('workouts', ordered.length),
-    nextFor('volume', volume.total),
-    nextFor('prs', prs.length),
-    nextFor('streak', currentStreak)
+    nextFor('workouts', ordered.length, ratePerWeek(countEvents)),
+    nextFor('volume', volume.total, ratePerWeek(volumeEvents)),
+    nextFor('prs', prs.length, ratePerWeek(prEvents)),
+    nextFor('streak', currentStreak, 1)
   ].filter(Boolean).map((n) => (
     n.category === 'streak' ? { ...n, lapsed: currentStreak < streak.best } : n
   )).sort((a, b) => b.pct - a.pct);

@@ -5,7 +5,7 @@
 // repRangeCounts, and "sessions" means what rankExercises means by it — distinct
 // workouts containing at least one working set. This module compares, and that
 // is all it does.
-import { workingVolume, muscleVolume, repRangeCounts } from './calculations.js';
+import { workingVolume, muscleVolume, repRangeCounts, sessionMinutes } from './calculations.js';
 import { rankExercises } from './exerciseStats.js';
 
 const DAY = 86400000;
@@ -65,6 +65,15 @@ function periodStats(workouts, exercises, range) {
   // the dashboard's own list means by them.
   const { rows } = rankExercises(workouts, exercises, { mode: 'frequency', start, end });
 
+  // AVERAGED OVER THE TIMED SESSIONS ONLY, never over all of them. A session
+  // logged without the timer has an unknown length, and folding it in as a zero
+  // would quietly report a shorter average for the period that happened to
+  // contain more untimed sessions. `sessionsTimed` is carried alongside so a
+  // caller can say how many sessions the average actually rests on.
+  const minutes = inPeriod.map(sessionMinutes).filter((m) => m != null);
+  const sessionsTimed = minutes.length;
+  const avgSessionMin = sessionsTimed ? minutes.reduce((a, m) => a + m, 0) / sessionsTimed : 0;
+
   return {
     start,
     end,
@@ -74,6 +83,8 @@ function periodStats(workouts, exercises, range) {
     exerciseCount: rows.length,
     perWeek: inPeriod.length / weeks,
     volumePerWeek: volumeKg / weeks,
+    avgSessionMin,
+    sessionsTimed,
     repRange: repRangeCounts(workouts, { start, end }),
     muscle: muscleVolume(workouts, exercises, { start, end }),
     rows
@@ -154,7 +165,8 @@ export function compareTrainingPeriods(workouts, exercises, rangeA, rangeB) {
       volumeKg: change(a.volumeKg, b.volumeKg),
       exerciseCount: change(a.exerciseCount, b.exerciseCount),
       perWeek: change(a.perWeek, b.perWeek),
-      volumePerWeek: change(a.volumePerWeek, b.volumePerWeek)
+      volumePerWeek: change(a.volumePerWeek, b.volumePerWeek),
+      avgSessionMin: change(a.avgSessionMin, b.avgSessionMin)
     },
     repRange: pairDistribution(a.repRange, b.repRange, 'count'),
     muscle: pairDistribution(a.muscle, b.muscle, 'volumeKg'),

@@ -403,3 +403,63 @@ test('missing, malformed and out-of-order dates give null, not a broken range', 
   assert.equal(localDayBounds('2026-02-31'), null);
   assert.equal(localDayBounds('2026-13-01'), null);
 });
+
+// ---- average session length ----
+//
+// This metric rests on the workout timer, which a lot of history does not have.
+// The failure to avoid is an untimed session being folded in as a zero: that
+// makes the average quietly depend on how many sessions happened to be logged
+// without the timer, which is not a fact about training at all.
+
+const timed = (id, daysAgo, minutes, sets) => {
+  const base = w(id, daysAgo, sets);
+  return { ...base, startTime: base.date, endTime: base.date + minutes * 60000 };
+};
+
+test('the average session covers only the timed sessions', () => {
+  const history = [
+    timed('a1', 50, 60, [set('a', 100, 5, 1)]),
+    w('a2', 40, [set('a', 100, 5, 2)]),            // no timer
+    timed('b1', 10, 90, [set('a', 100, 5, 3)]),
+    timed('b2', 5, 70, [set('a', 100, 5, 4)])
+  ];
+  const r = compareTrainingPeriods(history, EXERCISES, A, B);
+
+  assert.equal(r.a.workouts, 2);
+  assert.equal(r.a.sessionsTimed, 1);
+  assert.equal(r.a.avgSessionMin, 60);             // not 30
+  assert.equal(r.b.sessionsTimed, 2);
+  assert.equal(r.b.avgSessionMin, 80);
+  assert.equal(Math.round(r.delta.avgSessionMin.pct), 33);
+});
+
+test('no timer anywhere reports nothing timed rather than an average of zero', () => {
+  const r = compareTrainingPeriods(HISTORY, EXERCISES, A, B);
+  assert.equal(r.a.sessionsTimed, 0);
+  assert.equal(r.b.sessionsTimed, 0);
+  assert.equal(r.a.avgSessionMin, 0);
+  assert.equal(r.delta.avgSessionMin.kind, 'none');
+});
+
+test('an implausible session length is dropped, not averaged in', () => {
+  // Nine hours: the timer was left running overnight. One of these is enough
+  // to double a month's average on its own.
+  const history = [
+    timed('a1', 50, 60, [set('a', 100, 5, 1)]),
+    timed('b1', 10, 60, [set('a', 100, 5, 2)]),
+    timed('b2', 5, 9 * 60, [set('a', 100, 5, 3)])
+  ];
+  const r = compareTrainingPeriods(history, EXERCISES, A, B);
+  assert.equal(r.b.sessionsTimed, 1);
+  assert.equal(r.b.avgSessionMin, 60);
+});
+
+test('a period with timing against one without reads as new, not as a percentage', () => {
+  const history = [
+    w('a1', 50, [set('a', 100, 5, 1)]),
+    timed('b1', 10, 75, [set('a', 100, 5, 2)])
+  ];
+  const r = compareTrainingPeriods(history, EXERCISES, A, B);
+  assert.equal(r.delta.avgSessionMin.kind, 'new');
+  assert.equal(r.delta.avgSessionMin.pct, null);
+});

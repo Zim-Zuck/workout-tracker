@@ -336,3 +336,78 @@ test('every achieved entry carries a label, a date and the workout that crossed 
     assert.ok(ids.has(m.workoutId), `${m.label} points at a real workout`);
   }
 });
+
+// ---- the pace estimate, and the tile form ----
+//
+// WHAT THIS GUARDS. The estimate is an extrapolation from eight weeks, so the
+// only things worth asserting are that it never emits a number that is not a
+// number, never claims a date it cannot know, and goes quiet rather than
+// printing "about 7 years". The arithmetic itself is one division.
+
+test('the next milestone carries an estimate at the recent pace', () => {
+  // One workout every 3 days for 87 workouts: ~2.3 a week, 13 to go.
+  const r = milestonesFor(history(87), { asOf: NOW });
+  const next = nextOf(r, 'workouts');
+  assert.equal(next.threshold, 100);
+  assert.equal(next.remaining, 13);
+  assert.ok(next.etaWeeks > 0 && next.etaWeeks < 20, `got ${next.etaWeeks}`);
+  assert.match(next.etaLabel, /^about /);
+});
+
+test('no recent training means no estimate rather than Infinity', () => {
+  // All the training is a year old, so the eight-week pace window is empty.
+  const r = milestonesFor(history(30, { endAt: NOW - 52 * WEEK }), { asOf: NOW });
+  for (const n of r.next) {
+    if (n.category === 'streak') continue; // a streak advances by definition
+    assert.equal(n.etaWeeks, null, n.category);
+    assert.equal(n.etaLabel, null, n.category);
+  }
+});
+
+test('a far-off but reachable estimate is still printed, in months', () => {
+  // One workout in the pace window against 9 to go: slow, but a real rate and
+  // a real answer. Going quiet here would be hiding the thing it was asked.
+  const r = milestonesFor(history(1), { asOf: NOW });
+  const next = nextOf(r, 'workouts');
+  assert.ok(next.etaWeeks > 8, `got ${next.etaWeeks}`);
+  assert.match(next.etaLabel, /^about \d+ months$/);
+});
+
+test('an estimate past the cap is dropped, not printed', () => {
+  // One kilogram lifted, ever, against a ten-tonne milestone. The arithmetic
+  // succeeds and the answer is fifteen centuries, which is not information.
+  const r = milestonesFor(history(1, { weightKg: 1, reps: 1 }), { asOf: NOW });
+  const next = nextOf(r, 'volume');
+  assert.equal(next.etaWeeks, null);
+  assert.equal(next.etaLabel, null);
+});
+
+test('a streak estimate is the weeks remaining, exactly', () => {
+  const r = milestonesFor(history(40, { everyDays: 3 }), { asOf: NOW });
+  const next = nextOf(r, 'streak');
+  assert.equal(next.etaWeeks, next.remaining);
+});
+
+test('no next milestone ever carries a NaN or a negative estimate', () => {
+  for (const n of [0, 1, 9, 10, 87, 260]) {
+    const r = milestonesFor(history(n), { asOf: NOW });
+    for (const up of r.next) {
+      assert.ok(Number.isFinite(up.pct) && up.pct >= 0 && up.pct <= 100, `pct ${up.pct}`);
+      assert.ok(up.etaWeeks === null || (Number.isInteger(up.etaWeeks) && up.etaWeeks > 0),
+        `${up.category} eta ${up.etaWeeks}`);
+    }
+  }
+});
+
+test('every milestone carries a short value and a subject for the shelf', () => {
+  const r = milestonesFor(history(120), { asOf: NOW });
+  assert.ok(r.achieved.length > 0);
+  for (const m of [...r.achieved, ...r.next]) {
+    assert.ok(m.shortValue && m.shortValue.length <= 6, `${m.category}: ${m.shortValue}`);
+    assert.ok(m.subject && m.subject.length > 0, m.category);
+  }
+  // The unit rides on the value, so the subject never repeats it.
+  const streak = achievedOf(r, 'streak')[0];
+  assert.match(streak.shortValue, /^\d+w$/);
+  assert.equal(streak.subject, 'Streak');
+});

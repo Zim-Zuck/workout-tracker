@@ -64,7 +64,7 @@ Dependencies point up this list and never down or sideways within a tier.
 
 **1. A service returns numbers and locale-free strings; a component formats
 dates.** `milestonesFor` returns a raw timestamp and a label like
-`"100 workouts"`; `MilestonesRow` turns the timestamp into "Nov 16, 2026". A
+`"100 workouts"`; `MilestonesSection` turns the timestamp into "Nov 16, 2026". A
 locale-dependent string baked into a pure function makes its tests depend on the
 machine they run on. `progressSummary` is the exception and only because the
 share card's canvas needs finished strings.
@@ -88,8 +88,8 @@ the same lift untrackable.
   stays compact: new things go into a drill-down, not into another section here.
 - **ExerciseDetail**, **TrainingEvolution**, **ProgressShareCard** — behind a
   tap, and `React.lazy`-loaded for it. None is in the initial bundle.
-- **MilestonesRow** is deliberately not lazy: about a kilobyte, imports nothing
-  the dashboard does not already hold, and renders above the fold.
+- **MilestonesSection** is deliberately not lazy: it imports nothing the
+  dashboard does not already hold, and renders above the fold.
 
 ## Tests
 

@@ -158,6 +158,28 @@ export function computeStreak(workouts, asOf = Date.now()) {
   return count;
 }
 
+// HOW LONG A SESSION TOOK, in whole minutes, or null when it cannot be known.
+//
+// A session with no endTime is still running, or was logged without the timer;
+// either way its length is unknown and has to stay unknown rather than become a
+// zero that drags an average down. Five hours is the plausibility ceiling: past
+// it the overwhelmingly likely explanation is a timer left running overnight,
+// not a five-hour session, and one of those is enough to double a month's
+// average on its own.
+//
+// Canonical, because two callers already needed it — the weekly summary's
+// duration_min and the Evolution screen's average session — and two private
+// copies of a plausibility rule is how the two screens come to disagree about
+// the same number.
+export const MAX_PLAUSIBLE_SESSION_MIN = 300;
+
+export function sessionMinutes(workout) {
+  if (!workout?.startTime || !workout?.endTime) return null;
+  const min = Math.round((workout.endTime - workout.startTime) / 60000);
+  if (min <= 0 || min > MAX_PLAUSIBLE_SESSION_MIN) return null;
+  return min;
+}
+
 // THE BEST WORKING SET OF EACH SESSION, for one exercise, oldest first.
 //
 // ONE OBSERVATION PER SESSION, not per set. Per-set observations are noisy by
