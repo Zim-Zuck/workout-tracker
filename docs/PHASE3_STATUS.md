@@ -65,5 +65,22 @@ Decisions made:
 ### 3c. Property/fuzz tests — **remaining**
 ### 3d. Consistency audit — **remaining**
 ### 3e. ARCHITECTURE.md for the Progress area — **remaining**
-### Browser verification (after steps 1 and 2) — **remaining**
+### Browser verification (after steps 1 and 2) — **done, pass with nothing found**
+- Dev origin `:5173`, REAL data, read-only. Integrity snapshot taken before and
+  to be re-checked at the end: 12 workouts, 72 exercises, 132 sets, 57,212 kg.
+- Milestones row on Progress: "50 t lifted · Nov 18, 2026 / 10 workouts ·
+  Nov 16, 2026 / 10 personal records · Nov 16, 2026", then "Next: 100 t lifted —
+  42.8 t to go". `volumeKg` from the service (57,212) matches an independent
+  read-only tally of the raw store exactly; `currentStreak` (4) matches the
+  dashboard's own streak tile.
+- Evolution screen, custom Nov 1 – Nov 15: 6 workouts, 28,604 kg.
+  Share Card, same custom range: 6 workouts, 28,603.5 kg, window
+  Nov 1 00:00:00 → Nov 15 23:59:59 local. **Identical boundaries** — the step 1
+  fix verified against real data.
+- ExerciseDetail (Back Squat): trend, consistency strip and all-time row all
+  render. No console warnings or errors anywhere.
+- Preview origin `:4173` (separate IndexedDB, never the real one) for the small
+  states: one session → row shows only "Next: 4-week streak — 3 more weeks";
+  empty history → row hidden entirely and Progress shows its own empty state.
+  One-session fixture restored afterwards.
 ### Final report — **remaining**
