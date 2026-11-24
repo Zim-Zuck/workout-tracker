@@ -31,7 +31,14 @@ export const MILESTONE_CATEGORIES = ['workouts', 'streak', 'volume', 'prs'];
 // Finished workouts. 10 is where logging has become a habit rather than an
 // experiment; each step after it is roughly 2–2.5x the last, so a milestone
 // takes months rather than weeks and never lands twice in a fortnight.
-export const WORKOUT_MILESTONES = [10, 25, 50, 100, 250, 500];
+//
+// 1 IS ON THE LADDER FOR THE SHELF, not for the ladder's own sake. The first
+// workout is a real event, it is the only milestone a brand-new user can have,
+// and without it their shelf is empty for the weeks it takes to reach ten —
+// which is the stretch where seeing something on it matters most. The PR
+// ladder starts at 1 for the same reason. It is deliberately NOT "2", "3", "5":
+// the point is an anchor, not a second ladder of small numbers.
+export const WORKOUT_MILESTONES = [1, 10, 25, 50, 100, 250, 500];
 
 // Consecutive weeks containing a session, as computeStreak defines one. 4 is a
 // month, 12 a quarter, 26 half a year, 52 a year — all units a person already
@@ -69,7 +76,8 @@ function finishedInOrder(workouts) {
 
 function label(category, threshold) {
   switch (category) {
-    case 'workouts': return `${threshold.toLocaleString()} workouts`;
+    // "1 workouts" is not a thing anybody writes, and the first one has a name.
+    case 'workouts': return threshold === 1 ? 'First workout' : `${threshold.toLocaleString()} workouts`;
     case 'streak': return `${threshold}-week streak`;
     case 'volume': {
       const { value, unit } = compactVolume(threshold);
@@ -104,7 +112,10 @@ function shortValue(category, threshold) {
 
 function subject(category, threshold) {
   switch (category) {
-    case 'workouts': return 'Workouts';
+    // The two anchor tiles say what they are rather than reading as a count of
+    // one: "1 / Workouts" and "1 / Personal records" are both worse than the
+    // thing they actually mark.
+    case 'workouts': return threshold === 1 ? 'First workout' : 'Workouts';
     case 'streak': return 'Streak';
     case 'volume': return 'Volume';
     // The first PR is the tile a new user sees before any other, so it says

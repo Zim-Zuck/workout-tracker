@@ -64,7 +64,7 @@ Dependencies point up this list and never down or sideways within a tier.
 
 **1. A service returns numbers and locale-free strings; a component formats
 dates.** `milestonesFor` returns a raw timestamp and a label like
-`"100 workouts"`; `MilestonesSection` turns the timestamp into "Nov 16, 2026". A
+`"100 workouts"`; the Milestones screen turns the timestamp into "Nov 16, 2026". A
 locale-dependent string baked into a pure function makes its tests depend on the
 machine they run on. `progressSummary` is the exception and only because the
 share card's canvas needs finished strings.
@@ -86,10 +86,12 @@ the same lift untrackable.
 - **Progress** — the dashboard. Stat tiles, the Milestones row, the window
   picker, charts, the exercise roster, and entry points to the drill-downs. It
   stays compact: new things go into a drill-down, not into another section here.
-- **ExerciseDetail**, **TrainingEvolution**, **ProgressShareCard** — behind a
-  tap, and `React.lazy`-loaded for it. None is in the initial bundle.
-- **MilestonesSection** is deliberately not lazy: it imports nothing the
-  dashboard does not already hold, and renders above the fold.
+- **ExerciseDetail**, **TrainingEvolution**, **Milestones**,
+  **ProgressShareCard** — behind a tap, and `React.lazy`-loaded for it. None is
+  in the initial bundle.
+- **Milestones** joined the lazy drill-downs when it stopped being a section.
+  It was eager while it rendered above the fold; behind a row, there is nothing
+  to keep in the first bundle.
 
 ## Tests
 

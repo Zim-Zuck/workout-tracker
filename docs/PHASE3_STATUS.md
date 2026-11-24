@@ -36,8 +36,9 @@ Tests after: 418 total, 417 pass, 1 skipped, 0 fail. Bundle: main JS 629.45 kB
 (gzip 183.24 kB), +3.66 kB over baseline.
 
 Spec: `docs/phase-3-milestones.md`. New files: `src/services/milestones.js`,
-`src/components/MilestonesSection.jsx` (originally `MilestonesRow.jsx`; see the
-Progress redesign note below), `test/milestones.test.mjs` (29 tests).
+`src/pages/Milestones.jsx` (originally `MilestonesRow.jsx`, then
+`MilestonesSection.jsx`; see the Progress redesign note below),
+`test/milestones.test.mjs` (30 tests).
 
 Decisions made:
 - **Signature deviation**: `milestonesFor(workouts, { asOf })` — the `exercises`
@@ -83,16 +84,20 @@ Decisions made:
 - Lazy-loaded the three things behind a tap: Evolution, ExerciseDetail and the
   share card (which carries the whole canvas renderer). Each gets a Suspense
   fallback; the full-screen ones announce themselves with `role="status"`.
-- **MilestonesSection is deliberately NOT lazy** (a deviation from the brief).
-  It imports nothing the dashboard does not already hold, and it renders above
-  the fold — splitting it would trade a visible blank gap on every open for no
-  measurable saving.
-- **The compact row became a section** in the Progress redesign (designs 1b/1c).
-  The three-line "label · date" row was replaced by a next-milestone card, a
-  shelf of tiles for what has been reached, and a quiet list of what is ahead.
-  This overrides the earlier "the dashboard stays compact" rule for milestones
-  specifically: the row answered the one question that matters — how far away
-  the next one is — worst of all, by burying it mid-sentence at 13px.
+- **The compact row became a section, then a screen.** The Progress redesign
+  (designs 1b/1c) replaced the three-line "label · date" row with a
+  next-milestone card, a shelf of tiles for what has been reached, and a quiet
+  list of what is ahead — the row answered the one question that matters, how
+  far away the next one is, worst of all, by burying it mid-sentence at 13px.
+  That section then moved behind a row of its own, next to Training evolution
+  and below the calendar, because a full section of lifetime history on the
+  dashboard is more than the screen can carry. The "deliberately NOT lazy"
+  deviation from the brief is therefore retired: it existed only because the
+  component rendered above the fold, and it no longer does.
+- **1 is on the workout ladder** (a second deviation from the brief, which
+  started it at 10). The shelf has to show a new user something, and the first
+  workout is the only milestone they can have for the weeks it takes to reach
+  ten. The PR ladder already started at 1 for the same reason.
 - Evolution and ExerciseDetail were already thoroughly memoised; nothing there
   needed adding.
 ### 3b. Accessibility — **done**

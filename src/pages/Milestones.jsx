@@ -1,16 +1,18 @@
 import { useMemo } from 'react';
+import { ArrowLeft, Milestone } from 'lucide-react';
 import { milestonesFor } from '../services/milestones.js';
-import { GlassCard } from '../ui/index.js';
+import { GlassCard, IconButton, EmptyState } from '../ui/index.js';
 
 // MILESTONES: ONE THING YOU ARE WALKING TOWARDS, AND A SHELF OF WHAT YOU PASSED.
 //
-// This replaces the three-line row that used to sit under the lifetime tiles.
-// That row was compact and it was unreadable: three "label · date" lines and a
-// fourth sentence about what was next, all at 13px, all in the same grey, with
-// the one number a person actually wants — how far away the next one is —
-// buried in the middle of the longest line.
+// A DRILL-DOWN, NOT A DASHBOARD SECTION. This started as a three-line row under
+// the lifetime tiles, became a section in the redesign, and is now a screen of
+// its own behind a single row — the same shape as Training evolution, and for
+// the same reason. Lifetime milestones are something you go and look at, not
+// something the Progress dashboard should put in front of you every time you
+// open it to check last week's volume. The dashboard was carrying too much.
 //
-// So the section is built around the ONE question the row answered worst. The
+// The screen is built around the ONE question the old row answered worst. The
 // next milestone gets a card, a headline, a bar and both of its endpoints. The
 // ones already reached become a shelf of tiles, because a milestone is a thing
 // you collected and a list of dates does not feel like anything. Everything
@@ -47,7 +49,7 @@ function datesFor(rows) {
   });
 }
 
-export default function MilestonesSection({ workouts }) {
+export default function MilestonesScreen({ workouts, onBack }) {
   const { achieved, next, bestStreak } = useMemo(() => milestonesFor(workouts), [workouts]);
 
   // Oldest first — see the note above. milestonesFor returns newest first
@@ -60,55 +62,67 @@ export default function MilestonesSection({ workouts }) {
   const upcoming = next[0] || null;
   const ahead = next.slice(1);
 
-  // Nothing reached and nothing started is not a section worth the space it
-  // takes: a brand-new user would see four zeroed progress bars and learn
-  // nothing.
-  if (!reached.length && (!upcoming || upcoming.current === 0)) return null;
+  // Unreachable in practice — the row that opens this screen hides itself on
+  // the same condition, and the first workout is on the ladder so anybody who
+  // has trained has a tile. Here anyway, because a drill-down that can render
+  // an empty screen is a drill-down that one day will.
+  const nothing = !reached.length && (!upcoming || upcoming.current === 0);
 
   return (
-    <section aria-labelledby="milestones-heading" className="mt-xl">
-      <h2 id="milestones-heading" className="text-body font-semibold text-ink">
-        Milestones
-      </h2>
+    <div className="px-base pb-nav">
+      <div className="flex items-center gap-sm pt-sm -ml-sm">
+        <IconButton icon={ArrowLeft} label="Back to Progress" onClick={onBack} />
+        <h1 className="text-body font-semibold text-ink truncate">Milestones</h1>
+      </div>
 
-      {upcoming && <NextMilestone milestone={upcoming} bestStreak={bestStreak} />}
-
-      {reached.length > 0 && (
+      {nothing ? (
+        <EmptyState
+          icon={Milestone}
+          title="No milestones yet"
+          body="Finish your first session and the first one lands the same day."
+        />
+      ) : (
         <>
-          <h3 className="mt-xl text-micro font-semibold uppercase text-ink-tertiary">
-            Reached · <span className="tabular">{reached.length}</span>
-          </h3>
-          <ul className="mt-md grid grid-cols-2 gap-sm">
-            {reached.map((m, i) => (
-              <ReachedTile
-                key={`${m.category}-${m.threshold}`}
-                milestone={m}
-                date={reachedDates[i]}
-              />
-            ))}
-          </ul>
+          {upcoming && <NextMilestone milestone={upcoming} bestStreak={bestStreak} />}
+
+          {reached.length > 0 && (
+            <>
+              <h2 className="mt-xxl text-micro font-semibold uppercase text-ink-tertiary">
+                Reached · <span className="tabular">{reached.length}</span>
+              </h2>
+              <ul className="mt-md grid grid-cols-2 gap-sm">
+                {reached.map((m, i) => (
+                  <ReachedTile
+                    key={`${m.category}-${m.threshold}`}
+                    milestone={m}
+                    date={reachedDates[i]}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
+
+          {ahead.length > 0 && (
+            <>
+              <h2 className="mt-xxl text-micro font-semibold uppercase text-ink-tertiary">Ahead</h2>
+              <ul className="mt-sm flex flex-col">
+                {ahead.map((m) => (
+                  <li
+                    key={m.category}
+                    className="py-md flex items-baseline gap-md border-b border-hairline first:border-t"
+                  >
+                    <span className="flex-1 min-w-0 text-body font-regular text-ink">{m.label}</span>
+                    <span className="shrink-0 text-label font-regular text-ink-tertiary tabular">
+                      {m.progressLabel}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </>
       )}
-
-      {ahead.length > 0 && (
-        <>
-          <h3 className="mt-xl text-micro font-semibold uppercase text-ink-tertiary">Ahead</h3>
-          <ul className="mt-sm flex flex-col">
-            {ahead.map((m) => (
-              <li
-                key={m.category}
-                className="py-md flex items-baseline gap-md border-b border-hairline first:border-t"
-              >
-                <span className="flex-1 min-w-0 text-body font-regular text-ink">{m.label}</span>
-                <span className="shrink-0 text-label font-regular text-ink-tertiary tabular">
-                  {m.progressLabel}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
+    </div>
   );
 }
 
@@ -121,7 +135,7 @@ function NextMilestone({ milestone, bestStreak }) {
   const { label, progressLabel, etaLabel, pct, current, threshold, lapsed } = milestone;
 
   return (
-    <GlassCard className="mt-md p-base">
+    <GlassCard className="mt-lg p-base">
       <p className="text-micro font-semibold uppercase text-ink-tertiary">Next milestone</p>
       <p className="mt-xs text-title font-semibold text-ink tabular">{label}</p>
 

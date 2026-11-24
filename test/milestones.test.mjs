@@ -44,7 +44,7 @@ const nextOf = (r, category) => r.next.find((n) => n.category === category) || n
 // ---- the ladders themselves ----
 
 test('the thresholds are the documented ones, ascending, and each has a category', () => {
-  assert.deepEqual(WORKOUT_MILESTONES, [10, 25, 50, 100, 250, 500]);
+  assert.deepEqual(WORKOUT_MILESTONES, [1, 10, 25, 50, 100, 250, 500]);
   assert.deepEqual(STREAK_MILESTONES, [4, 8, 12, 26, 52]);
   assert.deepEqual(VOLUME_MILESTONES_KG, [10000, 50000, 100000, 250000, 500000, 1000000]);
   assert.deepEqual(PR_MILESTONES, [1, 10, 25, 50, 100]);
@@ -227,13 +227,27 @@ const THRESH = {
   prs: PR_MILESTONES
 };
 
-test('one workout: nothing crossed, and a one-week streak already counts', () => {
+test('one workout: the first-workout anchor, and a one-week streak already counts', () => {
   const r = milestonesFor(history(1), { asOf: NOW });
-  assert.deepEqual(r.achieved, []);
+  // The shelf is never empty for somebody who has trained. 1 is on the ladder
+  // for exactly this case — see the note on WORKOUT_MILESTONES.
+  assert.deepEqual(achievedOf(r, 'workouts').map((m) => m.threshold), [1]);
+  assert.equal(achievedOf(r, 'workouts')[0].label, 'First workout');
+  assert.equal(achievedOf(r, 'workouts')[0].subject, 'First workout');
+  assert.equal(achievedOf(r, 'volume').length, 0);
   assert.equal(r.totals.workouts, 1);
   assert.equal(r.currentStreak, 1);
   assert.equal(nextOf(r, 'workouts').current, 1);
   assert.equal(nextOf(r, 'workouts').progressLabel, '9 to go');
+});
+
+test('no history at all leaves the first workout as the next milestone', () => {
+  const r = milestonesFor([], { asOf: NOW });
+  assert.deepEqual(r.achieved, []);
+  const next = nextOf(r, 'workouts');
+  assert.equal(next.threshold, 1);
+  assert.equal(next.label, 'First workout');
+  assert.equal(next.progressLabel, '1 to go');
 });
 
 test('an in-progress workout is not counted, so nothing is announced mid-session', () => {

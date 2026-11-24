@@ -1,24 +1,25 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
-import { Share2, ChevronRight, LineChart as LineIcon, GitCompareArrows } from 'lucide-react';
+import { Share2, ChevronRight, LineChart as LineIcon, GitCompareArrows, Milestone } from 'lucide-react';
 import {
   GlassCard, StatBlock, PRBadge, SecondaryButton, TextLink, EmptyState, SegmentedPills
 } from '../ui/index.js';
 import { AreaChart, RadarChart, DonutChart } from '../components/Chart.jsx';
 import MonthCalendar from '../components/MonthCalendar.jsx';
-import MilestonesSection from '../components/MilestonesSection.jsx';
 
-// THE THREE THINGS BEHIND A TAP ARE SPLIT OUT OF THE DASHBOARD'S BUNDLE.
+// THE FOUR THINGS BEHIND A TAP ARE SPLIT OUT OF THE DASHBOARD'S BUNDLE.
 //
 // None of them is on screen when Progress opens, and between them they carry
 // the comparison engine, the distribution charts and the whole share-card
 // canvas renderer. Loading that on the way to a volume graph is work nobody
 // asked for.
 //
-// MilestonesSection is deliberately NOT lazy. It imports nothing the dashboard
-// does not already hold, and it renders above the fold — splitting it would
-// trade a visible blank gap on every open for nothing.
+// Milestones joined them when it stopped being a section. It was deliberately
+// eager while it rendered above the fold — splitting a visible part of the
+// first screen would have traded a blank gap on every open for nothing — and
+// that reason went away the moment it moved behind a row.
 const ExerciseDetail = lazy(() => import('./ExerciseDetail.jsx'));
 const TrainingEvolution = lazy(() => import('./TrainingEvolution.jsx'));
+const Milestones = lazy(() => import('./Milestones.jsx'));
 const ProgressShareCard = lazy(() => import('../components/ProgressShareCard.jsx'));
 import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
@@ -77,6 +78,7 @@ export default function ProgressScreen({ workout }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [detailFor, setDetailFor] = useState(null);
   const [evolutionOpen, setEvolutionOpen] = useState(false);
+  const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [win, setWin] = useState('4w');
   const [sort, setSort] = useState('frequency');
 
@@ -211,6 +213,14 @@ export default function ProgressScreen({ workout }) {
     );
   }
 
+  if (milestonesOpen) {
+    return (
+      <Suspense fallback={<DrillDownFallback label="Loading milestones" />}>
+        <Milestones workouts={workouts} onBack={() => setMilestonesOpen(false)} />
+      </Suspense>
+    );
+  }
+
   if (detailFor) {
     return (
       <Suspense fallback={<DrillDownFallback label={`Loading ${detailFor.name}`} />}>
@@ -248,11 +258,6 @@ export default function ProgressScreen({ workout }) {
         <StatBlock value={`${totals.streakWeeks}w`} label="Streak" align="center" className="whitespace-nowrap" />
         <StatBlock value={totals.total} label="Total" align="center" className="whitespace-nowrap" />
       </div>
-
-      {/* Lifetime milestones sit with the lifetime tiles, because they answer
-          the same question with a date attached. It hides itself when there is
-          nothing to say. */}
-      <MilestonesSection workouts={workouts} />
 
       <SegmentedPills
         className="mt-lg"
@@ -365,6 +370,32 @@ export default function ProgressScreen({ workout }) {
         <MonthCalendar workouts={workouts} monthsBack={win === '1y' ? 12 : win === '12w' ? 3 : win === '6w' ? 2 : 1} />
       </Section>
 
+      {/* TWO DRILL-DOWNS, NOT TWO SECTIONS ------------------------------------
+          Both answer a question you go and ask rather than one the dashboard
+          should answer at you every time it opens, so both are a single row
+          each — the same shape as an exercise row above them.
+
+          They sit here, after the calendar, because everything above is the
+          recent-training story the window pills govern and everything below is
+          the per-exercise detail. These two are lifetime, and neither obeys the
+          pills; putting them at the break is what stops them reading as part
+          of either half. Milestones used to be a section up beside the stat
+          tiles, which is most of why the page felt overloaded. */}
+      <GlassCard className="mt-xxl p-0 overflow-hidden">
+        <DrillDownRow
+          icon={Milestone}
+          title="Milestones"
+          body="What you have passed, and what is next."
+          onClick={() => setMilestonesOpen(true)}
+        />
+        <DrillDownRow
+          icon={GitCompareArrows}
+          title="Training evolution"
+          body="Compare two periods, side by side."
+          onClick={() => setEvolutionOpen(true)}
+        />
+      </GlassCard>
+
       {/* Per exercise ------------------------------------------------------ */}
       <Section
         title="By exercise"
@@ -432,28 +463,6 @@ export default function ProgressScreen({ workout }) {
         ))}
       </Section>
 
-      {/* ONE CARD, NOT A SECTION. Comparing two periods is a question you go
-          and ask, not one the dashboard should answer at you every time it
-          opens — so it is a drill-down behind a single row, the same shape as
-          an exercise row above it. */}
-      <GlassCard className="mt-xxl p-0 overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setEvolutionOpen(true)}
-          className="w-full min-h-tap p-base flex items-center gap-md text-left
-                     transition-colors duration-fast ease-out active:bg-glass-pressed"
-        >
-          <GitCompareArrows size={20} className="text-ink-secondary shrink-0" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-body font-regular text-ink">Training evolution</span>
-            <span className="block text-label font-regular text-ink-tertiary mt-xxs">
-              Compare two periods, and see what changed.
-            </span>
-          </span>
-          <ChevronRight size={17} className="text-ink-tertiary shrink-0" />
-        </button>
-      </GlassCard>
-
       <div className="mt-xxl flex items-center justify-center gap-md">
         <SecondaryButton icon={Share2} onClick={() => setShareOpen(true)}>Share progress</SecondaryButton>
         <TextLink onClick={async () => { await downloadSetsCSV(); toast('CSV exported'); }}>
@@ -474,6 +483,26 @@ export default function ProgressScreen({ workout }) {
       </Suspense>
       )}
     </div>
+  );
+}
+
+// One row that opens a screen. Borderless at the bottom of the card, so two of
+// them read as a short list rather than as two stacked cards.
+function DrillDownRow({ icon: Icon, title, body, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full min-h-tap p-base flex items-center gap-md text-left border-b border-hairline
+                 last:border-b-0 transition-colors duration-fast ease-out active:bg-glass-pressed"
+    >
+      <Icon size={20} aria-hidden="true" className="text-ink-secondary shrink-0" />
+      <span className="flex-1 min-w-0">
+        <span className="block text-body font-regular text-ink">{title}</span>
+        <span className="block text-label font-regular text-ink-tertiary mt-xxs">{body}</span>
+      </span>
+      <ChevronRight size={17} aria-hidden="true" className="text-ink-tertiary shrink-0" />
+    </button>
   );
 }
 
