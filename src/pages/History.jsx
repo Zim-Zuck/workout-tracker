@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Trash2, SlidersHorizontal, ChevronRight, Share2, Check, X, MoreHorizontal, Download } from 'lucide-react';
 import {
-  GlassCard, SegmentedTrack, BottomSheet, SheetAction, SetRow, SetRowHeader,
+  GlassCard, BottomSheet, SheetAction, SetRow, SetRowHeader,
   PrimaryButton, SecondaryButton, TextLink, StatBlock, EmptyState, useUndoToast, Pill,
   BodyPair, MuscleBars
 } from '../ui/index.js';

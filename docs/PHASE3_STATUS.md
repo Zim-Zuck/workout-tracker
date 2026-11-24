@@ -88,7 +88,48 @@ Decisions made:
   every open for no measurable saving.
 - Evolution and ExerciseDetail were already thoroughly memoised; nothing there
   needed adding.
-### 3b. Accessibility — **remaining**
+### 3b. Accessibility — **done**
+Tests after: 418 total, 417 pass, 1 skipped, 0 fail. Main JS 590.13 kB.
+
+Fixed:
+- `SegmentedTrack` had `role="tablist"` but no arrow keys and no roving
+  tabIndex, so it was a tablist in name only and a keyboard user tabbed through
+  every option. It now has the same keyboard contract `SegmentedPills` already
+  had. Used on ExerciseDetail, History, Social, Settings, the feed and the
+  export sheet.
+- Settings' three on/off switches (`Rest timer sound`, `Vibration`, `Ronnie`)
+  had `role="switch"` and `aria-checked` but **no accessible name** — the only
+  text identifying them was a sibling. A screen reader announced "switch, on"
+  three times with nothing to tell them apart. `label` is now required.
+- The share card's Timeframe row was a hand-rolled row of bare `<button>`s: no
+  group role, no `aria-selected`, no arrow keys, 36pt targets. Replaced with
+  `SegmentedPills`, which already solves all four. Pills are 8pt taller as a
+  result (36 → 44), which is the tap-target minimum doing its job.
+- The two-bar period comparison read as "A 9 percent, B 16 percent" with nothing
+  to say what A and B were or what was being measured. `DistributionBars` now
+  takes `ariaLabel` and `srLabel`; the bar track and the bare "A"/"B" are
+  `aria-hidden`, and each row carries one sentence —
+  "1–5, The period before: 9 %".
+- Removed a dead `SegmentedTrack` import from History.jsx.
+
+Audited and found already correct, so left alone:
+- Every `SegmentedPills`/`SegmentedTrack` call site already passes `ariaLabel`.
+- Both pairs of custom-range date inputs are wrapped in real `<label>`s.
+- `:focus-visible { outline: 2px solid var(--c-focus) }` is global.
+
+**Contrast, measured rather than assumed** (ratios against the three stops of
+the page gradient — `#5A1230` top, `#2A0A18` mid, `#0A0507` base):
+
+| ink | vs gradient top | vs mid | vs base |
+|---|---|---|---|
+| `ink` #F6EEF0 | 11.77 | 15.94 | 17.74 |
+| `ink-secondary` #D9C7CD — **the muted decline ink** | **8.31** | 11.26 | 12.53 |
+| `ink-tertiary` #A6959A | 4.72 | 6.40 | 7.12 |
+| `pr` #FFC46B | 8.54 | 11.57 | 12.88 |
+
+The muted decline ink clears AA (4.5:1) and AAA (7:1) at the worst point on the
+page. No change needed — recorded here so the next person does not re-litigate
+it. `ink-tertiary` at 4.72 is the thinnest margin in the app but still passes AA.
 ### 3c. Property/fuzz tests — **remaining**
 ### 3d. Consistency audit — **remaining**
 ### 3e. ARCHITECTURE.md for the Progress area — **remaining**

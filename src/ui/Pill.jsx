@@ -119,10 +119,28 @@ export function SegmentedPills({
 // options are scopes over the same content; use SegmentedPills when they are
 // different content.
 export function SegmentedTrack({ value, onChange, options, ariaLabel, className = '' }) {
+  const ref = useRef(null);
+
+  // Same keyboard contract as SegmentedPills: arrows move between segments, and
+  // only the selected one is in the tab order. A role="tablist" that you have to
+  // tab through option by option is a tablist in name only, and the two controls
+  // looking different to a keyboard was the kind of inconsistency nobody notices
+  // until they cannot use one of them.
+  const onKeyDown = (e) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    const i = options.findIndex((o) => o.value === value);
+    const next = options[(i + (e.key === 'ArrowRight' ? 1 : options.length - 1)) % options.length];
+    onChange(next.value);
+    ref.current?.querySelector(`[data-v="${next.value}"]`)?.focus();
+  };
+
   return (
     <div
+      ref={ref}
       role="tablist"
       aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
       className={`flex p-xs gap-xs rounded-full bg-glass-inset border border-glass-inset-border ${className}`}
     >
       {options.map((o) => {
@@ -130,9 +148,11 @@ export function SegmentedTrack({ value, onChange, options, ariaLabel, className 
         return (
           <button
             key={o.value}
+            data-v={o.value}
             role="tab"
             type="button"
             aria-selected={on}
+            tabIndex={on ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={[
               'flex-1 h-10 rounded-full text-label font-semibold whitespace-nowrap',

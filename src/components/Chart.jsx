@@ -150,25 +150,38 @@ export function LineChart({
 // Horizontal bars for a distribution — muscle groups, rep ranges. The value is
 // printed on every row, because a proportion you have to eyeball against its
 // neighbours is a proportion you cannot read.
-export function DistributionBars({ data, unit = '', formatValue = (v) => String(v) }) {
+// `ariaLabel` names the group and `srLabel` expands a bar's short visible label
+// into a sentence. The two-bar period comparison is the case that needs both:
+// on screen the bars are headed by the row's own title and labelled "A" and "B",
+// but a screen reader meets them with no such context and hears "A 9 percent, B
+// 16 percent", which says nothing about what A and B are or what is being
+// measured. The bar itself is decoration — the number next to it is the content
+// — so the track is hidden and the row carries one readable sentence.
+export function DistributionBars({
+  data, unit = '', formatValue = (v) => String(v), ariaLabel, srLabel
+}) {
   if (!data.length) return <Empty message="Nothing logged in this window." height={80} />;
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <ul className="flex flex-col gap-sm">
-      {data.map((d) => (
-        <li key={d.label} className="flex items-center gap-md">
-          <span className="w-[76px] shrink-0 text-label font-regular text-ink-secondary truncate">{d.label}</span>
-          <span className="flex-1 h-2 rounded-full bg-glass-inset overflow-hidden">
-            <span
-              className="block h-full rounded-full"
-              style={{ width: `${(d.value / max) * 100}%`, background: color.data }}
-            />
-          </span>
-          <span className="shrink-0 text-label font-semibold text-ink tabular text-right min-w-[64px]">
-            {formatValue(d.value)}{unit ? ` ${unit}` : ''}
-          </span>
-        </li>
-      ))}
+    <ul className="flex flex-col gap-sm" aria-label={ariaLabel}>
+      {data.map((d) => {
+        const value = `${formatValue(d.value)}${unit ? ` ${unit}` : ''}`;
+        return (
+          <li key={d.label} className="flex items-center gap-md">
+            <span aria-hidden="true" className="w-[76px] shrink-0 text-label font-regular text-ink-secondary truncate">{d.label}</span>
+            <span aria-hidden="true" className="flex-1 h-2 rounded-full bg-glass-inset overflow-hidden">
+              <span
+                className="block h-full rounded-full"
+                style={{ width: `${(d.value / max) * 100}%`, background: color.data }}
+              />
+            </span>
+            <span className="shrink-0 text-label font-semibold text-ink tabular text-right min-w-[64px]">
+              {srLabel && <span className="sr-only">{srLabel(d.label)}: </span>}
+              {value}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

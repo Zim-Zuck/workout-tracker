@@ -230,7 +230,7 @@ function Comparison({ result, highlights, titleA, titleB }) {
       </Block>
 
       <Block title="Rep ranges" subtitle="Share of working sets in each period.">
-        <MixBars rows={repRange} valueKey="count" unit="sets" />
+        <MixBars rows={repRange} valueKey="count" unit="sets" titleA={titleA} titleB={titleB} />
       </Block>
 
       {muscle.length > 0 && (
@@ -243,6 +243,8 @@ function Comparison({ result, highlights, titleA, titleB }) {
             rows={[...muscle].sort((x, y) => Math.max(y.a.pct, y.b.pct) - Math.max(x.a.pct, x.b.pct)).slice(0, 8)}
             valueKey="volumeKg"
             format={formatVolume}
+            titleA={titleA}
+            titleB={titleB}
           />
         </Block>
       )}
@@ -297,7 +299,7 @@ function shareNote(row) {
   return null;
 }
 
-function MixBars({ rows, valueKey, unit = '', format }) {
+function MixBars({ rows, valueKey, unit = '', format, titleA, titleB }) {
   const withAny = rows.filter((r) => r.a[valueKey] > 0 || r.b[valueKey] > 0);
   if (!withAny.length) return <p className="text-label font-regular text-ink-tertiary">Nothing logged in either period.</p>;
 
@@ -320,6 +322,8 @@ function MixBars({ rows, valueKey, unit = '', format }) {
                 { label: 'B', value: row.b.pct }
               ]}
               unit="%"
+              ariaLabel={`${row.label}, share of each period`}
+              srLabel={(k) => `${row.label}, ${k === 'A' ? titleA : titleB}`}
             />
           </div>
           <p className="mt-xs text-micro font-regular text-ink-tertiary tabular">

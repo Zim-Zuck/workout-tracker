@@ -123,6 +123,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         </Row>
         <Row label="Rest timer sound">
           <Segmented
+            label="Rest timer sound"
             value={settings.soundEnabled ? 'on' : 'off'}
             onChange={(v) => updateSettings({ soundEnabled: v === 'on' })}
             options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
@@ -130,6 +131,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         </Row>
         <Row label="Vibration">
           <Segmented
+            label="Vibration"
             value={settings.vibrationEnabled ? 'on' : 'off'}
             onChange={(v) => updateSettings({ vibrationEnabled: v === 'on' })}
             options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
@@ -137,6 +139,7 @@ export default function SettingsScreen({ settings, updateSettings, workout, auth
         </Row>
         <Row label="Ronnie">
           <Segmented
+            label="Ronnie"
             value={settings.ronnieEnabled ? 'on' : 'off'}
             onChange={(v) => updateSettings({ ronnieEnabled: v === 'on' })}
             options={[{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }]}
@@ -571,13 +574,18 @@ function Row({ label, children }) {
 // A two-state switch, shaped like a switch. The old inline segmented control
 // made On/Off look like a pair of equal choices rather than a thing that is
 // currently one way.
-function Segmented({ value, onChange, options }) {
+// `label` is required, not decorative. The switch sits in a Row whose text is
+// the only thing saying what it controls, and that text is a sibling — so
+// without this a screen reader announced "switch, on" three times in a row with
+// nothing to tell them apart.
+function Segmented({ value, onChange, options, label }) {
   const on = value === options[0].value;
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
+      aria-label={label}
       onClick={() => onChange(on ? options[1].value : options[0].value)}
       // The switch LOOKS 52x32 and IS 52x44: the track is drawn inside a
       // full-height hit area rather than being the hit area.

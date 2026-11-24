@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Share2, Download, X, Check, Search, Star } from 'lucide-react';
 import { buildProgressSummary, strengthSeriesFor, TIMEFRAMES } from '../services/progressSummary.js';
 import { customRange } from '../services/timeframes.js';
+import { SegmentedPills } from '../ui/index.js';
 import { formatWeight } from '../utils/units.js';
 import {
   PALETTE, FONT_DISPLAY, FONT_TEXT,
@@ -317,19 +318,19 @@ export default function ProgressShareCard({ open, workouts, exercises, onClose }
 
           <div className="space-y-4">
             <ConfigSection label="Timeframe">
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-                {TIMEFRAMES.map((tf) => (
-                  <button
-                    key={tf.id}
-                    onClick={() => setTimeframeId(tf.id)}
-                    className={`shrink-0 h-9 px-3 rounded-full text-label font-semibold border whitespace-nowrap ${
-                      timeframeId === tf.id ? 'bg-primary border-focus text-on-primary' : 'border-glass-border text-ink-tertiary'
-                    }`}
-                  >
-                    {tf.label}
-                  </button>
-                ))}
-              </div>
+              {/* Was a hand-rolled row of bare <button>s: no group role, no
+                  aria-selected, no arrow keys, and 36pt targets. SegmentedPills
+                  is the component that already solves all four, and reusing it
+                  means this row cannot drift away from every other picker in
+                  the app again. The pills are 8pt taller as a result, which is
+                  the tap-target minimum doing its job. */}
+              <SegmentedPills
+                ariaLabel="Timeframe"
+                size="sm"
+                value={timeframeId}
+                onChange={setTimeframeId}
+                options={TIMEFRAMES.map((tf) => ({ value: tf.id, label: tf.label }))}
+              />
               {timeframeId === 'custom' && (
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <label className="text-label text-ink-tertiary">
