@@ -359,7 +359,7 @@ function Root() {
           />
         )}
         {tab === 'history' && <HistoryScreen workout={workout} />}
-        {tab === 'progress' && <ProgressScreen workout={workout} />}
+        {tab === 'progress' && <ProgressScreen workout={workout} settings={settings} />}
         {tab === 'social' && (
           <SocialScreen
             auth={auth}

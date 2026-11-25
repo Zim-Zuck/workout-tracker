@@ -238,6 +238,10 @@ export function AreaChart({
   height = 190,
   formatValue = (v) => v.toLocaleString(),
   pointLabel = null,    // text for the pill on the latest point
+  // Whether the last point gets the "this is the one" treatment (bigger dot,
+  // drop line, pointLabel pill). Off when the data is historical weeks with
+  // nothing current among them — a plain trend line, nothing to call out.
+  highlightLast = true,
   emptyMessage = 'Not enough data yet.'
 }) {
   if (data.length < 2) return <Empty message={emptyMessage} height={height} />;
@@ -293,33 +297,38 @@ export function AreaChart({
                     strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
               {/* The drop line under the latest week, so the pill above it and
                   the date below it read as the same thing. */}
-              <line x1={x(lastI)} x2={x(lastI)} y1="0" y2={plotH}
-                    stroke={color.hairline} strokeWidth="1" strokeDasharray="2 3"
-                    vectorEffect="non-scaling-stroke" />
+              {highlightLast && (
+                <line x1={x(lastI)} x2={x(lastI)} y1="0" y2={plotH}
+                      stroke={color.hairline} strokeWidth="1" strokeDasharray="2 3"
+                      vectorEffect="non-scaling-stroke" />
+              )}
             </svg>
 
             {/* Dots, as HTML so they stay circles however wide the phone is. */}
-            {data.map((d, i) => (
-              <span
-                key={d.label + i}
-                className="absolute rounded-full"
-                style={{
-                  left: `${x(i)}%`,
-                  top: y(d.value),
-                  width: i === lastI ? 11 : 7,
-                  height: i === lastI ? 11 : 7,
-                  transform: 'translate(-50%, -50%)',
-                  background: i === lastI ? color.ink : color.bg,
-                  border: `2px solid ${i === lastI ? color.ink : color.dataStrong}`,
-                  boxShadow: i === lastI ? `0 0 0 4px ${color.glassInset}` : 'none'
-                }}
-              />
-            ))}
+            {data.map((d, i) => {
+              const last = highlightLast && i === lastI;
+              return (
+                <span
+                  key={d.label + i}
+                  className="absolute rounded-full"
+                  style={{
+                    left: `${x(i)}%`,
+                    top: y(d.value),
+                    width: last ? 11 : 7,
+                    height: last ? 11 : 7,
+                    transform: 'translate(-50%, -50%)',
+                    background: last ? color.ink : color.bg,
+                    border: `2px solid ${last ? color.ink : color.dataStrong}`,
+                    boxShadow: last ? `0 0 0 4px ${color.glassInset}` : 'none'
+                  }}
+                />
+              );
+            })}
 
             {/* Pinned to the top of the plot rather than floated above the
                 last point: when the latest week is the low point, "above the
                 dot" is down among the axis labels. */}
-            {pointLabel && (
+            {highlightLast && pointLabel && (
               <span
                 className="absolute h-8 px-md inline-flex items-center rounded-full bg-primary
                            text-on-primary text-label font-semibold tabular whitespace-nowrap"

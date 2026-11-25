@@ -25,6 +25,8 @@ import { useToast } from '../components/Toast.jsx';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
 import { prTimeline } from '../services/prs.js';
 import { isWorking, workingVolume, muscleVolume, repRangeCounts, E1RM_REP_CAP } from '../services/calculations.js';
+import { projectWeeklyVolume, PACE_TOLERANCE_PCT } from '../services/weeklyVolumeProjection.js';
+import WeeklyPaceRonnie from '../components/WeeklyPaceRonnie.jsx';
 import { downloadSetsCSV } from '../services/dataManager.js';
 import { WINDOWS, dashboardPillOptions, windowDays, rangeFor } from '../services/timeframes.js';
 import {
@@ -72,7 +74,7 @@ const WITHHELD_COPY = {
   noisy: 'too variable to call'
 };
 
-export default function ProgressScreen({ workout }) {
+export default function ProgressScreen({ workout, settings }) {
   const { workouts, exercises } = workout;
   const toast = useToast();
   const [shareOpen, setShareOpen] = useState(false);
@@ -123,15 +125,34 @@ export default function ProgressScreen({ workout }) {
     return out;
   }, [workouts, days]);
 
+  // A pure estimate of where the still-running current week will land, built
+  // from the user's own recent rhythm — how often sessions usually happen and
+  // how big one usually is. null when there isn't enough history yet (a new
+  // user, or fewer than two non-empty weeks behind this one); the UI then
+  // falls back to treating the week as what it actually is: incomplete.
+  const projection = useMemo(() => projectWeeklyVolume(workouts), [workouts]);
+  // Once the week has actually hit its expected session count there is
+  // nothing left to project — the real number already IS the projection.
+  const showProjection = projection != null && !projection.isFinal;
+
   // Weekly volume passes 2 tonnes often enough that kilograms stop being
-  // readable on an axis. Decided once, for the whole chart, so the bars stay
-  // comparable between weeks.
-  const useTonnes = useMemo(() => Math.max(0, ...weekly.map((d) => d.value)) >= 2000, [weekly]);
+  // readable on an axis. Decided once, for the whole chart — and the
+  // projected point, so a prediction can't flip the unit on its own — so the
+  // bars stay comparable between weeks.
+  const useTonnes = useMemo(
+    () => Math.max(0, ...weekly.map((d) => d.value), showProjection ? projection.projected : 0) >= 2000,
+    [weekly, showProjection, projection]
+  );
+
+  const weekNow = weekly[weekly.length - 1];
+  const fmtVol = (v) => (useTonnes
+    ? `${(Math.round((v / 1000) * 10) / 10).toLocaleString()} t`
+    : `${Math.round(v).toLocaleString()} kg`);
 
   // The current week against the average of the COMPLETED weeks behind it.
   // Comparing a Tuesday against full weeks and calling it a drop would be
-  // noise, so the badge says the week is still running rather than judging it.
-  const weekNow = weekly[weekly.length - 1];
+  // noise, so once there is enough history to project a finish, the badge
+  // judges THAT instead and says so; otherwise it keeps the old wording.
   const priorWeeks = weekly.slice(0, -1).filter((d) => d.value > 0);
   const priorAvg = priorWeeks.length
     ? priorWeeks.reduce((a, d) => a + d.value, 0) / priorWeeks.length
@@ -141,9 +162,31 @@ export default function ProgressScreen({ workout }) {
   const vsAvg = priorAvg > 0 && weekNow.value > 0
     ? Math.round(((weekNow.value - priorAvg) / priorAvg) * 100)
     : null;
-  const fmtVol = (v) => (useTonnes
-    ? `${(Math.round((v / 1000) * 10) / 10).toLocaleString()} t`
-    : `${Math.round(v).toLocaleString()} kg`);
+
+  const vsAvgProjected = showProjection && projection.averageWeeklyVolume > 0
+    ? Math.round(((projection.projected - projection.averageWeeklyVolume) / projection.averageWeeklyVolume) * 100)
+    : null;
+  // Within tolerance either way reads as "on pace", not a verdict — the whole
+  // point of projecting the week is to stop scoring an in-progress week
+  // against a finished one, and a flat percentage badge would just trade one
+  // false alarm for another.
+  const projectionBadge = vsAvgProjected == null ? null : Math.abs(vsAvgProjected) <= PACE_TOLERANCE_PCT
+    ? `On pace · ${vsAvgProjected >= 0 ? '+' : '−'}${Math.abs(vsAvgProjected)}% vs avg`
+    : `Projected ${vsAvgProjected >= 0 ? '+' : '−'}${Math.abs(vsAvgProjected)}% vs avg`;
+
+  // "~" on both numbers: an estimate built from an average session and an
+  // average frequency, not a count of anything actually logged.
+  const projectionLine = showProjection
+    ? `Projected ~${fmtVol(projection.projected)} · ~${projection.expectedSessions} sessions/wk`
+    : null;
+
+  // THIS WEEK IS OFF THE LINE. Plotting it as the chart's own last point
+  // always drew a cliff — a point for "so far" sitting beside points for
+  // whole weeks reads as a crash no matter how early in the week it is. The
+  // big number and the line above already ARE the current week's own
+  // element; the chart below is a plain trend of weeks that actually
+  // finished.
+  const completedWeekly = useMemo(() => weekly.slice(0, -1), [weekly]);
 
   // ---- Muscle groups ----
   // The split-evenly-across-tags formula lives in calculations.muscleVolume,
@@ -321,14 +364,17 @@ export default function ProgressScreen({ workout }) {
         <div className="flex items-end justify-between gap-md">
           <div className="min-w-0">
             <p className="text-title font-semibold text-ink tabular leading-none">{fmtVol(weekNow.value)}</p>
-            <p className="text-label font-regular text-ink-tertiary mt-xs">
+            {projectionLine && (
+              <p className="text-label font-regular text-ink-tertiary mt-xxs">{projectionLine}</p>
+            )}
+            <p className="text-label font-regular text-ink-tertiary mt-xxs">
               Week of {weekNow.label} · {weekNow.value > 0 ? 'in progress' : 'nothing logged yet'}
             </p>
           </div>
-          {vsAvg != null && (
+          {(showProjection ? projectionBadge : vsAvg != null) && (
             <span className="shrink-0 h-9 px-base inline-flex items-center rounded-full bg-glass-inset
                              border border-glass-inset-border text-label font-semibold text-ink-secondary tabular">
-              {vsAvg >= 0 ? '+' : '−'}{Math.abs(vsAvg)}% vs avg
+              {showProjection ? projectionBadge : `${vsAvg >= 0 ? '+' : '−'}${Math.abs(vsAvg)}% vs avg`}
             </span>
           )}
         </div>
@@ -337,15 +383,23 @@ export default function ProgressScreen({ workout }) {
             kilogram: "20k kg" reads as "twenty kilo kilograms". */}
         <div className="mt-lg">
           <AreaChart
-            data={useTonnes ? weekly.map((d) => ({ ...d, value: d.value / 1000 })) : weekly}
+            data={useTonnes ? completedWeekly.map((d) => ({ ...d, value: d.value / 1000 })) : completedWeekly}
             unit={useTonnes ? 't' : 'kg'}
-            pointLabel={`${fmtVol(weekNow.value)} · ${weekNow.label}`}
+            highlightLast={false}
             formatValue={(v) => (useTonnes
               ? (Math.round(v * 10) / 10).toLocaleString()
               : Math.round(v).toLocaleString())}
-            emptyMessage="No volume logged in this window."
+            emptyMessage="Not enough completed weeks yet."
           />
         </div>
+
+        {settings?.ronnieEnabled !== false && (
+          <WeeklyPaceRonnie
+            projection={projection}
+            intensity={settings?.ronnieIntensity}
+            className="mt-lg"
+          />
+        )}
       </Section>
 
       {/* Muscle balance ---------------------------------------------------- */}
