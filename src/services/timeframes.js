@@ -141,7 +141,8 @@ export function formatDayRange(start, end, { year = false, dash = '–' } = {}) 
 }
 
 // The Training Evolution comparison. No `all`: two periods both running to the
-// first workout ever is not a comparison. `custom` stays, because picking an
-// arbitrary block — a training camp, the months either side of an injury — is
-// most of the point of comparing periods at all.
-export const COMPARE_WINDOWS = ['1w', '2w', '4w', '6w', '12w', '3m', '6m', '1y', 'custom'];
+// first workout ever is not a comparison. No `custom` pill either — picking an
+// arbitrary block (a training camp, the months either side of an injury) is
+// still most of the point of comparing periods, but the screen's calendar does
+// that job now by direct tap rather than a pill plus two date fields.
+export const COMPARE_WINDOWS = ['1w', '2w', '4w', '6w', '12w', '3m', '6m', '1y'];

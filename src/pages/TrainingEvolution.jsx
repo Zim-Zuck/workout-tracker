@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import {
   SegmentedPills, SegmentedTrack, StaticPill, EmptyState, IconButton, GlassCard, BodyPair,
-  SectionCard, CompareLegend, ChangeChip, StackedBar, ExpandableList
+  SectionCard, CompareLegend, ChangeChip, StackedBar, ExpandableList, PeriodCalendar
 } from '../ui/index.js';
 import { color } from '../theme/tokens.js';
 import {
@@ -16,10 +16,17 @@ import { regionsFor, groupForRegion } from '../services/anatomy.js';
 import { buildVerdict, classifyVolumeTrend, summarizeDataGaps } from '../services/evolutionNarrative.js';
 import { buildFunFacts } from '../services/funFacts.js';
 import { formatVolume } from '../utils/units.js';
-import { formatDuration } from '../utils/date.js';
+import { formatDuration, ymd } from '../utils/date.js';
+import { hexToRgba } from '../utils/color.js';
 
 const DAY = 86400000;
 const RANGE_OPTIONS = pillOptions(COMPARE_WINDOWS);
+
+// PRESETS LONG ENOUGH THAT A MONTH GRID CAN'T SHOW THEM MEANINGFULLY. The
+// calendar stays hidden for these — a year-long highlight on a 7x6 grid is
+// not a visual, it's a stain — and the text chips above keep doing the job
+// alone, exactly as before the calendar existed.
+const LONG_PRESETS = new Set(['3m', '6m', '1y']);
 
 // A PERIOD IS A PRESET OR A PAIR OF DATES. Kept as one small object so the two
 // pickers are the same component twice rather than two near-copies.
@@ -116,6 +123,74 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
   // comparison people actually mean by "am I training more than I was".
   const [matchPreceding, setMatchPreceding] = useState(true);
 
+  // WHICH PERIOD THE CALENDAR'S DRAG APPLIES TO. B is always pickable; A only
+  // once matchPreceding is off, since a "before" that mirrors B has nothing of
+  // its own to drag — see effectiveRole below. This is set from the calendar's
+  // own role switch, not by tapping the summary chips above it — the two used
+  // to do the same thing and nobody could tell the chips were buttons too.
+  const [editingRole, setEditingRole] = useState('b');
+  // The drag in progress: where it started, and where the pointer is now.
+  // Both null between drags. Cleared any time the role, a preset, or the
+  // match toggle changes, so a half-finished drag for one period can't leak
+  // into another.
+  const [dragAnchor, setDragAnchor] = useState(null);
+  const [dragCursor, setDragCursor] = useState(null);
+  const [calMonth, setCalMonth] = useState(() => Date.now());
+
+  const effectiveRole = matchPreceding ? 'b' : editingRole;
+  const showCalendar = !LONG_PRESETS.has(periodB.id) && (matchPreceding || !LONG_PRESETS.has(periodA.id));
+  const isDragging = dragAnchor != null;
+
+  const clearDrag = () => { setDragAnchor(null); setDragCursor(null); };
+  const selectRole = (role) => {
+    if (role === 'a' && matchPreceding) return;
+    setEditingRole(role);
+    clearDrag();
+  };
+  const choosePresetB = (id) => { setPeriodB({ ...periodB, id }); clearDrag(); };
+  const choosePresetA = (id) => { setPeriodA({ ...periodA, id }); clearDrag(); };
+  const toggleMatchPreceding = () => { setMatchPreceding((v) => !v); clearDrag(); };
+  const navigateMonth = (delta) => setCalMonth((ts) => {
+    const d = new Date(ts);
+    return new Date(d.getFullYear(), d.getMonth() + delta, 1).getTime();
+  });
+
+  // PRESS, DRAG, RELEASE — one continuous gesture across the grid, rather than
+  // two separate taps for a start and an end date. onDragMove fires for every
+  // day the pointer crosses (see PeriodCalendar, which hit-tests under the
+  // pointer directly rather than relying on per-cell hover — touch doesn't
+  // fire those once a cell has captured the pointer). Releasing with no drag
+  // at all — a plain tap — commits a single-day range, which is all a tap
+  // should ever mean here.
+  const handleDragStart = (ts) => { setDragAnchor(ts); setDragCursor(ts); };
+  const handleDragMove = (ts) => { if (isDragging) setDragCursor(ts); };
+  const handleDragEnd = () => {
+    if (dragAnchor == null) return;
+    const endTs = dragCursor ?? dragAnchor;
+    const from = ymd(Math.min(dragAnchor, endTs));
+    const to = ymd(Math.max(dragAnchor, endTs));
+    if (effectiveRole === 'a') setPeriodA({ id: 'custom', from, to });
+    else setPeriodB({ id: 'custom', from, to });
+    clearDrag();
+  };
+  // A PLAIN CLICK, independent of the drag plumbing above — this is what
+  // fires when a keyboard user activates a day with Enter/Space (no pointer
+  // events involved at all), and picks that single day for whichever period
+  // is active.
+  const handleDayActivate = (ts) => {
+    const day = ymd(ts);
+    if (effectiveRole === 'a') setPeriodA({ id: 'custom', from: day, to: day });
+    else setPeriodB({ id: 'custom', from: day, to: day });
+  };
+
+  // THE LIVE PREVIEW IS THE SAME RANGE THE DAY GETS PAINTED WITH — while
+  // dragging, the period being edited is swapped for whatever the drag spans
+  // so far, so the grid lights up under the finger instead of waiting for
+  // release to show anything.
+  const dragPreviewRange = isDragging
+    ? { start: Math.min(dragAnchor, dragCursor), end: Math.max(dragAnchor, dragCursor) + DAY - 1 }
+    : null;
+
   // THE RANGES ARE MEMOIZED, NOT JUST THE COMPARISON. rangeFor() reads
   // Date.now() for a preset, so resolving on every render moves both ends by a
   // few milliseconds each time — which changes the memo keys below and makes
@@ -142,6 +217,19 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
 
   const precedingDays = rangeB ? Math.round((rangeB.end - rangeB.start) / DAY) : null;
 
+  // What the calendar actually paints: the committed range, unless a drag for
+  // that exact period is live right now, in which case the drag wins.
+  const calRangeB = effectiveRole === 'b' && dragPreviewRange ? dragPreviewRange : rangeB;
+  const calRangeA = effectiveRole === 'a' && dragPreviewRange ? dragPreviewRange : rangeA;
+
+  const roleLabel = effectiveRole === 'a' ? (matchPreceding ? 'A · before' : 'A · picked') : 'B · now';
+  const dragDays = isDragging
+    ? Math.round((Math.max(dragAnchor, dragCursor) - Math.min(dragAnchor, dragCursor)) / DAY) + 1
+    : 0;
+  const calendarStatus = isDragging
+    ? `Selecting ${dragDays} ${dragDays === 1 ? 'day' : 'days'} for ${roleLabel}.`
+    : `Drag across dates to set a custom period for ${roleLabel}.`;
+
   return (
     <div className="px-base pb-nav">
       <div className="flex items-center gap-sm pt-sm -ml-sm">
@@ -165,14 +253,14 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
         <RangeChip
           tag={matchPreceding ? 'A · Before' : 'A · Picked'}
           action={matchPreceding ? Pencil : RotateCcw}
+          actionLabel={matchPreceding
+            ? 'Compare against a period you pick instead'
+            : 'Compare against the period immediately before B'}
           title={matchPreceding
             ? (precedingDays ? `Previous ${precedingDays} days` : 'The period before')
             : chipTitle(periodA)}
           sub={rangeA ? chipDates(rangeA) : 'Pick both dates'}
-          onClick={() => setMatchPreceding((v) => !v)}
-          actionLabel={matchPreceding
-            ? 'Compare against a period you pick instead'
-            : 'Compare against the period immediately before B'}
+          onClick={toggleMatchPreceding}
         />
       </div>
 
@@ -181,10 +269,9 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
         ariaLabel="Recent period (B)"
         size="sm"
         value={periodB.id}
-        onChange={(id) => setPeriodB({ ...periodB, id })}
+        onChange={choosePresetB}
         options={RANGE_OPTIONS}
       />
-      {periodB.id === 'custom' && <DateFields period={periodB} onChange={setPeriodB} />}
 
       {!matchPreceding && (
         <section className="mt-lg">
@@ -194,11 +281,30 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
             ariaLabel="Compared with (A)"
             size="sm"
             value={periodA.id}
-            onChange={(id) => setPeriodA({ ...periodA, id })}
+            onChange={choosePresetA}
             options={RANGE_OPTIONS}
           />
-          {periodA.id === 'custom' && <DateFields period={periodA} onChange={setPeriodA} />}
         </section>
+      )}
+
+      {showCalendar && (
+        <PeriodCalendar
+          className="mt-lg"
+          month={calMonth}
+          onNavigate={navigateMonth}
+          rangeA={calRangeA}
+          rangeB={calRangeB}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onDayActivate={handleDayActivate}
+          activeRole={effectiveRole}
+          onRoleChange={selectRole}
+          canEditA={!matchPreceding}
+          labelA={matchPreceding ? 'A · before' : 'A · picked'}
+          labelB="B · now"
+          statusText={calendarStatus}
+        />
       )}
 
       {!rangeB || !rangeA ? (
@@ -223,12 +329,9 @@ export default function TrainingEvolution({ workouts, exercises, onBack }) {
 
 // One period, stated: what it is called, and exactly which days it covers.
 // Interactive only when there is something to switch — the B chip is driven by
-// the pills right underneath it and tapping it would do nothing.
-// THE AFFORDANCE IS AN ICON, NOT A WORD. "A · BEFORE" with "CHANGE" beside it
-// read as the single phrase "before change" — two labels in the same micro
-// uppercase, on the same line, in the same colour. A pencil cannot be misread
-// as part of the tag, and the chip's own headline already says which mode it
-// is in ("Previous 28 days" against "Last 6 weeks").
+// the pills right underneath it and tapping it would do nothing. Which period
+// the calendar below edits is its own control (PeriodCalendar's role switch),
+// not these cards — these are a summary, not a second way to do the same thing.
 function RangeChip({ tag, title, sub, emphasis = false, action: Action, actionLabel, onClick }) {
   const body = (
     <>
@@ -258,31 +361,6 @@ function RangeChip({ tag, title, sub, emphasis = false, action: Action, actionLa
     >
       {body}
     </GlassCard>
-  );
-}
-
-function DateFields({ period, onChange }) {
-  return (
-    <div className="mt-md grid grid-cols-2 gap-sm">
-      <label className="text-label text-ink-tertiary">
-        From
-        <input
-          type="date"
-          value={period.from}
-          onChange={(e) => onChange({ ...period, from: e.target.value })}
-          className="mt-1 w-full h-10 rounded-control bg-glass-inset border border-glass-border px-2 text-label text-ink"
-        />
-      </label>
-      <label className="text-label text-ink-tertiary">
-        To
-        <input
-          type="date"
-          value={period.to}
-          onChange={(e) => onChange({ ...period, to: e.target.value })}
-          className="mt-1 w-full h-10 rounded-control bg-glass-inset border border-glass-border px-2 text-label text-ink"
-        />
-      </label>
-    </div>
   );
 }
 
@@ -409,20 +487,6 @@ function Metric({ metric, first, titleA, titleB }) {
       </p>
     </div>
   );
-}
-
-// A hex colour at a given opacity, as an rgba() string. The rep-range and
-// muscle-split bars need several DISTINCT shades of the same two colours
-// (muted ink for "before", warm accent for "now") rather than several
-// different hues — varying lightness instead of hue is what keeps four
-// adjacent segments tellable apart for a colour-blind reader, not just for
-// everyone else.
-function hexToRgba(hex, alpha) {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // FUN FACT, directly under the summary card. The first fact is always the

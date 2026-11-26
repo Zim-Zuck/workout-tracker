@@ -26,3 +26,4 @@ export { default as SectionCard, CompareLegend } from './SectionCard.jsx';
 export { default as ChangeChip } from './ChangeChip.jsx';
 export { default as StackedBar } from './StackedBar.jsx';
 export { default as ExpandableList } from './ExpandableList.jsx';
+export { default as PeriodCalendar } from './PeriodCalendar.jsx';
