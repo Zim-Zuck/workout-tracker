@@ -14,9 +14,9 @@ import ExercisePickerSheet from '../components/ExercisePickerSheet.jsx';
 import ExerciseLibrarySheet from '../components/ExerciseLibrarySheet.jsx';
 import { useHaptic } from '../components/Toast.jsx';
 import { setLabels } from '../db/normalize.js';
-import { previousPerformance, summarizeSets, isWorking } from '../services/calculations.js';
+import { previousPerformance, bestSetAcrossHistory, isWorking } from '../services/calculations.js';
 import { sessionPRForExercise } from '../services/prs.js';
-import { recommend } from '../services/progression.js';
+import { recommend, isDeload, formatTarget } from '../services/progression.js';
 import { alternativesFor } from '../services/sessionBuilder.js';
 import { splitLabel } from '../services/splits.js';
 import { sessionAnatomy } from '../services/anatomy.js';
@@ -232,8 +232,13 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
           const sets = setsFor(exId);
           const labelled = setLabels(sets);
           const prev = previousPerformance(exId, workouts);
+          const best = bestSetAcrossHistory(exId, workouts);
           const rec = recommend({ exercise: ex, workoutHistory: workouts });
           const pr = sessionPRForExercise(exId, active.sets, workouts);
+          // A deload reads off the last session's own top set, not any one
+          // working set — a back-off set lighter than the top set shouldn't
+          // itself look like a deload.
+          const lastTopWeight = prev ? Math.max(0, ...prev.sets.map((s) => s.weightKg)) : 0;
 
           return (
             <ExerciseCard
@@ -241,10 +246,10 @@ export default function WorkoutScreen({ workout, settings, restTimer, onFinished
               exercise={ex}
               skipped={skipped.includes(exId)}
               sets={sets}
-              prevLine={prev ? summarizeSets(prev.sets, formatWeight) : 'No previous data'}
-              targetLine={rec.targetWeightKg > 0
-                ? `${formatWeight(rec.targetWeightKg)} × ${rec.targetRepsLow}–${rec.targetRepsHigh}`
-                : `${rec.targetRepsLow}–${rec.targetRepsHigh} reps`}
+              lastSets={prev ? prev.sets : null}
+              deload={isDeload(lastTopWeight, best?.weightKg)}
+              bestSet={best}
+              targetLine={formatTarget(rec, formatWeight)}
               prs={pr ? [{ kind: pr.kind, value: pr.unit === 'kg' ? formatWeight(pr.value) : `${pr.value}` }] : []}
               renderSet={(s) => {
                 const l = labelled.find((x) => x.set.id === s.id);

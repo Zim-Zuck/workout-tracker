@@ -1,21 +1,74 @@
-// Deterministic double-progression engine.
+// Deterministic double-progression engine, anchored to the best set ever
+// logged for an exercise — not the most recent session.
 //
-// Rules (in order):
-//   1. No prior data → suggest the exercise's default rep range at a placeholder weight (last used, or 0).
-//   2. Every working set hit the top of the rep range → increase weight by the exercise's
-//      configured increment, target reps = lower bound of the rep range at the new weight.
-//   3. Every working set is within the rep range but not all at top → repeat weight, target = range.
-//   4. Any working set failed to reach the bottom of the rep range → repeat weight, target = range
-//      with a message not to advance until you hit the range across all sets.
-//   5. If there were `failure`-typed sets or a clear decline vs the prior week → deload guidance,
-//      but never auto-decrease weight; recommend "repeat weight, focus on reaching bottom of range".
+// A light or missed session must never pull the target down: that's exactly
+// what discourages deload weeks. The target only ever moves when a new best
+// is set. See bestSetAcrossHistory() in calculations.js for what counts as
+// "best" and why a heavy low-rep single loses to a lighter set with more reps.
+//
+// Given the best set at W kg × R reps, with rep range [low, high]:
+//   - R >= high  → increase load by the exercise's increment, target reps = low.
+//   - R <  low   → repeat the best weight, target reps = low.
+//   - otherwise  → repeat the best weight, target reps = R + 1 (capped at high).
+//
+// Exercises with no best set at all — nothing in history clears the weight > 0
+// / reps > 0 floor, which covers bodyweight, timed and zero-weight lifts, and
+// a brand-new exercise — fall back to the previous, last-session-anchored
+// engine untouched, so those keep behaving exactly as they did before.
 //
 // Returns { targetWeightKg, targetRepsLow, targetRepsHigh, action, reason }
 //   action ∈ 'increase' | 'repeat' | 'first-session'
-import { isWorking, previousPerformance } from './calculations.js';
+//   targetRepsLow === targetRepsHigh whenever the target is anchored to a best
+//   set — it's one specific number, not a range to land anywhere in.
+import { isWorking, previousPerformance, bestSetAcrossHistory } from './calculations.js';
+
+// How far below the best set's weight the last session's top set has to fall
+// before it reads as a deload rather than ordinary day-to-day variance. Ten
+// percent is standard deload-week guidance; the tag is purely informational
+// and never changes the target.
+export const DELOAD_THRESHOLD = 0.10;
 
 export function recommend({ exercise, workoutHistory }) {
   const [low, high] = exercise.defaultReps || [8, 10];
+  const best = bestSetAcrossHistory(exercise.id, workoutHistory);
+  if (!best) return recommendFromLastSession(exercise, workoutHistory, low, high);
+
+  const step = exercise.weightIncrement || 2.5;
+
+  if (best.reps >= high) {
+    const nextWeight = roundToIncrement(best.weightKg + step, step);
+    return {
+      targetWeightKg: nextWeight,
+      targetRepsLow: low,
+      targetRepsHigh: low,
+      action: 'increase',
+      reason: `Your best is ${formatKgLike(best.weightKg)} × ${best.reps}. Move up to ${formatKgLike(nextWeight)} and build back to ${low}.`
+    };
+  }
+
+  if (best.reps < low) {
+    return {
+      targetWeightKg: best.weightKg,
+      targetRepsLow: low,
+      targetRepsHigh: low,
+      action: 'repeat',
+      reason: `Your best is ${formatKgLike(best.weightKg)} × ${best.reps}. Work back up to ${low} reps at that weight.`
+    };
+  }
+
+  const nextReps = Math.min(best.reps + 1, high);
+  return {
+    targetWeightKg: best.weightKg,
+    targetRepsLow: nextReps,
+    targetRepsHigh: nextReps,
+    action: 'repeat',
+    reason: `Your best is ${formatKgLike(best.weightKg)} × ${best.reps}. One more rep gets you to ${nextReps}.`
+  };
+}
+
+// The original last-session-anchored engine, kept verbatim as the fallback for
+// exercises bestSetAcrossHistory() has nothing to anchor to.
+function recommendFromLastSession(exercise, workoutHistory, low, high) {
   const prev = previousPerformance(exercise.id, workoutHistory);
   if (!prev) {
     return {
@@ -35,7 +88,6 @@ export function recommend({ exercise, workoutHistory }) {
   const anyBelowBottom = reps.some((r) => r < low);
   const anyFailure = workingAtWeight.some((s) => s.type === 'failure');
 
-  // Rule 2: progress the load.
   if (allAtTop) {
     const step = exercise.weightIncrement || 2.5;
     const nextWeight = roundToIncrement(weight + step, step);
@@ -48,7 +100,6 @@ export function recommend({ exercise, workoutHistory }) {
     };
   }
 
-  // Rule 4: something below the range → hold and focus.
   if (anyBelowBottom || anyFailure) {
     return {
       targetWeightKg: weight,
@@ -61,7 +112,6 @@ export function recommend({ exercise, workoutHistory }) {
     };
   }
 
-  // Rule 3: within range but not maxed → repeat.
   return {
     targetWeightKg: weight,
     targetRepsLow: low,
@@ -69,6 +119,25 @@ export function recommend({ exercise, workoutHistory }) {
     action: 'repeat',
     reason: `You hit ${reps.join(', ')} at ${formatKgLike(weight)}. Reach ${high} across all sets to advance.`
   };
+}
+
+// True once the last session's top-set weight has fallen at least
+// DELOAD_THRESHOLD below the best set's weight. Informational only — see the
+// module doc above.
+export function isDeload(lastTopSetWeightKg, bestWeightKg) {
+  if (!(bestWeightKg > 0) || !(lastTopSetWeightKg > 0)) return false;
+  return lastTopSetWeightKg <= bestWeightKg * (1 - DELOAD_THRESHOLD);
+}
+
+// A target's rep side as text: a single number when it's anchored to a best
+// set, a range when it's the legacy "hit this range" fallback.
+export function formatTargetRepLabel({ targetRepsLow, targetRepsHigh }) {
+  return targetRepsLow === targetRepsHigh ? `${targetRepsLow}` : `${targetRepsLow}–${targetRepsHigh}`;
+}
+
+export function formatTarget(rec, formatWeightFn) {
+  const reps = formatTargetRepLabel(rec);
+  return rec.targetWeightKg > 0 ? `${formatWeightFn(rec.targetWeightKg)} × ${reps}` : `${reps} reps`;
 }
 
 function mode(nums) {

@@ -194,8 +194,10 @@ export default function Gallery() {
         <Section title="ExerciseCard" note="Swipe left for Skip. Skipped collapses, it does not delete.">
           <ExerciseCard
             exercise={{ name: 'Wide-Grip Lat Pulldown', equipment: 'Cable' }}
-            prevLine="60 kg × 10, 10, 9"
-            targetLine="60 kg × 8–10"
+            lastSets={[{ weightKg: 50, reps: 15 }, { weightKg: 50, reps: 15 }, { weightKg: 65, reps: 10 }]}
+            deload
+            bestSet={{ weightKg: 65, reps: 10 }}
+            targetLine="65 kg × 11"
             prs={[{ kind: 'weight', value: '62.5 kg' }]}
             sets={demoSets.slice(1)}
             renderSet={(s, i) => ({

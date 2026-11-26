@@ -7,7 +7,7 @@ challenges and cloud backup on top — the tracker works completely without one.
 Features:
 
 - Fast set logging with big touch targets, +/- weight and rep steppers
-- Double-progression recommendations with a plain-English explanation
+- Double-progression recommendations anchored to your best-ever set, so a light or deload session never drags the target down
 - Automatic PR detection (weight, reps, e1RM, volume)
 - Rest timer that survives navigation and iOS background suspension
 - Dashboard: weekly volume, per-muscle volume, per-exercise 1RM & top-weight
@@ -188,13 +188,23 @@ Export shape:
 
 ## Progression rules
 
-Double progression. Given a target rep range `[low, high]`:
+Double progression, anchored to the **best set you've ever logged** for the exercise —
+not the last session. Best means the heaviest weight among sets with 5+ reps (ties go to
+more reps, then recency); exercises where nothing clears that floor fall back to the
+heaviest completed set. A light or missed session never pulls the target down; only a
+new best moves it.
 
-- All working sets ≥ `high` last session → increase load by one increment (2.5 kg / 5 lb).
-- Any working set below `low`, or a `failure`-typed set → repeat the same load; the reason line explains what to hit next time.
-- Otherwise → repeat load and aim for the top of the range.
+Given the best set at `W` kg × `R` reps, and a target rep range `[low, high]`:
 
-The engine never auto-decreases weight based on a bad session — decisions to deload stay with the lifter.
+- `R ≥ high` → target `(W + increment) × low` (2.5 kg default, or the exercise's own increment).
+- `R < low` → target `W × low`.
+- Otherwise → target `W × (R + 1)`, capped at `high`.
+
+If the last session's top set is 10%+ below the best set's weight, the card shows a small
+neutral "Deload" tag next to it — informational only, it never changes the target.
+
+Bodyweight, timed and other zero-weight exercises (nothing to anchor a "best" to) keep the
+original last-session-anchored behavior.
 
 ## Accessibility & UX
 

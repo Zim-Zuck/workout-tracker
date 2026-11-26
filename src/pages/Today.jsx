@@ -11,7 +11,7 @@ import MergeSuggestionCard from '../components/MergeSuggestionCard.jsx';
 import RonnieBanter from '../components/RonnieBanter.jsx';
 import { SPLITS, splitLabel } from '../services/splits.js';
 import { buildSession, recomputePlan, nextSplitInRotation } from '../services/sessionBuilder.js';
-import { recommend } from '../services/progression.js';
+import { recommend, formatTarget } from '../services/progression.js';
 import { prTimeline } from '../services/prs.js';
 import { workingVolume } from '../services/calculations.js';
 import { useWorkoutTotals } from '../hooks/useWorkoutTotals.js';
@@ -189,9 +189,7 @@ export default function Today({
                       </span>
                     </span>
                     <span className="shrink-0 text-label font-semibold text-ink-secondary tabular">
-                      {item.target.targetWeightKg > 0
-                        ? `${formatWeight(item.target.targetWeightKg)} × ${item.target.targetRepsLow}-${item.target.targetRepsHigh}`
-                        : `${item.target.targetRepsLow}-${item.target.targetRepsHigh} reps`}
+                      {formatTarget(item.target, formatWeight)}
                     </span>
                     {/* 44pt target around a 16px glyph. Removal is one tap and
                         an undo toast — never a confirmation. */}

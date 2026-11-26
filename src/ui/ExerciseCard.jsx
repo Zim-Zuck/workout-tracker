@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
-import { MoreVertical, Plus, RotateCcw } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { MoreVertical, Plus, RotateCcw, Star } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import SetRow, { SetRowHeader } from './SetRow.jsx';
 import PRBadge from './PRBadge.jsx';
 import Porthole from './Porthole.jsx';
 import { anatomyForExercise, tiersFor } from '../services/anatomy.js';
+import { formatWeight } from '../utils/units.js';
 
 // One exercise inside a live session.
 //
@@ -16,15 +17,48 @@ import { anatomyForExercise, tiersFor } from '../services/anatomy.js';
 // logged against it. Both are one tap with an undo toast and no dialog; the ⋮
 // sheet spells out the difference in a line.
 export default function ExerciseCard({
-  exercise, sets = [], prevLine, targetLine, prs = [],
+  exercise, sets = [], lastSets = null, deload = false, bestSet = null, targetLine, prs = [],
   skipped = false, loading = false,
   renderSet,                     // (set, i) => props for SetRow
   onAddSet, onOpenMenu, onSkip, onRestore
 }) {
   const [dx, setDx] = useState(0);
+  const [lastExpanded, setLastExpanded] = useState(false);
+  // Whether the full "Last" line actually overflows its available width. A
+  // fixed character count can't answer this: "100 kg × 10" and "65 kg × 10"
+  // are the same length but not the same pixel width, and the available width
+  // itself depends on whether the Deload tag is also competing for the row. So
+  // instead an invisible copy of the full text (measureRef) is laid out
+  // unconstrained to get its true width, and compared against the actual
+  // available width of the content column (contentRef) once both have mounted.
+  const [lastOverflows, setLastOverflows] = useState(false);
+  const measureRef = useRef(null);
+  const contentRef = useRef(null);
   const start = useRef({ x: 0, y: 0 });
   const swiping = useRef(false);
   const REVEAL = 96;
+
+  // "Last" never ends in an ellipsis — it either fits whole, or collapses to
+  // its top set (heaviest, then most reps) plus a tappable "+N more" that
+  // expands it in place. hasLast stays separate from the array itself so an
+  // explicit empty array (vs. null for "no history yet") still hides the row.
+  const hasLast = !!lastSets?.length;
+  const lastParts = hasLast ? lastSets.map((s) => `${formatWeight(s.weightKg)} × ${s.reps}`) : [];
+  const lastFull = lastParts.join(', ');
+  const lastTop = hasLast
+    ? lastSets.reduce((top, s) => (
+        !top || s.weightKg > top.weightKg || (s.weightKg === top.weightKg && s.reps > top.reps) ? s : top
+      ), null)
+    : null;
+  const lastCollapsible = lastParts.length > 1 && lastOverflows;
+
+  useLayoutEffect(() => {
+    if (!hasLast || lastParts.length < 2) return;
+    const full = measureRef.current;
+    const avail = contentRef.current;
+    if (!full || !avail) return;
+    setLastOverflows(full.scrollWidth > avail.clientWidth);
+  }, [hasLast, lastFull, lastParts.length, deload]);
 
   if (loading) {
     return (
@@ -121,9 +155,51 @@ export default function ExerciseCard({
               {exercise.equipment && (
                 <p className="text-micro font-semibold uppercase text-ink-tertiary mt-xxs">{exercise.equipment}</p>
               )}
-              {prevLine && (
-                <p className="text-label font-regular text-ink-secondary mt-sm truncate">
-                  <span className="text-ink-tertiary">Prev </span>{prevLine}
+              {hasLast && (
+                <p className="text-label font-regular text-ink-secondary mt-sm flex items-center gap-xs min-w-0">
+                  <span className="text-ink-tertiary shrink-0">Last</span>
+                  <span
+                    ref={contentRef}
+                    className={lastCollapsible && !lastExpanded
+                      ? 'min-w-0 flex-1 overflow-hidden whitespace-nowrap'
+                      : 'min-w-0 flex-1'}
+                  >
+                    {/* Invisible, unconstrained copy of the full text — its
+                        scrollWidth is the only way to know whether the real
+                        line (constrained by the flex box above) would
+                        overflow, since a fixed character count can't account
+                        for proportional-font width or the Deload tag eating
+                        into the same row. */}
+                    <span ref={measureRef} aria-hidden="true" className="invisible absolute whitespace-nowrap">
+                      {lastFull}
+                    </span>
+                    {lastCollapsible && !lastExpanded ? (
+                      <>
+                        {`${formatWeight(lastTop.weightKg)} × ${lastTop.reps}`}{' '}
+                        <button
+                          type="button"
+                          onClick={() => setLastExpanded(true)}
+                          className="text-ink-secondary underline underline-offset-2 decoration-glass-border"
+                        >
+                          +{lastParts.length - 1} more
+                        </button>
+                      </>
+                    ) : lastFull}
+                  </span>
+                  {deload && (
+                    <span className="shrink-0 inline-flex items-center h-5 px-xs rounded-full bg-glass-inset
+                                      border border-glass-inset-border text-micro font-semibold uppercase
+                                      text-ink-tertiary">
+                      Deload
+                    </span>
+                  )}
+                </p>
+              )}
+              {bestSet && (
+                <p className="text-label font-regular text-ink-secondary mt-xxs flex items-center gap-xs">
+                  <span className="text-ink-tertiary">Best</span>
+                  <Star size={12} strokeWidth={2.2} className="text-ink-tertiary shrink-0" />
+                  {formatWeight(bestSet.weightKg)} × {bestSet.reps}
                 </p>
               )}
               {targetLine && (

@@ -81,15 +81,38 @@ export function previousPerformance(exerciseId, workouts) {
   return null;
 }
 
-// Compact "80 kg × 8, 8, 7" summary of a set list, weights collapsed when identical.
-export function summarizeSets(sets, formatWeightFn) {
-  if (!sets.length) return '';
-  const w0 = sets[0].weightKg;
-  const allSame = sets.every((s) => s.weightKg === w0);
-  if (allSame) {
-    return `${formatWeightFn(w0)} × ${sets.map((s) => s.reps).join(', ')}`;
+// Best completed, non-warm-up set for exerciseId across ALL of history — not
+// just the most recent session. A deload week must never read as a new best:
+// the only way to raise this number is to actually lift more.
+//
+// "Best" means heaviest weight among sets that hit MIN_BEST_SET_REPS reps or
+// more — a heavy triple doesn't demonstrate the same capability a double-
+// progression target cares about, so it loses to a lighter set that cleared
+// the rep floor. Ties go to more reps, then to the more recent set. Exercises
+// where nothing ever clears that floor (pure low-rep strength work, or a lift
+// still building up) fall back to the heaviest completed set regardless of reps.
+//
+// `workouts` must be sorted desc by date, same contract as previousPerformance
+// above — a recency tie is resolved by "seen first" under that order.
+export const MIN_BEST_SET_REPS = 5;
+
+export function bestSetAcrossHistory(exerciseId, workouts) {
+  let qualified = null;
+  let heaviest = null;
+  for (const w of workouts || []) {
+    for (const s of w.sets || []) {
+      if (s.exerciseId !== exerciseId || !isWorking(s)) continue;
+      if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
+      if (!heaviest || outranksSet(s, heaviest)) heaviest = s;
+      if (s.reps >= MIN_BEST_SET_REPS && (!qualified || outranksSet(s, qualified))) qualified = s;
+    }
   }
-  return sets.map((s) => `${formatWeightFn(s.weightKg)}×${s.reps}`).join(', ');
+  return qualified || heaviest;
+}
+
+function outranksSet(a, b) {
+  if (a.weightKg !== b.weightKg) return a.weightKg > b.weightKg;
+  return a.reps > b.reps; // equal on both — keep `b`, which was seen first (more recent)
 }
 
 // Detect PRs achieved *in this workout* for a given exercise vs prior history.
